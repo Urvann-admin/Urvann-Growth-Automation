@@ -46,34 +46,27 @@ export class UrvannApiService {
     substores: string[],
     onProgress?: (completed: number, total: number) => void
   ): Promise<Record<string, Record<string, number>>> {
-    // Use the consolidated bulk endpoint - ONE API call instead of hundreds!
+    // NEW: Use cached endpoint for instant load!
     try {
       const totalRequests = aliases.length * substores.length;
       
       // Update progress if callback provided
       if (onProgress) {
-        // Simulate progress for better UX (server will handle the actual work)
         onProgress(0, totalRequests);
       }
 
-      // Add timeout for bulk request (60 seconds should be enough for thousands of combinations)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      // Fetch from cache (INSTANT!)
+      const queryParams = new URLSearchParams({
+        categories: aliases.join(','),
+        substores: substores.join(','),
+      });
 
-      try {
-        const response = await fetch('/api/products/count/bulk', {
-          method: 'POST',
+      const response = await fetch(`/api/products/count/cached?${queryParams}`, {
+        method: 'GET',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            categories: aliases,
-            substores: substores
-          }),
-          signal: controller.signal
         });
-
-        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -82,20 +75,16 @@ export class UrvannApiService {
         const data = await response.json();
         
         if (data.success && data.data) {
-          // Update progress to 100% on success
+        // Update progress to 100% immediately
           if (onProgress) {
             onProgress(totalRequests, totalRequests);
           }
           return data.data;
         } else {
-          throw new Error('Invalid response from bulk endpoint');
-        }
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        throw fetchError;
+        throw new Error('Invalid response from cached endpoint');
       }
     } catch (error) {
-      console.error('Error in bulk product count fetch:', error);
+      console.error('Error fetching cached counts:', error);
       // Return empty structure on error
       const results: Record<string, Record<string, number>> = {};
       for (const alias of aliases) {
@@ -109,6 +98,51 @@ export class UrvannApiService {
         onProgress(totalRequests, totalRequests);
       }
       return results;
+    }
+  }
+
+  // Trigger background refresh
+  static async refreshProductCounts(
+    aliases: string[],
+    substores: string[]
+  ): Promise<{ success: boolean; message?: string }> {
+    try {
+      const response = await fetch('/api/products/count/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          categories: aliases,
+          substores: substores,
+          mode: 'full'
+        })
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error: any) {
+      console.error('Error triggering refresh:', error);
+      return { success: false, message: error.message };
+    }
+  }
+
+  // Get cache status
+  static async getCacheStatus(): Promise<any> {
+    try {
+      const response = await fetch('/api/products/count/cached', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ action: 'status' })
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error: any) {
+      console.error('Error getting cache status:', error);
+      return { success: false, message: error.message };
     }
   }
 }

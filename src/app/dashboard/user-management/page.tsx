@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import UserForm from '@/components/forms/UserForm';
 import { userService } from '@/shared/services/api';
+import { Users, Plus, LogOut, Edit, Trash2, TreeDeciduous } from 'lucide-react';
 
 interface User {
   _id: string;
@@ -45,7 +46,6 @@ export default function UserManagementPage() {
       const token = localStorage.getItem('urvann-token');
       
       if (token) {
-        // Set auth token for API service
         const { apiService } = await import('@/shared/services/api');
         apiService.setAuthToken(token);
       } else {
@@ -139,52 +139,50 @@ export default function UserManagementPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/20 to-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-3 border-emerald-500 border-t-transparent"></div>
+          <p className="text-slate-600 text-sm">Loading users...</p>
+        </div>
       </div>
     );
   }
 
-  // If no current user, don't render anything (will redirect)
   if (!currentUser) {
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header Container */}
-      <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-700 shadow-lg">
-        <div className="px-6 py-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/20 to-slate-50">
+      {/* Header */}
+      <div className="bg-white/80 backdrop-blur-sm border-b border-emerald-100 shadow-sm sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-6 py-3">
           <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                </svg>
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg flex items-center justify-center shadow-md">
+                <Users className="w-6 h-6 text-white" strokeWidth={1.5} />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-white">User Management</h1>
-                <p className="text-blue-100 text-sm mt-1">Manage team members and their roles</p>
+                <h1 className="text-lg font-semibold text-slate-900">
+                  User Management
+                </h1>
+                <p className="text-slate-500 text-xs">Manage team members and their roles</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowCreateForm(true)}
-                className="inline-flex items-center px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors duration-200"
+                className="inline-flex items-center px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-lg transition-all font-medium text-xs shadow-md hover:shadow-lg"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
                 Add User
               </button>
               <button
                 onClick={handleLogout}
-                className="inline-flex items-center px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors duration-200"
+                className="inline-flex items-center px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all font-medium text-xs"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
+                <LogOut className="w-3.5 h-3.5 mr-1.5" />
                 Logout
               </button>
             </div>
@@ -193,83 +191,83 @@ export default function UserManagementPage() {
       </div>
 
       {/* Main Content */}
-      <div className="p-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="max-w-7xl mx-auto py-6 px-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 border-r border-gray-200">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide border-r border-slate-200">
                     User
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 border-r border-gray-200">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide border-r border-slate-200">
                     Role
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 border-r border-gray-200">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide border-r border-slate-200">
                     Status
                   </th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-gray-700 border-r border-gray-200">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide border-r border-slate-200">
                     Last Login
                   </th>
-                  <th className="px-6 py-4 text-center text-sm font-semibold text-gray-700">
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="bg-white divide-y divide-slate-100">
                 {users && users.length > 0 ? users.map((user, index) => (
-                  <tr key={user._id} className={`hover:bg-gray-50 transition-colors duration-150 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <tr key={user._id} className={`hover:bg-slate-50/50 transition-colors duration-150 ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'}`}>
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center mr-3">
-                          <span className="text-sm font-medium text-blue-600">
+                        <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-green-600 rounded-full flex items-center justify-center mr-3 shadow-sm">
+                          <span className="text-xs font-semibold text-white">
                             {user.name.charAt(0).toUpperCase()}
                           </span>
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{user.name}</div>
-                          <div className="text-sm text-gray-500">{user.email}</div>
+                          <div className="text-sm font-medium text-slate-900">{user.name}</div>
+                          <div className="text-xs text-slate-500">{user.email}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        user.role === 'admin' ? 'bg-red-100 text-red-800' :
-                        user.role === 'manager' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-green-100 text-green-800'
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${
+                        user.role === 'admin' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                        user.role === 'manager' ? 'bg-amber-100 text-amber-700 border border-amber-200' :
+                        'bg-emerald-100 text-emerald-700 border border-emerald-200'
                       }`}>
                         {user.role.replace('_', ' ').toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <button
                         onClick={() => toggleUserStatus(user._id, !user.isActive)}
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold transition-colors ${
                           user.isActive 
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200' 
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200' 
+                            : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'
                         }`}
                       >
                         {user.isActive ? 'Active' : 'Inactive'}
                       </button>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600">
                       {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                      <div className="flex justify-center space-x-2">
+                    <td className="px-4 py-3 whitespace-nowrap text-center text-xs font-medium">
+                      <div className="flex justify-center space-x-3">
                         <button
                           onClick={() => setEditingUser(user)}
-                          className="text-blue-600 hover:text-blue-900"
+                          className="text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
                         >
-                          Edit
+                          <Edit className="w-4 h-4 inline" />
                         </button>
                         {currentUser.role === 'admin' && user._id !== currentUser.id && (
                           <button
                             onClick={() => handleDeleteUser(user._id)}
-                            className="text-red-600 hover:text-red-900"
+                            className="text-rose-600 hover:text-rose-700 font-medium transition-colors"
                           >
-                            Delete
+                            <Trash2 className="w-4 h-4 inline" />
                           </button>
                         )}
                       </div>
@@ -277,8 +275,12 @@ export default function UserManagementPage() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                      No users found
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center">
+                        <Users className="w-12 h-12 text-slate-300 mb-3" />
+                        <p className="text-slate-500 text-sm font-medium">No users found</p>
+                        <p className="text-slate-400 text-xs mt-1">Add your first user to get started</p>
+                      </div>
                     </td>
                   </tr>
                 )}

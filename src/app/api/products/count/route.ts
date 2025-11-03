@@ -67,31 +67,56 @@ export async function GET(request: Request) {
     const filters = [
       { field: "categories", operator: "eq", value: slugifiedAlias }, // Use slugified alias
       { field: "substore", operator: "eq", value: substore },
-      { field: "publish", operator: "eq", value: "1" }
+      { field: "publish", operator: "eq", value: "1" },
+      { field: "inventory_quantity", operator: "gt", value: 0 }
     ];
 
-    // Make a single request to get the total count from paging
-    // No need to fetch all products - the API's paging.total is reliable
-    const queryParams = new URLSearchParams({
-      fields: JSON.stringify({"sku": 1}), // Minimal fields for faster response
-      limit: "1", // Only need 1 record to get paging info
-      start: "0",
-      filters: JSON.stringify(filters)
-    });
+    // Paginate through all results to count them (API limit is 500)
+    // Formula: Total = 500*n + x (where x < 500 is the last page count)
+    let totalCount = 0;
+    let start = 0;
+    const limit = 500;
+    let pageNumber = 0;
 
-    const response = await makeApiRequest(`${BASE_URL}/api/1.1/entity/ms.products?${queryParams}`, {
-      'access-key': ACCESS_KEY,
-      'Content-Type': 'application/json'
-    });
+    while (true) {
+      pageNumber++;
+      
+      const queryParams = new URLSearchParams({
+        fields: JSON.stringify({"sku": 1}),
+        limit: limit.toString(),
+        start: start.toString(),
+        filters: JSON.stringify(filters)
+      });
 
-    if (!response.ok) {
-      throw new Error(`Urvann API error! status: ${response.status}`);
+      const response = await makeApiRequest(`${BASE_URL}/api/1.1/entity/ms.products?${queryParams}`, {
+        'access-key': ACCESS_KEY,
+        'Content-Type': 'application/json'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Urvann API error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const returnedCount = data.data?.length || 0;
+      
+      totalCount += returnedCount;
+      
+      // If we got less than 500, this is the last page
+      if (returnedCount < limit) {
+        break;
+      }
+      
+      // Continue to next page
+      start += limit;
+      
+      // Safety limit: max 20 pages
+      if (pageNumber >= 20) {
+        break;
+      }
     }
-
-    const data = await response.json();
     
-    // Get total from paging - this is the accurate count from the API
-    const total = data.paging?.total || 0;
+    const total = totalCount;
     
     return NextResponse.json({ 
       success: true, 
