@@ -212,9 +212,8 @@ export const useCopyToClipboard = () => {
   return { copied, copy };
 };
 
-
-
-
+// Export real-time counts hook
+export { useRealtimeCounts } from './useRealtimeCounts';
 
 
 

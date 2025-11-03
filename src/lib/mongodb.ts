@@ -1,4 +1,5 @@
 import { MongoClient } from 'mongodb';
+import mongoose from 'mongoose';
 
 // Use different MongoDB URIs based on environment
 const uri = process.env.NODE_ENV === 'development' 
@@ -44,4 +45,29 @@ export async function getDb() {
 export async function getCollection(collection: string) {
   const db = await getDb();
   return db.collection(collection);
+}
+
+// Mongoose connection for models
+let isConnected = false;
+
+export async function connectDB() {
+  if (isConnected) {
+    return;
+  }
+
+  if (!uri) {
+    throw new Error('Please add your Mongo URI to .env.local');
+  }
+
+  try {
+    // Connect to GrowthAutomation database explicitly
+    await mongoose.connect(uri, {
+      dbName: 'GrowthAutomation'
+    });
+    isConnected = true;
+    console.log('MongoDB connected via Mongoose to GrowthAutomation database');
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    throw error;
+  }
 }

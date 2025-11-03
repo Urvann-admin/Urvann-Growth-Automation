@@ -38,8 +38,15 @@ export const getHubBySubstore = (substore: string): string | null => {
   return mapping ? mapping.hub : null;
 };
 
-
-
-
+// Format substore names for UI display
+export const formatSubstoreForDisplay = (substore: string): string => {
+  const displayMap: Record<string, string> = {
+    'greaternoida': 'GREATERN',
+    'vasantkunj': 'VASANTK',
+    'ghaziabad': 'GZB',
+  };
+  
+  return displayMap[substore.toLowerCase()] || substore.toUpperCase();
+};
 
 
