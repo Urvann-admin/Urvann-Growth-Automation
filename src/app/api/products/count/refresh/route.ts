@@ -34,7 +34,7 @@ async function fetchProductCount(category: string, substore: string): Promise<nu
     { field: "categories", operator: "eq", value: categoryAlias },
     { field: "substore", operator: "eq", value: substore },
     { field: "publish", operator: "eq", value: "1" },
-    { field: "inventory_quantity", operator: "gt", value: 0 }
+    // { field: "inventory_quantity", operator: "gt", value: 0 }
   ];
   
   // Paginate through all results to count them
