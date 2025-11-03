@@ -134,7 +134,7 @@ export default function DashboardPage() {
               <div className="flex items-end justify-between">
                 <div>
                   <div className="text-2xl font-bold text-slate-900">
-                    {user.role === 'admin' ? 'Admin' : 'Manager'}
+                {user.role === 'admin' ? 'Admin' : 'Manager'}
                   </div>
                   <div className="text-xs text-indigo-600 font-medium mt-0.5">Access Level</div>
                 </div>

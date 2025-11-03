@@ -126,48 +126,48 @@ export default function LoginPage() {
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Email Input */}
-              <div>
+            <div>
                 <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-2">
                   Email
-                </label>
+              </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Mail className="h-5 w-5 text-emerald-500" />
                   </div>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={formData.email}
-                    onChange={handleChange}
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={formData.email}
+                onChange={handleChange}
                     className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all bg-white/50"
                     placeholder="Enter your email"
-                  />
+              />
                 </div>
-              </div>
+            </div>
 
               {/* Password Input */}
-              <div>
+            <div>
                 <label htmlFor="password" className="block text-sm font-semibold text-slate-700 mb-2">
                   Password
-                </label>
+              </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Lock className="h-5 w-5 text-emerald-500" />
                   </div>
-                  <input
-                    id="password"
-                    name="password"
+              <input
+                id="password"
+                name="password"
                     type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    required
-                    value={formData.password}
-                    onChange={handleChange}
+                autoComplete="current-password"
+                required
+                value={formData.password}
+                onChange={handleChange}
                     className="block w-full pl-10 pr-12 py-3 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all bg-white/50"
-                    placeholder="Enter your password"
-                  />
+                placeholder="Enter your password"
+              />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -180,36 +180,36 @@ export default function LoginPage() {
                     )}
                   </button>
                 </div>
-              </div>
+            </div>
 
               {/* Remember Me */}
-              <div className="flex items-center">
+            <div className="flex items-center">
                 <label className="flex items-center cursor-pointer group">
-                  <input
-                    type="checkbox"
+              <input
+                type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer"
-                  />
+              />
                   <span className="ml-2 text-sm text-slate-700 group-hover:text-emerald-700 transition-colors">
                     Remember me
                   </span>
-                </label>
-              </div>
+              </label>
+            </div>
 
               {/* Error Message */}
-              {error && (
+            {error && (
                 <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-start space-x-2">
                   <svg className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
                   <p className="text-sm text-rose-700">{error}</p>
-                </div>
-              )}
+              </div>
+            )}
 
               {/* Login Button */}
               <button
-                type="submit"
+              type="submit"
                 disabled={isLoading}
                 className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center space-x-2"
               >
@@ -230,16 +230,16 @@ export default function LoginPage() {
                   </>
                 )}
               </button>
-            </form>
+          </form>
 
             {/* Footer */}
-            <div className="mt-6 text-center">
+          <div className="mt-6 text-center">
               <p className="text-sm text-slate-600">
                 Need access?{' '}
                 <button className="font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
                   Contact Administrator
                 </button>
-              </p>
+            </p>
             </div>
           </div>
 

@@ -226,12 +226,12 @@ const getProductCount = async (
 ): Promise<ProductCountResult> => {
   const slugifiedAlias = slugify(category);
 
-  const filters = [
-    { field: "categories", operator: "eq", value: slugifiedAlias },
-    { field: "substore", operator: "eq", value: substore },
-    { field: "publish", operator: "eq", value: "1" },
-    { field: "inventory_quantity", operator: "gt", value: 0 }
-  ];
+    const filters = [
+      { field: "categories", operator: "eq", value: slugifiedAlias },
+      { field: "substore", operator: "eq", value: substore },
+      { field: "publish", operator: "eq", value: "1" },
+      // { field: "inventory_quantity", operator: "gt", value: 0 }
+    ];
 
   const queryParams = new URLSearchParams({
     fields: JSON.stringify({ sku: 1 }), // Minimal fields for speed

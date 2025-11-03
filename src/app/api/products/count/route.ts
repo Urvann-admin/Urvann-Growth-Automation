@@ -68,7 +68,7 @@ export async function GET(request: Request) {
       { field: "categories", operator: "eq", value: slugifiedAlias }, // Use slugified alias
       { field: "substore", operator: "eq", value: substore },
       { field: "publish", operator: "eq", value: "1" },
-      { field: "inventory_quantity", operator: "gt", value: 0 }
+      // { field: "inventory_quantity", operator: "gt", value: 0 }
     ];
 
     // Paginate through all results to count them (API limit is 500)
@@ -81,23 +81,23 @@ export async function GET(request: Request) {
     while (true) {
       pageNumber++;
       
-      const queryParams = new URLSearchParams({
+    const queryParams = new URLSearchParams({
         fields: JSON.stringify({"sku": 1}),
         limit: limit.toString(),
         start: start.toString(),
-        filters: JSON.stringify(filters)
-      });
+      filters: JSON.stringify(filters)
+    });
 
-      const response = await makeApiRequest(`${BASE_URL}/api/1.1/entity/ms.products?${queryParams}`, {
-        'access-key': ACCESS_KEY,
-        'Content-Type': 'application/json'
-      });
+    const response = await makeApiRequest(`${BASE_URL}/api/1.1/entity/ms.products?${queryParams}`, {
+      'access-key': ACCESS_KEY,
+      'Content-Type': 'application/json'
+    });
 
-      if (!response.ok) {
-        throw new Error(`Urvann API error! status: ${response.status}`);
-      }
+    if (!response.ok) {
+      throw new Error(`Urvann API error! status: ${response.status}`);
+    }
 
-      const data = await response.json();
+    const data = await response.json();
       const returnedCount = data.data?.length || 0;
       
       totalCount += returnedCount;

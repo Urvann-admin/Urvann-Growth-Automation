@@ -45,7 +45,7 @@ async function fetchProductCount(category: string, substore: string, retryCount 
     { field: "categories", operator: "eq", value: categoryAlias },
     { field: "substore", operator: "eq", value: substore },
     { field: "publish", operator: "eq", value: "1" },
-    { field: "inventory_quantity", operator: "gt", value: 0 }
+    // { field: "inventory_quantity", operator: "gt", value: 0 }
   ];
   
   let totalCount = 0;
