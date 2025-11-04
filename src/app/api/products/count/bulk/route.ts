@@ -230,7 +230,7 @@ const getProductCount = async (
       { field: "categories", operator: "eq", value: slugifiedAlias },
       { field: "substore", operator: "eq", value: substore },
       { field: "publish", operator: "eq", value: "1" },
-      // { field: "inventory_quantity", operator: "gt", value: 0 }
+      { field: "inventory_quantity", operator: "gte", value: 1 }
     ];
 
   const queryParams = new URLSearchParams({
