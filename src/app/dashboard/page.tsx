@@ -47,7 +47,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50/20 to-slate-50">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+      <div className="bg-white border-b border-emerald-100/50 shadow-sm sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-6 py-3">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-3">
@@ -63,7 +63,7 @@ export default function DashboardPage() {
             </div>
             
             <div className="flex items-center space-x-3">
-              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-slate-50 rounded-lg border border-slate-200">
+              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 bg-emerald-50/50 rounded-lg border border-emerald-100">
                 <div className="w-7 h-7 bg-gradient-to-br from-emerald-500 to-green-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
                   {user.email?.charAt(0).toUpperCase()}
                 </div>
@@ -74,7 +74,7 @@ export default function DashboardPage() {
               </div>
               <button
                 onClick={handleLogout}
-                className="inline-flex items-center px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all font-medium text-xs"
+                className="inline-flex items-center px-3 py-1.5 bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg transition-all font-medium text-xs border border-transparent hover:border-emerald-200"
               >
                 <LogOut className="w-3.5 h-3.5 mr-1.5" />
                 Logout
