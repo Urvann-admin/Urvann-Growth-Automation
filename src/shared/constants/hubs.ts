@@ -8,19 +8,13 @@ export const HUB_MAPPINGS: HubMapping[] = [
   { hub: 'Whitefield', substores: ['bgl-e', 'bgl-e2'] },
   { hub: 'Thanissandra', substores: ['bgl-n', 'bgl-n2'] },
   { hub: 'HSR', substores: ['bgl-s1', 'bgl-s2', 'bgl-w1', 'bgl-w2'] },
-  { hub: 'Noi', substores: ['noi'] },
+  { hub: 'Noida', substores: ['noi', 'greaternoida', 'kalkaji'] },
+  { hub: 'Rohini', substores: ['roh'] },
+  { hub: 'Dwarka', substores: ['dwarka', 'uttam', 'vasantkunj'] },
+  { hub: 'Faridabad', substores: ['dncr'] },
   { hub: 'Ghaziabad', substores: ['ghaziabad'] },
-  { hub: 'Chhatarpur', substores: ['sdel', 'sdelhi'] },
-  { hub: 'Rohini', substores: ['rohini'] },
-  { hub: 'Roh', substores: ['roh'] },
-  { hub: 'Uttam', substores: ['uttam'] },
-  { hub: 'Dwarka', substores: ['dwarka'] },
-  { hub: 'dncr', substores: ['dncr'] },
   { hub: 'Gurugram', substores: ['gurugram'] },
-  { hub: 'Greater Noida', substores: ['greaternoida'] },
-  { hub: 'Kalkaji', substores: ['kalkaji'] },
-  { hub: 'Vasant Kunj', substores: ['vasantkunj'] },
-  { hub: 'India', substores: ['india'] },
+  { hub: 'India', substores: ['india', 'rest-of-india', 'ahmedabad', 'pune', 'hyderabad', 'mumbai', 'kolkata', 'chandigarh', 'all-over-india'] },
 ];
 
 // Helper functions
@@ -44,6 +38,8 @@ export const formatSubstoreForDisplay = (substore: string): string => {
     'greaternoida': 'GREATERN',
     'vasantkunj': 'VASANTK',
     'ghaziabad': 'GZB',
+    'rest-of-india': 'ROI',
+    'all-over-india': 'AOI',
   };
   
   return displayMap[substore.toLowerCase()] || substore.toUpperCase();

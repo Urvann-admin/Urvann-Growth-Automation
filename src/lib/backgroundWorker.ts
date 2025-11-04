@@ -1,10 +1,11 @@
-/**
+ /**
  * Background Worker - Auto-starts on server initialization
  * Continuously updates product counts in MongoDB
  */
 
 import { connectDB } from './mongodb';
 import mongoose from 'mongoose';
+import { getAllSubstores } from '@/shared/constants/hubs';
 
 const BASE_URL = 'https://www.urvann.com';
 const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
@@ -45,7 +46,7 @@ async function fetchProductCount(category: string, substore: string, retryCount 
     { field: "categories", operator: "eq", value: categoryAlias },
     { field: "substore", operator: "eq", value: substore },
     { field: "publish", operator: "eq", value: "1" },
-    // { field: "inventory_quantity", operator: "gt", value: 0 }
+    { field: "inventory_quantity", operator: "gte", value: 1 }
   ];
   
   let totalCount = 0;
@@ -125,12 +126,7 @@ async function updateAllCounts() {
     
     // Get all categories from MongoDB using CategoryModel
     const categories = await CategoryModel.findAll();
-    const substores = [
-      'bgl-e', 'bgl-e2', 'bgl-n', 'bgl-n2', 'bgl-s1', 'bgl-s2',
-      'bgl-w1', 'bgl-w2', 'noi', 'ghaziabad', 'sdel', 'sdelhi',
-      'rohini', 'roh', 'uttam', 'dwarka', 'dncr', 'gurugram',
-      'greaternoida', 'kalkaji', 'vasantkunj'
-    ];
+    const substores = getAllSubstores();
     
     const combinations: Array<{ category: string; substore: string }> = [];
     for (const category of categories) {

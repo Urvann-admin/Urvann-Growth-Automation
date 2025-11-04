@@ -68,7 +68,7 @@ export async function GET(request: Request) {
       { field: "categories", operator: "eq", value: slugifiedAlias }, // Use slugified alias
       { field: "substore", operator: "eq", value: substore },
       { field: "publish", operator: "eq", value: "1" },
-      // { field: "inventory_quantity", operator: "gt", value: 0 }
+      { field: "inventory_quantity", operator: "gte", value: 1 }
     ];
 
     // Paginate through all results to count them (API limit is 500)
