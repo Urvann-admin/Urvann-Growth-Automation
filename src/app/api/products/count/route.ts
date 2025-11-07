@@ -65,10 +65,10 @@ export async function GET(request: Request) {
 
     // Construct query parameters for Urvann API
     const filters = [
-      { field: "categories", operator: "eq", value: slugifiedAlias }, // Use slugified alias
-      { field: "substore", operator: "eq", value: substore },
-      { field: "publish", operator: "eq", value: "1" },
-      { field: "inventory_quantity", operator: "gte", value: 1 }
+      { field: "categories", operator: "equal", value: slugifiedAlias }, // Use slugified alias
+      { field: "substore", operator: "equal", value: substore },
+      { field: "publish", operator: "equal", value: "1" },
+      { field: "inventory_quantity", operator: "greater_than", value: 0 }
     ];
 
     // Paginate through all results to count them (API limit is 500)
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
       pageNumber++;
       
     const queryParams = new URLSearchParams({
-        fields: JSON.stringify({"sku": 1}),
+        fields: JSON.stringify({"sku": 1, "inventory_quantity": 1}),
         limit: limit.toString(),
         start: start.toString(),
       filters: JSON.stringify(filters)

@@ -31,10 +31,10 @@ async function fetchProductCount(category: string, substore: string): Promise<nu
   const categoryAlias = category;
   
   const filters = [
-    { field: "categories", operator: "eq", value: categoryAlias },
-    { field: "substore", operator: "eq", value: substore },
-    { field: "publish", operator: "eq", value: "1" },
-    { field: "inventory_quantity", operator: "gte", value: 1 }
+    { field: "categories", operator: "equal", value: categoryAlias },
+    { field: "substore", operator: "equal", value: substore },
+    { field: "publish", operator: "equal", value: "1" },
+    { field: "inventory_quantity", operator: "greater_than", value: 0 }
   ];
   
   // Paginate through all results to count them
@@ -49,7 +49,7 @@ async function fetchProductCount(category: string, substore: string): Promise<nu
       pageNumber++;
       
       const queryParams = new URLSearchParams({
-        fields: JSON.stringify({ sku: 1 }),
+        fields: JSON.stringify({ sku: 1, inventory_quantity: 1 }),
         limit: limit.toString(),
         start: start.toString(),
         filters: JSON.stringify(filters)

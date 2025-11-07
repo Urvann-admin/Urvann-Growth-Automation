@@ -227,14 +227,14 @@ const getProductCount = async (
   const slugifiedAlias = slugify(category);
 
     const filters = [
-      { field: "categories", operator: "eq", value: slugifiedAlias },
-      { field: "substore", operator: "eq", value: substore },
-      { field: "publish", operator: "eq", value: "1" },
-      { field: "inventory_quantity", operator: "gte", value: 1 }
+      { field: "categories", operator: "equal", value: slugifiedAlias },
+      { field: "substore", operator: "equal", value: substore },
+      { field: "publish", operator: "equal", value: "1" },
+      { field: "inventory_quantity", operator: "greater_than", value: 0 }
     ];
 
   const queryParams = new URLSearchParams({
-    fields: JSON.stringify({ sku: 1 }), // Minimal fields for speed
+    fields: JSON.stringify({ sku: 1, inventory_quantity: 1 }), // Include inventory_quantity in fields
     limit: "1", // Only need count from paging.total
     start: "0",
     filters: JSON.stringify(filters)
