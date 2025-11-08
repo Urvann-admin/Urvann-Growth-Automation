@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { UserModel } from '@/models/User';
+import { UserModel, User } from '@/models/User';
 import jwt from 'jsonwebtoken';
 
 export async function POST(request: Request) {
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     }
 
     // Find user
-    const user = await UserModel.findByEmail(email);
+    const user = await UserModel.findByEmail(email) as User | null;
     if (!user) {
       return NextResponse.json(
         { error: 'Invalid email or password' },
