@@ -37,7 +37,7 @@ export default function GrowthAnalyticsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedSubstores, setSelectedSubstores] = useState<string[]>(getAllSubstores());
   const [expandedCategories, setExpandedCategories] = useState<Record<string, ExpandedCategory>>({});
-
+  
   // Use real-time counts hook
   const categoryAliases = categories.map(cat => cat.alias);
   const { 
@@ -103,7 +103,7 @@ export default function GrowthAnalyticsPage() {
       if (result.success) {
         // Get child categories
         const childCategories = result.data;
-
+        
         // Update expanded categories (counts will come from real-time hook automatically)
         setExpandedCategories(prev => ({
           ...prev,
@@ -191,7 +191,7 @@ export default function GrowthAnalyticsPage() {
                 <p className="text-xs text-slate-500">Product performance tracking</p>
               </div>
             </div>
-            
+
             {/* Status and Controls */}
             <div className="flex items-center space-x-4">
               {/* Connection Status */}
@@ -205,14 +205,14 @@ export default function GrowthAnalyticsPage() {
                     • {lastUpdate.toLocaleTimeString()}
                   </span>
                 )}
-                </div>
-                
+              </div>
+
               {/* Substore Selector */}
-                <div className="w-64">
-                  <SubstoreSelector 
-                    selectedSubstores={selectedSubstores}
-                    onSubstoreChange={setSelectedSubstores}
-                  />
+              <div className="w-64">
+                <SubstoreSelector 
+                  selectedSubstores={selectedSubstores}
+                  onSubstoreChange={setSelectedSubstores}
+                />
               </div>
             </div>
           </div>
@@ -221,15 +221,15 @@ export default function GrowthAnalyticsPage() {
 
       {/* Main Content */}
       <div className="max-w-[1600px] mx-auto p-4">
-      {selectedSubstores.length === 0 ? (
+        {selectedSubstores.length === 0 ? (
           <div className="bg-white/60 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200/60 p-8 text-center">
             <svg className="w-12 h-12 text-slate-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
             </svg>
             <p className="text-slate-700 font-medium">No substores selected</p>
             <p className="text-sm text-slate-500 mt-1">Please select at least one substore to view analytics</p>
-        </div>
-      ) : (
+          </div>
+        ) : (
           <div className="bg-white/60 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
             {/* Compact Table */}
             <div className="overflow-x-auto">
@@ -267,51 +267,51 @@ export default function GrowthAnalyticsPage() {
                                   </span>
                                   {category.category.length > 15 && (
                                     <div className="absolute bottom-full left-0 mb-2 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[100] shadow-xl">
-                                {category.category}
+                                      {category.category}
                                       <div className="absolute top-full left-3 w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-transparent border-t-slate-900"></div>
                                     </div>
                                   )}
                                 </div>
                                 <span className="text-[10px] text-slate-400 font-normal flex-shrink-0">
                                   {category.typeOfCategory}
-                              </span>
-                            </div>
-                            
+                                </span>
+                              </div>
+                              
                               {/* Expand/Collapse Button */}
                               {!isUnpublished && (
-                              <select
+                                <select
                                   value={isExpanded?.selectedType || ''}
-                                onChange={(e) => handleCategoryTypeSelect(category, e.target.value)}
+                                  onChange={(e) => handleCategoryTypeSelect(category, e.target.value)}
                                   className="text-[10px] px-1 py-0.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500/30 flex-shrink-0 transition-all"
-                              >
+                                >
                                   <option value="">{isExpanded ? '−' : '+'}</option>
                                   {category.typeOfCategory === 'L1' && <option value="L2">L2</option>}
                                   {category.typeOfCategory === 'L2' && <option value="L3">L3</option>}
-                              </select>
+                                </select>
                               )}
-                          </div>
-                        </td>
-                        {getSubstoresFromSelectedHubs().map(substore => {
-                          const count = productCounts[category.alias]?.[substore] || 0;
+                            </div>
+                          </td>
+                          {getSubstoresFromSelectedHubs().map(substore => {
+                            const count = productCounts[category.alias]?.[substore] || 0;
                             const getCountColor = (count: number) => {
                               if (count === 0) return 'text-rose-700 bg-rose-50/80 border border-rose-200/30';
                               if (count > 1000) return 'text-emerald-700 bg-emerald-50/80 border border-emerald-200/30';
                               if (count > 500) return 'text-teal-700 bg-teal-50/80 border border-teal-200/30';
                               if (count > 100) return 'text-amber-700 bg-amber-50/80 border border-amber-200/30';
                               return 'text-indigo-700 bg-indigo-50/80 border border-indigo-200/30';
-                          };
-                          
-                          return (
+                            };
+                            
+                            return (
                               <td key={`${category.alias}-${substore}`} className="px-2 py-1.5 whitespace-nowrap text-center">
                                 <span className={`inline-block px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${isUnpublished ? 'bg-slate-100 text-slate-500' : getCountColor(count)}`}>
-                                {count.toLocaleString()}
+                                  {count.toLocaleString()}
                                 </span>
-                            </td>
-                          );
-                        })}
+                              </td>
+                            );
+                          })}
                         </tr>
                         
-                      {/* Expanded Child Categories */}
+                        {/* Expanded Child Categories */}
                         {isExpanded?.children.map((childCategory, childIndex) => (
                           <tr key={`${childCategory._id || 'no-id'}-${childCategory.alias}-${categoryId}-${childIndex}`} className="bg-indigo-50/20 backdrop-blur-sm">
                             <td className="sticky left-0 z-10 bg-indigo-50 px-2 py-1.5 whitespace-nowrap border-r border-indigo-200">
@@ -327,7 +327,7 @@ export default function GrowthAnalyticsPage() {
                                   </span>
                                   {childCategory.category.length > 12 && (
                                     <div className="absolute bottom-full left-0 mb-2 px-2.5 py-1.5 bg-slate-900 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-[100] shadow-xl">
-                                  {childCategory.category}
+                                      {childCategory.category}
                                       <div className="absolute top-full left-3 w-0 h-0 border-l-[5px] border-r-[5px] border-t-[5px] border-transparent border-t-slate-900"></div>
                                     </div>
                                   )}
@@ -335,28 +335,28 @@ export default function GrowthAnalyticsPage() {
                                 <span className="text-[10px] text-indigo-600 font-normal flex-shrink-0">
                                   {childCategory.typeOfCategory}
                                 </span>
-                            </div>
-                          </td>
-                          {getSubstoresFromSelectedHubs().map(substore => {
-                            const count = productCounts[childCategory.alias]?.[substore] || 0;
+                              </div>
+                            </td>
+                            {getSubstoresFromSelectedHubs().map(substore => {
+                              const count = productCounts[childCategory.alias]?.[substore] || 0;
                               const getCountColor = (count: number) => {
                                 if (count === 0) return 'text-slate-600 bg-slate-100/80 border border-slate-200/40';
                                 if (count > 1000) return 'text-emerald-700 bg-emerald-100/80 border border-emerald-200/40';
                                 if (count > 500) return 'text-teal-700 bg-teal-100/80 border border-teal-200/40';
                                 if (count > 100) return 'text-amber-700 bg-amber-100/80 border border-amber-200/40';
                                 return 'text-indigo-700 bg-indigo-100/80 border border-indigo-200/40';
-                            };
-                            
-                            return (
+                              };
+                              
+                              return (
                                 <td key={`${childCategory.alias}-${substore}`} className="px-2 py-1.5 whitespace-nowrap text-center">
                                   <span className={`inline-block px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${getCountColor(count)}`}>
-                                  {count.toLocaleString()}
+                                    {count.toLocaleString()}
                                   </span>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
                       </React.Fragment>
                     );
                   })}
@@ -376,7 +376,7 @@ export default function GrowthAnalyticsPage() {
               ⚠️ {countsError}
             </div>
           )}
-          </div>
+        </div>
       </div>
     </div>
   );
