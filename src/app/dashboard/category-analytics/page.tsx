@@ -1,4 +1,8 @@
+'use client';
+
 import { Button } from "@/components/ui/Button";
+
+export const dynamic = 'force-dynamic';
 
 export default function CategoryAnalyticsPage() {
   return (
