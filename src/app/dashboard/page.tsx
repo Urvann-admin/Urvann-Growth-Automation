@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/Button";
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useEffect, useState } from 'react';
-import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Sprout } from 'lucide-react';
+import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Sprout, Building2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -134,7 +134,7 @@ export default function DashboardPage() {
               <div className="flex items-end justify-between">
                 <div>
                   <div className="text-2xl font-bold text-slate-900">
-                {user.role === 'admin' ? 'Admin' : 'Manager'}
+                    {user.role === 'admin' ? 'Admin' : 'Manager'}
                   </div>
                   <div className="text-xs text-indigo-600 font-medium mt-0.5">Access Level</div>
                 </div>
@@ -176,6 +176,32 @@ export default function DashboardPage() {
               </div>
               <svg className="w-4 h-4 text-slate-400 group-hover:text-amber-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Saathi App Logs Card */}
+          <div 
+            className="group bg-gradient-to-br from-violet-50/50 to-purple-50/30 rounded-xl shadow-sm border border-violet-100 p-5 cursor-pointer hover:shadow-md hover:border-violet-200 transition-all duration-200"
+            onClick={() => router.push('/dashboard/saathi-app-logs')}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-11 h-11 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                <Building2 className="w-5 h-5 text-white" strokeWidth={2.5} />
+              </div>
+              <div className="px-2 py-0.5 bg-violet-100 text-violet-700 text-[10px] font-semibold rounded-full">
+                LOGS
+              </div>
+            </div>
+            <h3 className="text-base font-semibold text-slate-900 mb-0.5">Saathi App Logs</h3>
+            <p className="text-xs text-slate-600 mb-3">Seller & product inventory</p>
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-2xl font-bold text-slate-900">Sellers</div>
+                <div className="text-xs text-violet-600 font-medium mt-0.5">View all sellers</div>
+              </div>
+              <svg className="w-4 h-4 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
           </div>
