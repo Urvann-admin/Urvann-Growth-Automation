@@ -61,7 +61,13 @@ export default function UserForm({ user, onSubmit, onCancel, isEditing = false }
       return;
     }
 
-    const submitData = {
+    const submitData: {
+      name: string;
+      email: string;
+      role: 'admin' | 'manager' | 'team_member';
+      isActive: boolean;
+      password?: string;
+    } = {
       name: formData.name.trim(),
       email: formData.email.trim(),
       role: formData.role,
