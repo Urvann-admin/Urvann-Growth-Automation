@@ -34,12 +34,14 @@ export async function POST(request: Request) {
     }
 
     // Update last login
-    await UserModel.updateLastLogin(user._id);
+    if (user._id) {
+      await UserModel.updateLastLogin(user._id);
+    }
 
     // Generate JWT token
     const token = jwt.sign(
       {
-        userId: user._id.toString(),
+        userId: user._id?.toString() || '',
         email: user.email,
         role: user.role,
       },
