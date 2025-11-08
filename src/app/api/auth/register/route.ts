@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     // Generate JWT token
     const token = jwt.sign(
       {
-        userId: user._id.toString(),
+        userId: user._id?.toString() || '',
         email: user.email,
         role: user.role,
       },
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       email: user.email,
       role: user.role,
       isEmailVerified: true, // Default to true for now
-      lastLoginAt: user.lastLoginAt,
+      lastLoginAt: (user as any).lastLoginAt,
     };
 
     return NextResponse.json({
