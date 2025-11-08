@@ -9,6 +9,7 @@ export async function GET(request: Request) {
     const seller = searchParams.get('seller');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
+    const search = searchParams.get('search') || undefined;
 
     if (!seller) {
       return NextResponse.json(
@@ -19,10 +20,10 @@ export async function GET(request: Request) {
 
     const skip = (page - 1) * limit;
     
-    // Sorting is now done at database level in findBySeller method
+    // Sorting and filtering is now done at database level in findBySeller method
     const [products, totalCount] = await Promise.all([
-      ProductInventoryModel.findBySeller(seller, skip, limit),
-      ProductInventoryModel.countBySellerFilter(seller),
+      ProductInventoryModel.findBySeller(seller, skip, limit, search),
+      ProductInventoryModel.countBySellerFilter(seller, search),
     ]);
 
     const hasMore = skip + products.length < totalCount;

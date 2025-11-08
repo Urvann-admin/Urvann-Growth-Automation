@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Building2, Package, CheckCircle, XCircle, Calendar, ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
+import { Building2, Package, CheckCircle, XCircle, Calendar, ArrowLeft, Loader2, RefreshCw, Search, X } from 'lucide-react';
 
 interface Seller {
   seller: string;
@@ -61,6 +61,7 @@ export default function SaathiAppLogsPage() {
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingMoreProducts, setLoadingMoreProducts] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   const sellersObserverRef = useRef<HTMLDivElement>(null);
   const productsObserverRef = useRef<HTMLDivElement>(null);
@@ -112,6 +113,7 @@ export default function SaathiAppLogsPage() {
   const handleSellerClick = async (seller: string) => {
     setSelectedSeller(seller);
     setProducts([]);
+    setSearchTerm(''); // Reset search when selecting a seller
     setProductsPagination({
       page: 1,
       limit: 50,
@@ -119,10 +121,10 @@ export default function SaathiAppLogsPage() {
       hasMore: false,
       loaded: 0,
     });
-    fetchProducts(seller, 1);
+    fetchProducts(seller, 1, false, '');
   };
 
-  const fetchProducts = async (seller: string, page: number, append: boolean = false) => {
+  const fetchProducts = async (seller: string, page: number, append: boolean = false, search: string = searchTerm) => {
     try {
       if (append) {
         setLoadingMoreProducts(true);
@@ -131,8 +133,9 @@ export default function SaathiAppLogsPage() {
       }
       setError(null);
 
+      const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
       const response = await fetch(
-        `/api/saathi-app-logs/products?seller=${encodeURIComponent(seller)}&page=${page}&limit=50`
+        `/api/saathi-app-logs/products?seller=${encodeURIComponent(seller)}&page=${page}&limit=50${searchParam}`
       );
       const result = await response.json();
       
@@ -157,13 +160,14 @@ export default function SaathiAppLogsPage() {
 
   const loadMoreProducts = useCallback(() => {
     if (productsPagination.hasMore && !loadingMoreProducts && selectedSeller) {
-      fetchProducts(selectedSeller, productsPagination.page + 1, true);
+      fetchProducts(selectedSeller, productsPagination.page + 1, true, searchTerm);
     }
-  }, [productsPagination, loadingMoreProducts, selectedSeller]);
+  }, [productsPagination, loadingMoreProducts, selectedSeller, searchTerm]);
 
   const handleBack = () => {
     setSelectedSeller(null);
     setProducts([]);
+    setSearchTerm('');
     setProductsPagination({
       page: 1,
       limit: 50,
@@ -174,9 +178,12 @@ export default function SaathiAppLogsPage() {
     setError(null);
   };
 
-  const handleRefresh = async () => {
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+  };
+
+  const handleSearchSubmit = () => {
     if (selectedSeller) {
-      // Refresh products for selected seller
       setProducts([]);
       setProductsPagination({
         page: 1,
@@ -185,7 +192,43 @@ export default function SaathiAppLogsPage() {
         hasMore: false,
         loaded: 0,
       });
-      await fetchProducts(selectedSeller, 1);
+      fetchProducts(selectedSeller, 1, false, searchTerm);
+    }
+  };
+
+  const handleSearchClear = () => {
+    setSearchTerm('');
+    if (selectedSeller) {
+      setProducts([]);
+      setProductsPagination({
+        page: 1,
+        limit: 50,
+        total: 0,
+        hasMore: false,
+        loaded: 0,
+      });
+      fetchProducts(selectedSeller, 1, false, '');
+    }
+  };
+
+  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearchSubmit();
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (selectedSeller) {
+      // Refresh products for selected seller (with current search term)
+      setProducts([]);
+      setProductsPagination({
+        page: 1,
+        limit: 50,
+        total: 0,
+        hasMore: false,
+        loaded: 0,
+      });
+      await fetchProducts(selectedSeller, 1, false, searchTerm);
     } else {
       // Refresh sellers list
       setSellers([]);
@@ -199,6 +242,7 @@ export default function SaathiAppLogsPage() {
       await fetchSellers(1);
     }
   };
+
 
   // Intersection Observer for sellers infinite scroll
   useEffect(() => {
@@ -288,14 +332,47 @@ export default function SaathiAppLogsPage() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={handleRefresh}
-              disabled={loading || loadingProducts || loadingMoreSellers || loadingMoreProducts}
-              className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
-            >
-              <RefreshCw className={`w-4 h-4 ${(loading || loadingProducts || loadingMoreSellers || loadingMoreProducts) ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              {selectedSeller && (
+                <div className="flex items-center space-x-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      onKeyPress={handleSearchKeyPress}
+                      placeholder="Search by name or SKU..."
+                      className="pl-10 pr-10 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-64"
+                    />
+                    {searchTerm && (
+                      <button
+                        onClick={handleSearchClear}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-slate-100 rounded transition-colors"
+                      >
+                        <X className="w-4 h-4 text-slate-400" />
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleSearchSubmit}
+                    disabled={loadingProducts || loadingMoreProducts}
+                    className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
+                  >
+                    <Search className="w-4 h-4" />
+                    <span>Search</span>
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={handleRefresh}
+                disabled={loading || loadingProducts || loadingMoreSellers || loadingMoreProducts}
+                className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
+              >
+                <RefreshCw className={`w-4 h-4 ${(loading || loadingProducts || loadingMoreSellers || loadingMoreProducts) ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -44,20 +44,44 @@ export class ProductInventoryModel {
     return collection.find({ substore }).toArray();
   }
 
-  static async findBySeller(seller: string, skip: number = 0, limit: number = 50) {
+  static async findBySeller(seller: string, skip: number = 0, limit: number = 50, searchTerm?: string) {
     const collection = await getProductInventoryCollection();
+    
+    // Build query with optional search filter
+    const query: any = { seller };
+    
+    if (searchTerm && searchTerm.trim()) {
+      const searchRegex = { $regex: searchTerm.trim(), $options: 'i' };
+      query.$or = [
+        { name: searchRegex },
+        { sku: searchRegex }
+      ];
+    }
+    
     // Sort by updatedAt in descending order (most recent first) at database level
     return collection
-      .find({ seller })
+      .find(query)
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limit)
       .toArray();
   }
 
-  static async countBySellerFilter(seller: string) {
+  static async countBySellerFilter(seller: string, searchTerm?: string) {
     const collection = await getProductInventoryCollection();
-    return collection.countDocuments({ seller });
+    
+    // Build query with optional search filter
+    const query: any = { seller };
+    
+    if (searchTerm && searchTerm.trim()) {
+      const searchRegex = { $regex: searchTerm.trim(), $options: 'i' };
+      query.$or = [
+        { name: searchRegex },
+        { sku: searchRegex }
+      ];
+    }
+    
+    return collection.countDocuments(query);
   }
 
   static async findPublished() {
