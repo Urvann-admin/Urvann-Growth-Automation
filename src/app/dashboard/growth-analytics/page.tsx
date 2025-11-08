@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRealtimeCounts } from '@/shared/hooks';
 import SubstoreSelector from '@/components/analytics/SubstoreSelector';
 import { getAllSubstores, getHubBySubstore, formatSubstoreForDisplay } from '@/shared/constants/hubs';
+import { Download } from 'lucide-react';
 
 interface ProductCountData {
   [category: string]: {
@@ -158,6 +159,57 @@ export default function GrowthAnalyticsPage() {
 
   const loading = loadingCategories || loadingCounts;
 
+  // Function to generate and download CSV
+  const handleDownloadCSV = () => {
+    if (categories.length === 0 || selectedSubstores.length === 0) {
+      return;
+    }
+
+    const substores = getSubstoresFromSelectedHubs();
+    
+    // Create CSV header
+    let csvContent = 'Category,' + substores.map(substore => formatSubstoreForDisplay(substore)).join(',') + '\n';
+
+    // Add data rows
+    categories.forEach((category) => {
+      const isUnpublished = category.publish === 0 || category.publish === false;
+      const categoryId = category._id || category.alias;
+      const isExpanded = expandedCategories[categoryId];
+      
+      // Add parent category row
+      const categoryName = `"${category.category} ${category.typeOfCategory}"`;
+      const rowData = substores.map(substore => {
+        const count = productCounts[category.alias]?.[substore] || 0;
+        return count;
+      });
+      csvContent += categoryName + ',' + rowData.join(',') + '\n';
+
+      // Add expanded child categories if expanded
+      if (isExpanded?.children && isExpanded.children.length > 0) {
+        isExpanded.children.forEach((childCategory) => {
+          const childName = `"  ${childCategory.category} ${childCategory.typeOfCategory}"`; // Indented with spaces
+          const childRowData = substores.map(substore => {
+            const count = productCounts[childCategory.alias]?.[substore] || 0;
+            return count;
+          });
+          csvContent += childName + ',' + childRowData.join(',') + '\n';
+        });
+      }
+    });
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `growth-analytics-${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (loadingCategories) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 p-4">
@@ -214,6 +266,17 @@ export default function GrowthAnalyticsPage() {
                     onSubstoreChange={setSelectedSubstores}
                   />
               </div>
+
+              {/* Download CSV Button */}
+              <button
+                onClick={handleDownloadCSV}
+                disabled={loading || categories.length === 0 || selectedSubstores.length === 0}
+                className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
+                title="Download data as CSV"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download CSV</span>
+              </button>
             </div>
           </div>
         </div>
