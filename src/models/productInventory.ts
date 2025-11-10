@@ -13,6 +13,7 @@ export interface ProductInventory {
   seller: string;
   updatedAt: Date;
   lastUpdatedBy: string;
+  lastFieldUpdated: string;
   source: string;
 }
 
