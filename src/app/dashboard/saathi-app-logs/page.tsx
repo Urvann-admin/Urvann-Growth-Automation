@@ -24,6 +24,7 @@ interface Product {
   seller: string;
   updatedAt: Date | string;
   lastUpdatedBy: string;
+  lastFieldUpdated: string;
   source: string;
 }
 
@@ -420,31 +421,34 @@ export default function SaathiAppLogsPage() {
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Product Name
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         SKU
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Price
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Publish
                       </th>
-                      <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Inventory
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Last Updated
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Updated By
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
+                        Last Field Updated
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Source
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Substore
                       </th>
                     </tr>
@@ -498,6 +502,11 @@ export default function SaathiAppLogsPage() {
                         <td className="px-4 py-3">
                           <span className="text-xs text-slate-700 font-medium">
                             {product.lastUpdatedBy || '-'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs text-slate-700 font-medium">
+                            {product.lastFieldUpdated || '-'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
