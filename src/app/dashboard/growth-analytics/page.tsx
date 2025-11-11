@@ -239,7 +239,7 @@ export default function GrowthAnalyticsPage() {
                 </svg>
               </div>
               <div>
-                <h1 className="text-lg font-semibold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">Growth Analytics</h1>
+                <h1 className="text-lg font-semibold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">Availability Dashboard</h1>
                 <p className="text-xs text-slate-500">Product performance tracking</p>
               </div>
             </div>
@@ -295,15 +295,15 @@ export default function GrowthAnalyticsPage() {
         ) : (
           <div className="bg-white/60 backdrop-blur-sm rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
             {/* Compact Table */}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-[calc(100vh-180px)] overflow-y-auto">
               <table className="min-w-full divide-y divide-slate-200/60">
-                <thead className="bg-slate-50 sticky top-0 z-10">
+                <thead className="bg-slate-50 sticky top-0 z-20 shadow-sm">
                   <tr>
-                    <th className="sticky left-0 z-10 bg-slate-50 px-2 py-1.5 text-left text-[10px] font-semibold text-slate-700 uppercase tracking-wide border-r border-slate-200">
+                    <th className="sticky left-0 z-20 bg-slate-50 px-2 py-1.5 text-left text-[10px] font-bold text-slate-700 uppercase tracking-wide border-r border-slate-200">
                       Category
                     </th>
                     {getSubstoresFromSelectedHubs().map(substore => (
-                      <th key={substore} className="px-2 py-1.5 text-center text-[10px] font-semibold text-slate-700 uppercase tracking-wide">
+                      <th key={substore} className="px-2 py-1.5 text-center text-[10px] font-bold text-slate-700 uppercase tracking-wide">
                         {formatSubstoreForDisplay(substore)}
                       </th>
                     ))}
@@ -319,7 +319,7 @@ export default function GrowthAnalyticsPage() {
                     return (
                       <React.Fragment key={uniqueKey}>
                         <tr className={`hover:bg-slate-50/50 transition-all duration-200 ${isUnpublished ? 'bg-slate-100/40' : ''}`}>
-                          <td className="sticky left-0 z-10 bg-white px-2 py-1.5 whitespace-nowrap border-r border-slate-200">
+                          <td className="sticky left-0 z-10 bg-white px-2 py-1.5 whitespace-nowrap border-r border-slate-200" style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}>
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <div className="relative group min-w-0">
@@ -335,9 +335,16 @@ export default function GrowthAnalyticsPage() {
                                     </div>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-slate-400 font-normal flex-shrink-0">
+                                <a
+                                  href={`https://www.urvann.com/browse/${category.alias}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[10px] text-slate-400 hover:text-indigo-600 font-normal flex-shrink-0 cursor-pointer underline transition-colors"
+                                  title={`View ${category.category} on Urvann`}
+                                >
                                   {category.typeOfCategory}
-                                </span>
+                                </a>
                               </div>
                               
                               {/* Expand/Collapse Button */}
@@ -357,7 +364,7 @@ export default function GrowthAnalyticsPage() {
                           {getSubstoresFromSelectedHubs().map(substore => {
                             const count = productCounts[category.alias]?.[substore] || 0;
                             const getCountColor = (count: number) => {
-                              if (count === 0) return 'text-rose-700 bg-rose-50/80 border border-rose-200/30';
+                              if (count === 0) return 'text-white bg-red-700 border border-red-800';
                               if (count > 1000) return 'text-emerald-700 bg-emerald-50/80 border border-emerald-200/30';
                               if (count > 500) return 'text-teal-700 bg-teal-50/80 border border-teal-200/30';
                               if (count > 100) return 'text-amber-700 bg-amber-50/80 border border-amber-200/30';
@@ -377,7 +384,7 @@ export default function GrowthAnalyticsPage() {
                         {/* Expanded Child Categories */}
                         {isExpanded?.children.map((childCategory, childIndex) => (
                           <tr key={`${childCategory._id || 'no-id'}-${childCategory.alias}-${categoryId}-${childIndex}`} className="bg-indigo-50/20 backdrop-blur-sm">
-                            <td className="sticky left-0 z-10 bg-indigo-50 px-2 py-1.5 whitespace-nowrap border-r border-indigo-200">
+                            <td className="sticky left-0 z-10 bg-indigo-50 px-2 py-1.5 whitespace-nowrap border-r border-indigo-200" style={{ backgroundColor: 'rgba(238, 242, 255, 0.95)' }}>
                               <div className="flex items-center pl-4 gap-1.5">
                                 <svg className="w-2.5 h-2.5 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -395,15 +402,22 @@ export default function GrowthAnalyticsPage() {
                                     </div>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-indigo-600 font-normal flex-shrink-0">
+                                <a
+                                  href={`https://www.urvann.com/browse/${childCategory.alias}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[10px] text-indigo-600 hover:text-indigo-800 font-normal flex-shrink-0 cursor-pointer underline transition-colors"
+                                  title={`View ${childCategory.category} on Urvann`}
+                                >
                                   {childCategory.typeOfCategory}
-                                </span>
+                                </a>
                               </div>
                             </td>
                             {getSubstoresFromSelectedHubs().map(substore => {
                               const count = productCounts[childCategory.alias]?.[substore] || 0;
                               const getCountColor = (count: number) => {
-                                if (count === 0) return 'text-slate-600 bg-slate-100/80 border border-slate-200/40';
+                                if (count === 0) return 'text-white bg-red-700 border border-red-800';
                                 if (count > 1000) return 'text-emerald-700 bg-emerald-100/80 border border-emerald-200/40';
                                 if (count > 500) return 'text-teal-700 bg-teal-100/80 border border-teal-200/40';
                                 if (count > 100) return 'text-amber-700 bg-amber-100/80 border border-amber-200/40';

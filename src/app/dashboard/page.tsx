@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/Button";
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useEffect, useState } from 'react';
-import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Sprout, Building2 } from 'lucide-react';
+import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Building2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -87,10 +87,10 @@ export default function DashboardPage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto py-6 px-6">
         {/* Dashboard Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="flex justify-center gap-6">
           {/* Growth Metrics Card */}
           <div 
-            className="group bg-gradient-to-br from-emerald-50/50 to-green-50/30 rounded-xl shadow-sm border border-emerald-100 p-5 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all duration-200"
+            className="group bg-gradient-to-br from-emerald-50/50 to-green-50/30 rounded-xl shadow-sm border border-emerald-100 p-5 cursor-pointer hover:shadow-md hover:border-emerald-200 transition-all duration-200 w-[280px] flex-shrink-0"
             onClick={() => router.push('/dashboard/growth-analytics')}
           >
             <div className="flex items-start justify-between mb-3">
@@ -99,15 +99,12 @@ export default function DashboardPage() {
               </div>
               <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
             </div>
-            <h3 className="text-base font-semibold text-slate-900 mb-0.5">Growth Metrics</h3>
-            <p className="text-xs text-slate-600 mb-3">Track your growth</p>
+            <h3 className="text-base font-semibold text-slate-900 mb-0.5">Availability Dashboard</h3>
+            <p className="text-xs text-slate-600 mb-3">Track product availability</p>
             <div className="flex items-end justify-between">
               <div>
-                <div className="text-2xl font-bold text-slate-900">+24.5%</div>
-                <div className="text-xs text-emerald-600 font-medium flex items-center mt-0.5">
-                  <Sprout className="w-3 h-3 mr-0.5" />
-                  vs last month
-                </div>
+                <div className="text-2xl font-bold text-slate-900">Analytics</div>
+                <div className="text-xs text-emerald-600 font-medium mt-0.5">View availability</div>
               </div>
               <svg className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -115,39 +112,9 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* User Management Card - Only for Admin/Manager */}
-          {(user.role === 'admin' || user.role === 'manager') && (
-            <div 
-              className="group bg-gradient-to-br from-indigo-50/50 to-purple-50/30 rounded-xl shadow-sm border border-indigo-100 p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all duration-200"
-              onClick={() => router.push('/dashboard/user-management')}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-                  <Users className="w-5 h-5 text-white" strokeWidth={2.5} />
-                </div>
-                <div className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-semibold rounded-full">
-                  {user.role === 'admin' ? 'Admin' : 'Manager'}
-                </div>
-              </div>
-              <h3 className="text-base font-semibold text-slate-900 mb-0.5">User Management</h3>
-              <p className="text-xs text-slate-600 mb-3">Manage team members</p>
-              <div className="flex items-end justify-between">
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">
-                    {user.role === 'admin' ? 'Admin' : 'Manager'}
-                  </div>
-                  <div className="text-xs text-indigo-600 font-medium mt-0.5">Access Level</div>
-                </div>
-                <svg className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
-            </div>
-          )}
-
           {/* Real Time Dashboard Card */}
           <div 
-            className="group bg-gradient-to-br from-amber-50/50 to-orange-50/30 rounded-xl shadow-sm border border-amber-100 p-5 cursor-pointer hover:shadow-md hover:border-amber-200 transition-all duration-200"
+            className="group bg-gradient-to-br from-amber-50/50 to-orange-50/30 rounded-xl shadow-sm border border-amber-100 p-5 cursor-pointer hover:shadow-md hover:border-amber-200 transition-all duration-200 w-[280px] flex-shrink-0"
             onClick={() => {
               const baseUrl = 'http://13.200.250.221/realtime-orders';
               const params = new URLSearchParams({
@@ -182,7 +149,7 @@ export default function DashboardPage() {
 
           {/* Saathi App Logs Card */}
           <div 
-            className="group bg-gradient-to-br from-violet-50/50 to-purple-50/30 rounded-xl shadow-sm border border-violet-100 p-5 cursor-pointer hover:shadow-md hover:border-violet-200 transition-all duration-200"
+            className="group bg-gradient-to-br from-violet-50/50 to-purple-50/30 rounded-xl shadow-sm border border-violet-100 p-5 cursor-pointer hover:shadow-md hover:border-violet-200 transition-all duration-200 w-[280px] flex-shrink-0"
             onClick={() => router.push('/dashboard/saathi-app-logs')}
           >
             <div className="flex items-start justify-between mb-3">
@@ -205,6 +172,36 @@ export default function DashboardPage() {
               </svg>
             </div>
           </div>
+
+          {/* User Management Card - Only for Admin/Manager */}
+          {(user.role === 'admin' || user.role === 'manager') && (
+            <div 
+              className="group bg-gradient-to-br from-indigo-50/50 to-purple-50/30 rounded-xl shadow-sm border border-indigo-100 p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all duration-200 w-[280px] flex-shrink-0"
+              onClick={() => router.push('/dashboard/user-management')}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-11 h-11 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                  <Users className="w-5 h-5 text-white" strokeWidth={2.5} />
+                </div>
+                <div className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-[10px] font-semibold rounded-full">
+                  {user.role === 'admin' ? 'Admin' : 'Manager'}
+                </div>
+              </div>
+              <h3 className="text-base font-semibold text-slate-900 mb-0.5">User Management</h3>
+              <p className="text-xs text-slate-600 mb-3">Manage team members</p>
+              <div className="flex items-end justify-between">
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">
+                    {user.role === 'admin' ? 'Admin' : 'Manager'}
+                  </div>
+                  <div className="text-xs text-indigo-600 font-medium mt-0.5">Access Level</div>
+                </div>
+                <svg className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
