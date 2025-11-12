@@ -446,9 +446,6 @@ export default function SaathiAppLogsPage() {
                         Last Field Updated
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
-                        Source
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Substore
                       </th>
                     </tr>
@@ -507,11 +504,6 @@ export default function SaathiAppLogsPage() {
                         <td className="px-4 py-3">
                           <span className="text-xs text-slate-700 font-medium">
                             {product.lastFieldUpdated || '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-50 text-blue-700">
-                            {product.source || '-'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
