@@ -11,6 +11,7 @@ export interface Category {
   l3Parent: string;
   publish: boolean;
   priorityOrder: number;
+  substores?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -61,6 +62,11 @@ export class CategoryModel {
   static async findByCategory(category: string) {
     const collection = await getCollection('categoryList');
     return collection.findOne({ category });
+  }
+
+  static async findByAlias(alias: string) {
+    const collection = await getCollection('categoryList');
+    return collection.findOne({ alias });
   }
 
   static async findByType(typeOfCategory: string) {
