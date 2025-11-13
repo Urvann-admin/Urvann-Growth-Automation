@@ -149,31 +149,31 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Saathi App Logs Card */}
-            <div 
-              className="group bg-gradient-to-br from-violet-50/50 to-purple-50/30 rounded-xl shadow-sm border border-violet-100 p-5 cursor-pointer hover:shadow-md hover:border-violet-200 transition-all duration-200 w-[280px] flex-shrink-0"
-              onClick={() => router.push('/dashboard/saathi-app-logs')}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="w-11 h-11 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-                  <Building2 className="w-5 h-5 text-white" strokeWidth={2.5} />
-                </div>
-                <div className="px-2 py-0.5 bg-violet-100 text-violet-700 text-[10px] font-semibold rounded-full">
-                  LOGS
-                </div>
+          {/* Saathi App Logs Card */}
+          <div 
+            className="group bg-gradient-to-br from-violet-50/50 to-purple-50/30 rounded-xl shadow-sm border border-violet-100 p-5 cursor-pointer hover:shadow-md hover:border-violet-200 transition-all duration-200 w-[280px] flex-shrink-0"
+            onClick={() => router.push('/dashboard/saathi-app-logs')}
+          >
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-11 h-11 bg-gradient-to-br from-violet-500 to-purple-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                <Building2 className="w-5 h-5 text-white" strokeWidth={2.5} />
               </div>
-              <h3 className="text-base font-semibold text-slate-900 mb-0.5">Saathi App Logs</h3>
-              <p className="text-xs text-slate-600 mb-3">Seller & product inventory</p>
-              <div className="flex items-end justify-between">
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">Sellers</div>
-                  <div className="text-xs text-violet-600 font-medium mt-0.5">View all sellers</div>
-                </div>
-                <svg className="w-4 h-4 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+              <div className="px-2 py-0.5 bg-violet-100 text-violet-700 text-[10px] font-semibold rounded-full">
+                LOGS
               </div>
             </div>
+            <h3 className="text-base font-semibold text-slate-900 mb-0.5">Product Logs</h3>
+            <p className="text-xs text-slate-600 mb-3">Seller & product inventory</p>
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-2xl font-bold text-slate-900">Sellers</div>
+                <div className="text-xs text-violet-600 font-medium mt-0.5">View all sellers</div>
+              </div>
+              <svg className="w-4 h-4 text-slate-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
 
             {/* Data Upload Card */}
             {(user.role === 'admin' || user.role === 'manager') && (

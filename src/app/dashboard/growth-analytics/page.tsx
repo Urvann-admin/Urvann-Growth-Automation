@@ -22,6 +22,7 @@ interface Category {
   l3Parent: string;
   publish: boolean | number;
   priorityOrder: number;
+  substores?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -318,8 +319,8 @@ export default function GrowthAnalyticsPage() {
                     
                     return (
                       <React.Fragment key={uniqueKey}>
-                        <tr className={`hover:bg-slate-50/50 transition-all duration-200 ${isUnpublished ? 'bg-slate-100/40' : ''}`}>
-                          <td className="sticky left-0 z-10 bg-white px-2 py-1.5 whitespace-nowrap border-r border-slate-200" style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }}>
+                        <tr className={`transition-all duration-200 ${isUnpublished ? 'bg-slate-200/60 hover:bg-slate-200/70' : 'hover:bg-slate-50/50'}`}>
+                          <td className={`sticky left-0 z-10 px-2 py-1.5 whitespace-nowrap border-r border-slate-200 ${isUnpublished ? 'bg-slate-200/60' : 'bg-white'}`} style={isUnpublished ? { backgroundColor: 'rgba(226, 232, 240, 0.95)' } : { backgroundColor: 'rgba(255, 255, 255, 0.95)' }}>
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <div className="relative group min-w-0">
@@ -340,7 +341,7 @@ export default function GrowthAnalyticsPage() {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
-                                  className="text-[10px] text-slate-400 hover:text-indigo-600 font-normal flex-shrink-0 cursor-pointer underline transition-colors"
+                                  className={`text-[10px] font-normal flex-shrink-0 cursor-pointer underline transition-colors ${isUnpublished ? 'text-slate-400 hover:text-slate-500' : 'text-slate-400 hover:text-indigo-600'}`}
                                   title={`View ${category.category} on Urvann`}
                                 >
                                   {category.typeOfCategory}
@@ -363,17 +364,27 @@ export default function GrowthAnalyticsPage() {
                           </td>
                           {getSubstoresFromSelectedHubs().map(substore => {
                             const count = productCounts[category.alias]?.[substore] || 0;
+                            
+                            // Check if substore is not available for this category
+                            // If published AND substores array exists AND is not empty AND substore is NOT in array, show grey
+                            const categorySubstores = category.substores || [];
+                            const isSubstoreNotAvailable = !isUnpublished && 
+                              categorySubstores.length > 0 && 
+                              !categorySubstores.includes(substore);
+                            
                             const getCountColor = (count: number) => {
-                              if (count === 0) return 'text-white bg-red-700 border border-red-800';
-                              if (count > 1000) return 'text-emerald-700 bg-emerald-50/80 border border-emerald-200/30';
-                              if (count > 500) return 'text-teal-700 bg-teal-50/80 border border-teal-200/30';
-                              if (count > 100) return 'text-amber-700 bg-amber-50/80 border border-amber-200/30';
-                              return 'text-indigo-700 bg-indigo-50/80 border border-indigo-200/30';
+                              if (count === 0) return 'text-white bg-red-700 border border-red-800'; // Dark red for 0
+                              if (count >= 1000) return 'text-emerald-700 bg-emerald-50/80 border border-emerald-200/30'; // Green for 4 digits
+                              if (count >= 100) return 'text-indigo-700 bg-indigo-50/80 border border-indigo-200/30'; // Blue for 3 digits
+                              if (count >= 10) return 'text-amber-700 bg-amber-50/80 border border-amber-200/30'; // Yellow for 2 digits
+                              return 'text-rose-600 bg-rose-50/80 border border-rose-200/30'; // Light red for 1 digit
                             };
                             
+                            const shouldShowGrey = isUnpublished || isSubstoreNotAvailable;
+                            
                             return (
-                              <td key={`${category.alias}-${substore}`} className="px-2 py-1.5 whitespace-nowrap text-center">
-                                <span className={`inline-block px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${isUnpublished ? 'bg-slate-100 text-slate-500' : getCountColor(count)}`}>
+                              <td key={`${category.alias}-${substore}`} className={`px-2 py-1.5 whitespace-nowrap text-center ${shouldShowGrey ? 'bg-slate-200/60' : ''}`}>
+                                <span className={`inline-block px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${shouldShowGrey ? 'bg-slate-300 text-slate-600' : getCountColor(count)}`}>
                                   {count.toLocaleString()}
                                 </span>
                               </td>
@@ -416,17 +427,28 @@ export default function GrowthAnalyticsPage() {
                             </td>
                             {getSubstoresFromSelectedHubs().map(substore => {
                               const count = productCounts[childCategory.alias]?.[substore] || 0;
+                              
+                              // Check if substore is not available for this child category
+                              // If published AND substores array exists AND is not empty AND substore is NOT in array, show grey
+                              const childCategorySubstores = childCategory.substores || [];
+                              const isChildUnpublished = childCategory.publish === 0 || childCategory.publish === false;
+                              const isSubstoreNotAvailable = !isChildUnpublished && 
+                                childCategorySubstores.length > 0 && 
+                                !childCategorySubstores.includes(substore);
+                              
                               const getCountColor = (count: number) => {
-                                if (count === 0) return 'text-white bg-red-700 border border-red-800';
-                                if (count > 1000) return 'text-emerald-700 bg-emerald-100/80 border border-emerald-200/40';
-                                if (count > 500) return 'text-teal-700 bg-teal-100/80 border border-teal-200/40';
-                                if (count > 100) return 'text-amber-700 bg-amber-100/80 border border-amber-200/40';
-                                return 'text-indigo-700 bg-indigo-100/80 border border-indigo-200/40';
+                                if (count === 0) return 'text-white bg-red-700 border border-red-800'; // Dark red for 0
+                                if (count >= 1000) return 'text-emerald-700 bg-emerald-100/80 border border-emerald-200/40'; // Green for 4 digits
+                                if (count >= 100) return 'text-indigo-700 bg-indigo-100/80 border border-indigo-200/40'; // Blue for 3 digits
+                                if (count >= 10) return 'text-amber-700 bg-amber-100/80 border border-amber-200/40'; // Yellow for 2 digits
+                                return 'text-rose-600 bg-rose-100/80 border border-rose-200/40'; // Light red for 1 digit
                               };
                               
+                              const shouldShowGrey = isChildUnpublished || isSubstoreNotAvailable;
+                              
                               return (
-                                <td key={`${childCategory.alias}-${substore}`} className="px-2 py-1.5 whitespace-nowrap text-center">
-                                  <span className={`inline-block px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${getCountColor(count)}`}>
+                                <td key={`${childCategory.alias}-${substore}`} className={`px-2 py-1.5 whitespace-nowrap text-center ${shouldShowGrey ? 'bg-slate-200/60' : ''}`}>
+                                  <span className={`inline-block px-1.5 py-0.5 rounded-md text-[11px] font-semibold ${shouldShowGrey ? 'bg-slate-300 text-slate-600' : getCountColor(count)}`}>
                                     {count.toLocaleString()}
                                   </span>
                                 </td>

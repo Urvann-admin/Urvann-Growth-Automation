@@ -63,9 +63,27 @@ export default function SaathiAppLogsPage() {
   const [loadingMoreProducts, setLoadingMoreProducts] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedUpdatedBy, setSelectedUpdatedBy] = useState<string[]>([]);
+  const [isUpdatedByDropdownOpen, setIsUpdatedByDropdownOpen] = useState(false);
+  const [updatedBySearchTerm, setUpdatedBySearchTerm] = useState<string>('');
 
   const sellersObserverRef = useRef<HTMLDivElement>(null);
   const productsObserverRef = useRef<HTMLDivElement>(null);
+  const updatedByDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Extract unique updatedBy values from currently displayed products
+  const uniqueUpdatedBy = Array.from(
+    new Set(
+      products
+        .map((p) => p.lastUpdatedBy)
+        .filter((value): value is string => value != null && value !== '')
+    )
+  ).sort();
+
+  // Filter updatedBy options based on search term
+  const filteredUpdatedBy = uniqueUpdatedBy.filter((email) =>
+    email.toLowerCase().includes(updatedBySearchTerm.toLowerCase())
+  );
 
   useEffect(() => {
     if (!user) {
@@ -115,6 +133,9 @@ export default function SaathiAppLogsPage() {
     setSelectedSeller(seller);
     setProducts([]);
     setSearchTerm(''); // Reset search when selecting a seller
+    setSelectedUpdatedBy([]); // Reset updatedBy filter
+    setUpdatedBySearchTerm('');
+    setIsUpdatedByDropdownOpen(false);
     setProductsPagination({
       page: 1,
       limit: 50,
@@ -122,10 +143,10 @@ export default function SaathiAppLogsPage() {
       hasMore: false,
       loaded: 0,
     });
-    fetchProducts(seller, 1, false, '');
+    fetchProducts(seller, 1, false, '', '');
   };
 
-  const fetchProducts = async (seller: string, page: number, append: boolean = false, search: string = searchTerm) => {
+  const fetchProducts = async (seller: string, page: number, append: boolean = false, search: string = searchTerm, updatedBy: string = selectedUpdatedBy.join(',')) => {
     try {
       if (append) {
         setLoadingMoreProducts(true);
@@ -135,8 +156,9 @@ export default function SaathiAppLogsPage() {
       setError(null);
 
       const searchParam = search ? `&search=${encodeURIComponent(search)}` : '';
+      const updatedByParam = updatedBy ? `&updatedBy=${encodeURIComponent(updatedBy)}` : '';
       const response = await fetch(
-        `/api/saathi-app-logs/products?seller=${encodeURIComponent(seller)}&page=${page}&limit=50${searchParam}`
+        `/api/saathi-app-logs/products?seller=${encodeURIComponent(seller)}&page=${page}&limit=50${searchParam}${updatedByParam}`
       );
       const result = await response.json();
       
@@ -161,14 +183,18 @@ export default function SaathiAppLogsPage() {
 
   const loadMoreProducts = useCallback(() => {
     if (productsPagination.hasMore && !loadingMoreProducts && selectedSeller) {
-      fetchProducts(selectedSeller, productsPagination.page + 1, true, searchTerm);
+      const updatedByParam = selectedUpdatedBy.length > 0 ? selectedUpdatedBy.join(',') : '';
+      fetchProducts(selectedSeller, productsPagination.page + 1, true, searchTerm, updatedByParam);
     }
-  }, [productsPagination, loadingMoreProducts, selectedSeller, searchTerm]);
+  }, [productsPagination, loadingMoreProducts, selectedSeller, searchTerm, selectedUpdatedBy]);
 
   const handleBack = () => {
     setSelectedSeller(null);
     setProducts([]);
     setSearchTerm('');
+    setSelectedUpdatedBy([]);
+    setUpdatedBySearchTerm('');
+    setIsUpdatedByDropdownOpen(false);
     setProductsPagination({
       page: 1,
       limit: 50,
@@ -193,9 +219,49 @@ export default function SaathiAppLogsPage() {
         hasMore: false,
         loaded: 0,
       });
-      fetchProducts(selectedSeller, 1, false, searchTerm);
+      // Convert array to comma-separated string for API
+      const updatedByParam = selectedUpdatedBy.length > 0 ? selectedUpdatedBy.join(',') : '';
+      fetchProducts(selectedSeller, 1, false, searchTerm, updatedByParam);
     }
   };
+
+  const handleUpdatedByToggle = (value: string) => {
+    setSelectedUpdatedBy((prev) => {
+      if (value === '') {
+        // Toggle "All Updated By" - clear all selections
+        return [];
+      }
+      if (prev.includes(value)) {
+        // Remove if already selected
+        return prev.filter((item) => item !== value);
+      } else {
+        // Add if not selected
+        return [...prev, value];
+      }
+    });
+  };
+
+  const handleSelectAllUpdatedBy = () => {
+    setSelectedUpdatedBy([]);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (updatedByDropdownRef.current && !updatedByDropdownRef.current.contains(event.target as Node)) {
+        setIsUpdatedByDropdownOpen(false);
+        setUpdatedBySearchTerm('');
+      }
+    };
+
+    if (isUpdatedByDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUpdatedByDropdownOpen]);
 
   const handleSearchClear = () => {
     setSearchTerm('');
@@ -208,7 +274,8 @@ export default function SaathiAppLogsPage() {
         hasMore: false,
         loaded: 0,
       });
-      fetchProducts(selectedSeller, 1, false, '');
+      const updatedByParam = selectedUpdatedBy.length > 0 ? selectedUpdatedBy.join(',') : '';
+      fetchProducts(selectedSeller, 1, false, '', updatedByParam);
     }
   };
 
@@ -220,7 +287,7 @@ export default function SaathiAppLogsPage() {
 
   const handleRefresh = async () => {
     if (selectedSeller) {
-      // Refresh products for selected seller (with current search term)
+      // Refresh products for selected seller (with current search term and filters)
       setProducts([]);
       setProductsPagination({
         page: 1,
@@ -229,7 +296,8 @@ export default function SaathiAppLogsPage() {
         hasMore: false,
         loaded: 0,
       });
-      await fetchProducts(selectedSeller, 1, false, searchTerm);
+      const updatedByParam = selectedUpdatedBy.length > 0 ? selectedUpdatedBy.join(',') : '';
+      await fetchProducts(selectedSeller, 1, false, searchTerm, updatedByParam);
     } else {
       // Refresh sellers list
       setSellers([]);
@@ -326,7 +394,7 @@ export default function SaathiAppLogsPage() {
               </div>
               <div>
                 <h1 className="text-lg font-semibold text-slate-900">
-                  {selectedSeller ? `${selectedSeller} - Products` : 'Saathi App Logs'}
+                  {selectedSeller ? `${selectedSeller} - Products` : 'Product Logs'}
                 </h1>
                 <p className="text-xs text-slate-500">
                   {selectedSeller ? 'Product inventory details' : 'View sellers and their products'}
@@ -353,6 +421,106 @@ export default function SaathiAppLogsPage() {
                       >
                         <X className="w-4 h-4 text-slate-400" />
                       </button>
+                    )}
+                  </div>
+                  <div className="relative" ref={updatedByDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!loadingProducts && !loadingMoreProducts && products.length > 0) {
+                          setIsUpdatedByDropdownOpen(!isUpdatedByDropdownOpen);
+                        }
+                      }}
+                      disabled={loadingProducts || loadingMoreProducts || products.length === 0}
+                      className="pl-3 pr-8 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white text-left w-full min-w-[200px] disabled:bg-slate-50 disabled:cursor-not-allowed flex items-center justify-between"
+                    >
+                      <span className={selectedUpdatedBy.length > 0 ? 'text-slate-900' : 'text-slate-500'}>
+                        {selectedUpdatedBy.length === 0
+                          ? 'All Updated By'
+                          : selectedUpdatedBy.length === 1
+                          ? selectedUpdatedBy[0]
+                          : `${selectedUpdatedBy.length} selected`}
+                      </span>
+                      <svg
+                        className={`w-4 h-4 text-slate-400 transition-transform ${isUpdatedByDropdownOpen ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {isUpdatedByDropdownOpen && (
+                      <div className="absolute z-50 mt-1 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                        <div className="p-2 border-b border-slate-200">
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                              type="text"
+                              value={updatedBySearchTerm}
+                              onChange={(e) => setUpdatedBySearchTerm(e.target.value)}
+                              placeholder="Search by email..."
+                              className="pl-8 pr-3 py-1.5 w-full border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                              autoFocus
+                            />
+                          </div>
+                        </div>
+                        <div className="overflow-y-auto max-h-48">
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatedByToggle('')}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors flex items-center ${
+                              selectedUpdatedBy.length === 0 ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-900'
+                            }`}
+                          >
+                            <div className={`w-4 h-4 mr-2 border-2 rounded flex items-center justify-center shrink-0 ${
+                              selectedUpdatedBy.length === 0 ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
+                            }`}>
+                              {selectedUpdatedBy.length === 0 && (
+                                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              )}
+                            </div>
+                            <span>All Updated By</span>
+                          </button>
+                          {filteredUpdatedBy.length > 0 ? (
+                            filteredUpdatedBy.map((option) => (
+                              <button
+                                key={option}
+                                type="button"
+                                onClick={() => handleUpdatedByToggle(option)}
+                                className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 transition-colors flex items-center ${
+                                  selectedUpdatedBy.includes(option)
+                                    ? 'bg-indigo-50 text-indigo-700 font-medium'
+                                    : 'text-slate-900'
+                                }`}
+                              >
+                                <div className={`w-4 h-4 mr-2 border-2 rounded flex items-center justify-center shrink-0 ${
+                                  selectedUpdatedBy.includes(option) ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'
+                                }`}>
+                                  {selectedUpdatedBy.includes(option) && (
+                                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                      <path
+                                        fillRule="evenodd"
+                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                        clipRule="evenodd"
+                                      />
+                                    </svg>
+                                  )}
+                                </div>
+                                <span>{option}</span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-slate-500 text-center">No results found</div>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
                   <button

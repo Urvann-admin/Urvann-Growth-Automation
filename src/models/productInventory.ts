@@ -45,18 +45,31 @@ export class ProductInventoryModel {
     return collection.find({ substore }).toArray();
   }
 
-  static async findBySeller(seller: string, skip: number = 0, limit: number = 50, searchTerm?: string) {
+  static async findBySeller(seller: string, skip: number = 0, limit: number = 50, searchTerm?: string, updatedBy?: string) {
     const collection = await getProductInventoryCollection();
     
     // Build query with optional search filter
     const query: any = { seller };
     
     if (searchTerm && searchTerm.trim()) {
-      const searchRegex = { $regex: searchTerm.trim(), $options: 'i' };
+      const trimmedSearch = searchTerm.trim();
+      // Use exact match (case-insensitive) for SKU, partial match for name
       query.$or = [
-        { name: searchRegex },
-        { sku: searchRegex }
+        { name: { $regex: trimmedSearch, $options: 'i' } }, // Partial match for name
+        { sku: { $regex: `^${trimmedSearch}$`, $options: 'i' } } // Exact match for SKU (case-insensitive)
       ];
+    }
+    
+    // Add updatedBy filter if provided (supports multiple values as comma-separated)
+    if (updatedBy && updatedBy.trim()) {
+      const updatedByValues = updatedBy.split(',').map(v => v.trim()).filter(v => v);
+      if (updatedByValues.length > 0) {
+        if (updatedByValues.length === 1) {
+          query.lastUpdatedBy = updatedByValues[0];
+        } else {
+          query.lastUpdatedBy = { $in: updatedByValues };
+        }
+      }
     }
     
     // Sort by updatedAt in descending order (most recent first) at database level
@@ -68,18 +81,31 @@ export class ProductInventoryModel {
       .toArray();
   }
 
-  static async countBySellerFilter(seller: string, searchTerm?: string) {
+  static async countBySellerFilter(seller: string, searchTerm?: string, updatedBy?: string) {
     const collection = await getProductInventoryCollection();
     
     // Build query with optional search filter
     const query: any = { seller };
     
     if (searchTerm && searchTerm.trim()) {
-      const searchRegex = { $regex: searchTerm.trim(), $options: 'i' };
+      const trimmedSearch = searchTerm.trim();
+      // Use exact match (case-insensitive) for SKU, partial match for name
       query.$or = [
-        { name: searchRegex },
-        { sku: searchRegex }
+        { name: { $regex: trimmedSearch, $options: 'i' } }, // Partial match for name
+        { sku: { $regex: `^${trimmedSearch}$`, $options: 'i' } } // Exact match for SKU (case-insensitive)
       ];
+    }
+    
+    // Add updatedBy filter if provided (supports multiple values as comma-separated)
+    if (updatedBy && updatedBy.trim()) {
+      const updatedByValues = updatedBy.split(',').map(v => v.trim()).filter(v => v);
+      if (updatedByValues.length > 0) {
+        if (updatedByValues.length === 1) {
+          query.lastUpdatedBy = updatedByValues[0];
+        } else {
+          query.lastUpdatedBy = { $in: updatedByValues };
+        }
+      }
     }
     
     return collection.countDocuments(query);
