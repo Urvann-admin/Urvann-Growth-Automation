@@ -174,7 +174,13 @@ export async function POST(request: Request) {
         
         if (existing) {
           // Update existing category
-          await CategoryModel.update(existing._id as string, categoryData);
+          // Convert ObjectId to string if needed
+          const id = existing._id ? String(existing._id) : '';
+          if (!id) {
+            errorsDuringInsert.push(`Failed to update ${categoryData.category}: Invalid ID`);
+            continue;
+          }
+          await CategoryModel.update(id, categoryData);
           updatedCount++;
         } else {
           // Create new category
