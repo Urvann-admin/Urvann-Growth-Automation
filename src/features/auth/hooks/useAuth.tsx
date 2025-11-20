@@ -93,6 +93,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         storage.set(STORAGE_KEYS.user, userData);
         storage.set(STORAGE_KEYS.token, token);
         
+        // Store Growth user credentials in localStorage
+        const realtimeAccess = {
+          id: credentials.email,
+          password: credentials.password,
+        };
+        storage.set('realtimeAccess', realtimeAccess);
+        console.log('Realtime access data stored in localStorage:', realtimeAccess);
+        
         console.log('User data stored in localStorage');
         
         // Set auth token for API calls
@@ -153,6 +161,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null);
       storage.remove(STORAGE_KEYS.user);
       storage.remove(STORAGE_KEYS.token);
+      storage.remove('realtimeAccess');
       // apiService.removeAuthToken();
     }
   };
