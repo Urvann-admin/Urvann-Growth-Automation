@@ -38,7 +38,7 @@ interface Pagination {
 
 export default function SaathiAppLogsPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [sellersPagination, setSellersPagination] = useState<Pagination>({
@@ -86,12 +86,17 @@ export default function SaathiAppLogsPage() {
   );
 
   useEffect(() => {
+    // Wait for auth to finish loading before checking user
+    if (isLoading) {
+      return;
+    }
+    
     if (!user) {
       router.push('/auth/login');
       return;
     }
     fetchSellers(1);
-  }, [user, router]);
+  }, [user, isLoading, router]);
 
   const fetchSellers = async (page: number, append: boolean = false) => {
     try {
@@ -369,6 +374,18 @@ export default function SaathiAppLogsPage() {
       minute: '2-digit',
     });
   };
+
+  // Wait for auth to finish loading before checking user
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-3 border-emerald-500 border-t-transparent"></div>
+          <p className="text-slate-600 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return null;

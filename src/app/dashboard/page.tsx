@@ -8,21 +8,45 @@ import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Building2, Upload }
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   
   useEffect(() => {
+    console.log('Dashboard - isLoading:', isLoading);
     console.log('Dashboard - user:', user);
     console.log('Dashboard - user role:', user?.role);
-    
+
+    const isReturningFromRealtime =
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('returning_to_dashboard') === 'true';
+
+    // Wait for auth to finish loading before checking user
+    if (isLoading) {
+      return;
+    }
+
     if (!user) {
+      if (typeof window !== 'undefined') {
+        const storedUser = localStorage.getItem('urvann-user');
+        const storedToken = localStorage.getItem('urvann-token');
+
+        if (isReturningFromRealtime && storedUser && storedToken) {
+          console.log('Returning user detected, waiting for auth context to sync...');
+          return;
+        }
+      }
+
       console.log('No user, redirecting to login');
+      sessionStorage.removeItem('returning_to_dashboard');
       router.push('/auth/login');
     } else {
+      if (isReturningFromRealtime) {
+        sessionStorage.removeItem('returning_to_dashboard');
+      }
       console.log('User found, setting loading to false');
       setLoading(false);
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
   
   const handleLogout = () => {
     logout();
@@ -118,13 +142,8 @@ export default function DashboardPage() {
             <div 
               className="group bg-gradient-to-br from-amber-50/50 to-orange-50/30 rounded-xl shadow-sm border border-amber-100 p-5 cursor-pointer hover:shadow-md hover:border-amber-200 transition-all duration-200 w-[280px] flex-shrink-0"
               onClick={() => {
-                const baseUrl = 'http://13.200.250.221/realtime-orders';
-                const params = new URLSearchParams({
-                  email: user.email,
-                  password: 'admin123'
-                });
-                const urlWithParams = `${baseUrl}?${params.toString()}`;
-                window.open(urlWithParams, '_blank');
+                console.log('Real Time Dashboard clicked');
+                router.push('/dashboard/realtime-orders');
               }}
             >
               <div className="flex items-start justify-between mb-3">

@@ -7,7 +7,7 @@ import { Upload, Download, FileText, X, CheckCircle, AlertCircle, Loader2, Arrow
 
 export default function DataUploadPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; details?: any } | null>(null);
@@ -97,6 +97,18 @@ export default function DataUploadPage() {
       fileInputRef.current.value = '';
     }
   };
+
+  // Wait for auth to finish loading before checking user
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-3 border-emerald-500 border-t-transparent"></div>
+          <p className="text-slate-600 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     router.push('/auth/login');

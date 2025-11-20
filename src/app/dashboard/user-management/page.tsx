@@ -20,7 +20,7 @@ interface User {
 
 export default function UserManagementPage() {
   const router = useRouter();
-  const { user: currentUser, logout } = useAuth();
+  const { user: currentUser, logout, isLoading } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -28,6 +28,11 @@ export default function UserManagementPage() {
 
   // Check if user has permission
   useEffect(() => {
+    // Wait for auth to finish loading before checking user
+    if (isLoading) {
+      return;
+    }
+    
     if (!currentUser) {
       router.push('/auth/login');
       return;
@@ -39,7 +44,7 @@ export default function UserManagementPage() {
     }
     
     loadUsers();
-  }, [currentUser, router]);
+  }, [currentUser, isLoading, router]);
 
   const loadUsers = async () => {
     try {
