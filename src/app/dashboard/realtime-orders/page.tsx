@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { storage } from '@/shared/utils';
+import { STORAGE_KEYS } from '@/shared/constants';
 
 export default function RealtimeOrdersRedirectPage() {
   const router = useRouter();
@@ -33,10 +35,20 @@ export default function RealtimeOrdersRedirectPage() {
     sessionStorage.setItem(RETURN_FLAG, 'true');
     hasRedirected.current = true;
     
-    // Pass return URL as query parameter so the real-time dashboard knows where to redirect back
+    // Get user email from localStorage to pass via URL (for cross-origin access)
+    const storedUser = storage.get(STORAGE_KEYS.user);
+    const userEmail = storedUser?.email || '';
+    
+    // Pass return URL and user email as query parameters
     const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard/realtime-orders`);
-    const externalUrlWithReturn = `${externalUrl}?returnUrl=${returnUrl}`;
-    window.location.href = externalUrlWithReturn;
+    const params = new URLSearchParams({
+      returnUrl: returnUrl,
+      email: userEmail, // Pass email for cross-origin localStorage issue
+    });
+    const externalUrlWithParams = `${externalUrl}?${params.toString()}`;
+    
+    console.log('RealtimeOrdersRedirectPage: Redirecting with email:', userEmail);
+    window.location.href = externalUrlWithParams;
   }, [router]);
 
   return (

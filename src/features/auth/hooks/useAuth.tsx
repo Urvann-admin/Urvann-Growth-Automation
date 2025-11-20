@@ -96,6 +96,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Store Growth user credentials in localStorage
         const realtimeAccess = {
           id: credentials.email,
+          email: credentials.email,
           password: credentials.password,
         };
         storage.set('realtimeAccess', realtimeAccess);
