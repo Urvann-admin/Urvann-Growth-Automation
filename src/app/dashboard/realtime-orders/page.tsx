@@ -1,87 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { storage } from '@/shared/utils';
-import { STORAGE_KEYS } from '@/shared/constants';
-import type { AuthUser } from '@/shared/types/api';
 
 export default function RealtimeOrdersRedirectPage() {
   const router = useRouter();
-  const hasRedirected = useRef(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    // Prevent double execution
-    if (hasRedirected.current || isRedirecting) {
-      return;
-    }
-
-    const RETURN_FLAG = 'returning_from_realtime_dashboard';
-    const BACK_TO_DASHBOARD_FLAG = 'returning_to_dashboard';
-    const REDIRECT_IN_PROGRESS_FLAG = 'realtime_redirect_in_progress';
-    const externalUrl = 'http://13.235.242.169:5001/dashboard/realtime-orders';
-
-    // Check if we're returning from external dashboard
-    const wasAtExternal = sessionStorage.getItem(RETURN_FLAG) === 'true';
-    
-    // Check if redirect is already in progress (prevents double redirects)
-    const redirectInProgress = sessionStorage.getItem(REDIRECT_IN_PROGRESS_FLAG) === 'true';
-
-    console.log('RealtimeOrdersRedirectPage: wasAtExternal:', wasAtExternal);
-    console.log('RealtimeOrdersRedirectPage: redirectInProgress:', redirectInProgress);
-
-    if (wasAtExternal) {
-      console.log('RealtimeOrdersRedirectPage: Returning to dashboard');
-      sessionStorage.removeItem(RETURN_FLAG);
-      sessionStorage.removeItem(REDIRECT_IN_PROGRESS_FLAG);
-      sessionStorage.setItem(BACK_TO_DASHBOARD_FLAG, 'true');
-      hasRedirected.current = true;
-      setIsRedirecting(true);
-      router.replace('/dashboard');
-      return;
-    }
-
-    // If redirect is already in progress, don't redirect again
-    if (redirectInProgress) {
-      console.log('RealtimeOrdersRedirectPage: Redirect already in progress, waiting...');
-      return;
-    }
-
-    console.log('RealtimeOrdersRedirectPage: Redirecting to external site');
-    
-    // Mark redirect as in progress
-    sessionStorage.setItem(REDIRECT_IN_PROGRESS_FLAG, 'true');
-    sessionStorage.setItem(RETURN_FLAG, 'true');
-    hasRedirected.current = true;
-    setIsRedirecting(true);
-    
-    // Get user email from localStorage to pass via URL (for cross-origin access)
-    const storedUser = storage.get<AuthUser>(STORAGE_KEYS.user);
-    const userEmail = storedUser?.email || '';
-    
-    if (!userEmail) {
-      console.error('RealtimeOrdersRedirectPage: No user email found, redirecting to dashboard');
-      sessionStorage.removeItem(REDIRECT_IN_PROGRESS_FLAG);
-      sessionStorage.removeItem(RETURN_FLAG);
-      router.replace('/dashboard');
-      return;
-    }
-    
-    // Pass return URL and user email as query parameters
-    // Return URL should point to dashboard, not redirect page
-    const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard`);
-    const params = new URLSearchParams({
-      returnUrl: returnUrl,
-      email: userEmail, // Pass email for cross-origin localStorage issue
-    });
-    const externalUrlWithParams = `${externalUrl}?${params.toString()}`;
-    
-    console.log('RealtimeOrdersRedirectPage: Redirecting with email:', userEmail);
-    
-    // Immediate redirect to external URL (using replace for immediate navigation)
-    window.location.replace(externalUrlWithParams);
-  }, [router, isRedirecting]);
+    // This page should not be used anymore since we do direct redirects
+    // If someone lands here, redirect them back to dashboard
+    console.log('RealtimeOrdersRedirectPage: This page is deprecated, redirecting to dashboard');
+    router.replace('/dashboard');
+  }, [router]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-emerald-50/30 flex items-center justify-center">

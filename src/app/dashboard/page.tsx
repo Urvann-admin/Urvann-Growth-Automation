@@ -153,12 +153,10 @@ export default function DashboardPage() {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                // Prevent multiple clicks
-                const redirectInProgress = sessionStorage.getItem('realtime_redirect_in_progress') === 'true';
-                if (redirectInProgress) {
-                  console.log('Real Time Dashboard: Redirect already in progress, ignoring click');
-                  return;
-                }
+                // Clear any stuck flags first
+                sessionStorage.removeItem('realtime_redirect_in_progress');
+                sessionStorage.removeItem('returning_from_realtime_dashboard');
+                sessionStorage.removeItem('returning_to_dashboard');
                 
                 console.log('Real Time Dashboard clicked - redirecting immediately');
                 
@@ -168,16 +166,12 @@ export default function DashboardPage() {
                 
                 if (!userEmail) {
                   console.error('Real Time Dashboard: No user email found');
+                  alert('User email not found. Please refresh and try again.');
                   return;
                 }
                 
-                // Set session flags for return flow
-                sessionStorage.setItem('realtime_redirect_in_progress', 'true');
-                sessionStorage.setItem('returning_from_realtime_dashboard', 'true');
-                
-                // Build external URL with params
+                // Build external URL with params - use full URL for returnUrl
                 const externalUrl = 'http://13.235.242.169:5001/dashboard/realtime-orders';
-                // Return URL should point to dashboard, not redirect page
                 const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard`);
                 const params = new URLSearchParams({
                   returnUrl: returnUrl,
@@ -185,8 +179,11 @@ export default function DashboardPage() {
                 });
                 const externalUrlWithParams = `${externalUrl}?${params.toString()}`;
                 
+                console.log('Redirecting to:', externalUrlWithParams);
+                console.log('Return URL will be:', returnUrl);
+                
                 // Immediate redirect to external URL
-                window.location.replace(externalUrlWithParams);
+                window.location.href = externalUrlWithParams;
               }}
             >
               <div className="flex items-start justify-between mb-3">
