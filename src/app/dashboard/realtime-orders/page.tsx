@@ -78,15 +78,8 @@ export default function RealtimeOrdersRedirectPage() {
     
     console.log('RealtimeOrdersRedirectPage: Redirecting with email:', userEmail);
     
-    // Use setTimeout to ensure state updates before redirect
-    const redirectTimeout = setTimeout(() => {
-      window.location.href = externalUrlWithParams;
-    }, 100);
-
-    // Cleanup function to handle component unmount (e.g., back button)
-    return () => {
-      clearTimeout(redirectTimeout);
-    };
+    // Immediate redirect to external URL (using replace for immediate navigation)
+    window.location.replace(externalUrlWithParams);
   }, [router, isRedirecting]);
 
   return (

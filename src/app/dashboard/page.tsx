@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useEffect, useState } from 'react';
 import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Building2, Upload } from 'lucide-react';
+import { storage } from '@/shared/utils';
+import { STORAGE_KEYS } from '@/shared/constants';
+import type { AuthUser } from '@/shared/types/api';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -157,8 +160,32 @@ export default function DashboardPage() {
                   return;
                 }
                 
-                console.log('Real Time Dashboard clicked');
-                router.push('/dashboard/realtime-orders');
+                console.log('Real Time Dashboard clicked - redirecting immediately');
+                
+                // Get user email from localStorage
+                const storedUser = storage.get<AuthUser>(STORAGE_KEYS.user);
+                const userEmail = storedUser?.email || '';
+                
+                if (!userEmail) {
+                  console.error('Real Time Dashboard: No user email found');
+                  return;
+                }
+                
+                // Set session flags for return flow
+                sessionStorage.setItem('realtime_redirect_in_progress', 'true');
+                sessionStorage.setItem('returning_from_realtime_dashboard', 'true');
+                
+                // Build external URL with params
+                const externalUrl = 'http://13.235.242.169:5001/dashboard/realtime-orders';
+                const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard/realtime-orders`);
+                const params = new URLSearchParams({
+                  returnUrl: returnUrl,
+                  email: userEmail,
+                });
+                const externalUrlWithParams = `${externalUrl}?${params.toString()}`;
+                
+                // Immediate redirect to external URL
+                window.location.replace(externalUrlWithParams);
               }}
             >
               <div className="flex items-start justify-between mb-3">
