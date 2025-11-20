@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { storage } from '@/shared/utils';
 import { STORAGE_KEYS } from '@/shared/constants';
+import type { AuthUser } from '@/shared/types/api';
 
 export default function RealtimeOrdersRedirectPage() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function RealtimeOrdersRedirectPage() {
     hasRedirected.current = true;
     
     // Get user email from localStorage to pass via URL (for cross-origin access)
-    const storedUser = storage.get(STORAGE_KEYS.user);
+    const storedUser = storage.get<AuthUser>(STORAGE_KEYS.user);
     const userEmail = storedUser?.email || '';
     
     // Pass return URL and user email as query parameters
