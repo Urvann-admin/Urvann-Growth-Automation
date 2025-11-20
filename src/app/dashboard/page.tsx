@@ -20,6 +20,13 @@ export default function DashboardPage() {
       typeof window !== 'undefined' &&
       sessionStorage.getItem('returning_to_dashboard') === 'true';
 
+    // Clear redirect flags when returning to dashboard
+    if (isReturningFromRealtime && typeof window !== 'undefined') {
+      sessionStorage.removeItem('returning_to_dashboard');
+      sessionStorage.removeItem('realtime_redirect_in_progress');
+      sessionStorage.removeItem('returning_from_realtime_dashboard');
+    }
+
     // Wait for auth to finish loading before checking user
     if (isLoading) {
       return;
@@ -38,11 +45,9 @@ export default function DashboardPage() {
 
       console.log('No user, redirecting to login');
       sessionStorage.removeItem('returning_to_dashboard');
+      sessionStorage.removeItem('realtime_redirect_in_progress');
       router.push('/auth/login');
     } else {
-      if (isReturningFromRealtime) {
-        sessionStorage.removeItem('returning_to_dashboard');
-      }
       console.log('User found, setting loading to false');
       setLoading(false);
     }
@@ -141,7 +146,17 @@ export default function DashboardPage() {
             {/* Real Time Dashboard Card */}
             <div 
               className="group bg-gradient-to-br from-amber-50/50 to-orange-50/30 rounded-xl shadow-sm border border-amber-100 p-5 cursor-pointer hover:shadow-md hover:border-amber-200 transition-all duration-200 w-[280px] flex-shrink-0"
-              onClick={() => {
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Prevent multiple clicks
+                const redirectInProgress = sessionStorage.getItem('realtime_redirect_in_progress') === 'true';
+                if (redirectInProgress) {
+                  console.log('Real Time Dashboard: Redirect already in progress, ignoring click');
+                  return;
+                }
+                
                 console.log('Real Time Dashboard clicked');
                 router.push('/dashboard/realtime-orders');
               }}
