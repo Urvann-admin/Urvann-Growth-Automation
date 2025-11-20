@@ -69,7 +69,8 @@ export default function RealtimeOrdersRedirectPage() {
     }
     
     // Pass return URL and user email as query parameters
-    const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard/realtime-orders`);
+    // Return URL should point to dashboard, not redirect page
+    const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard`);
     const params = new URLSearchParams({
       returnUrl: returnUrl,
       email: userEmail, // Pass email for cross-origin localStorage issue

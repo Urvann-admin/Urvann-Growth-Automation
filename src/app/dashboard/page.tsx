@@ -177,7 +177,8 @@ export default function DashboardPage() {
                 
                 // Build external URL with params
                 const externalUrl = 'http://13.235.242.169:5001/dashboard/realtime-orders';
-                const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard/realtime-orders`);
+                // Return URL should point to dashboard, not redirect page
+                const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard`);
                 const params = new URLSearchParams({
                   returnUrl: returnUrl,
                   email: userEmail,
