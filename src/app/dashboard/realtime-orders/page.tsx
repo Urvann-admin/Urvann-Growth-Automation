@@ -79,22 +79,13 @@ export default function RealtimeOrdersRedirectPage() {
     console.log('RealtimeOrdersRedirectPage: Redirecting with email:', userEmail);
     
     // Use setTimeout to ensure state updates before redirect
-    setTimeout(() => {
+    const redirectTimeout = setTimeout(() => {
       window.location.href = externalUrlWithParams;
     }, 100);
 
     // Cleanup function to handle component unmount (e.g., back button)
     return () => {
-      // Clear redirect in progress flag after a delay if we're still on this page
-      // This handles the case where user presses back before redirect completes
-      const timeoutId = setTimeout(() => {
-        if (window.location.pathname === '/dashboard/realtime-orders') {
-          console.log('RealtimeOrdersRedirectPage: Still on redirect page after timeout, clearing flags');
-          sessionStorage.removeItem(REDIRECT_IN_PROGRESS_FLAG);
-        }
-      }, 2000);
-      
-      return () => clearTimeout(timeoutId);
+      clearTimeout(redirectTimeout);
     };
   }, [router, isRedirecting]);
 
