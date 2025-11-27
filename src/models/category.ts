@@ -40,8 +40,11 @@ export class CategoryModel {
     return { ...category, _id: categoryData._id };
   }
 
-  static async update(id: string, categoryData: Partial<Omit<Category, '_id' | 'createdAt'>>) {
+  static async update(id: string | ObjectId, categoryData: Partial<Omit<Category, '_id' | 'createdAt'>>) {
     const collection = await getCollection('categoryList');
+    
+    // Convert string ID to ObjectId if needed
+    const objectId = typeof id === 'string' ? new ObjectId(id) : id;
     
     const updateData = {
       ...categoryData,
@@ -49,7 +52,7 @@ export class CategoryModel {
     };
     
     return collection.updateOne(
-      { _id: id as any },
+      { _id: objectId },
       { $set: updateData }
     );
   }

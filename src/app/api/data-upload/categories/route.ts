@@ -174,13 +174,27 @@ export async function POST(request: Request) {
         
         if (existing) {
           // Update existing category
-          // Convert ObjectId to string if needed
-          const id = existing._id ? String(existing._id) : '';
-          if (!id) {
+          // Use the _id directly (it's already an ObjectId from MongoDB)
+          if (!existing._id) {
             errorsDuringInsert.push(`Failed to update ${categoryData.category}: Invalid ID`);
             continue;
           }
-          await CategoryModel.update(id, categoryData);
+          
+          // Pass the ObjectId directly (can be ObjectId or string)
+          const updateResult = await CategoryModel.update(existing._id, categoryData);
+          
+          // Check if the update actually matched and modified a document
+          if (updateResult.matchedCount === 0) {
+            errorsDuringInsert.push(`Failed to update ${categoryData.category}: Document not found`);
+            continue;
+          }
+          
+          if (updateResult.modifiedCount === 0) {
+            // Document was matched but not modified (data might be the same)
+            // This is not necessarily an error, but we'll still count it as updated
+            console.log(`Category ${categoryData.alias} was matched but not modified (data unchanged)`);
+          }
+          
           updatedCount++;
         } else {
           // Create new category
@@ -188,6 +202,7 @@ export async function POST(request: Request) {
           insertedCount++;
         }
       } catch (error: any) {
+        console.error(`Error processing category ${categoryData.alias}:`, error);
         errorsDuringInsert.push(`Failed to process ${categoryData.category}: ${error.message}`);
       }
     }

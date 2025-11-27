@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Urvann Growth Automation",
   description: "Growth automation platform for Urvann",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
