@@ -28,7 +28,7 @@ export interface ProductInventoryAuditLog {
 async function getProductInventoryAuditLogCollection() {
   const client = await clientPromise;
   const db = client.db('UrvannSellerApp');
-  return db.collection<ProductInventoryAuditLog>('productInventoryAuditLog');
+  return db.collection<ProductInventoryAuditLog>('ProductInventoryAuditLog');
 }
 
 export class ProductInventoryAuditLogModel {
