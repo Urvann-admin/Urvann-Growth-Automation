@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Building2, Package, CheckCircle, XCircle, Calendar, ArrowLeft, Loader2, RefreshCw, Search, X } from 'lucide-react';
+import { Building2, Package, CheckCircle, XCircle, Calendar, ArrowLeft, Loader2, RefreshCw, Search, X, ChevronDown, ChevronRight, History } from 'lucide-react';
+import AuditLogTimeline from '@/components/audit/AuditLogTimeline';
 
 interface Seller {
   seller: string;
@@ -66,6 +67,11 @@ export default function SaathiAppLogsPage() {
   const [selectedUpdatedBy, setSelectedUpdatedBy] = useState<string[]>([]);
   const [isUpdatedByDropdownOpen, setIsUpdatedByDropdownOpen] = useState(false);
   const [updatedBySearchTerm, setUpdatedBySearchTerm] = useState<string>('');
+  
+  // Audit logs state
+  const [expandedAuditLogs, setExpandedAuditLogs] = useState<Set<string>>(new Set());
+  const [auditLogsData, setAuditLogsData] = useState<Record<string, any[]>>({});
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState<Set<string>>(new Set());
 
   const sellersObserverRef = useRef<HTMLDivElement>(null);
   const productsObserverRef = useRef<HTMLDivElement>(null);
@@ -200,6 +206,9 @@ export default function SaathiAppLogsPage() {
     setSelectedUpdatedBy([]);
     setUpdatedBySearchTerm('');
     setIsUpdatedByDropdownOpen(false);
+    setExpandedAuditLogs(new Set());
+    setAuditLogsData({});
+    setLoadingAuditLogs(new Set());
     setProductsPagination({
       page: 1,
       limit: 50,
@@ -290,10 +299,61 @@ export default function SaathiAppLogsPage() {
     }
   };
 
+  // Audit logs functionality
+  const fetchAuditLogs = async (sku: string) => {
+    try {
+      setLoadingAuditLogs(prev => new Set([...prev, sku]));
+      
+      const response = await fetch(`/api/saathi-app-logs/products/audit-logs?sku=${encodeURIComponent(sku)}&limit=20`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setAuditLogsData(prev => ({
+          ...prev,
+          [sku]: result.data
+        }));
+      } else {
+        console.error('Failed to fetch audit logs:', result.message);
+      }
+    } catch (error) {
+      console.error('Error fetching audit logs:', error);
+    } finally {
+      setLoadingAuditLogs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sku);
+        return newSet;
+      });
+    }
+  };
+
+  const toggleAuditLogs = async (sku: string) => {
+    const isExpanded = expandedAuditLogs.has(sku);
+    
+    if (isExpanded) {
+      // Collapse
+      setExpandedAuditLogs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sku);
+        return newSet;
+      });
+    } else {
+      // Expand
+      setExpandedAuditLogs(prev => new Set([...prev, sku]));
+      
+      // Fetch audit logs if not already loaded
+      if (!auditLogsData[sku]) {
+        await fetchAuditLogs(sku);
+      }
+    }
+  };
+
   const handleRefresh = async () => {
     if (selectedSeller) {
       // Refresh products for selected seller (with current search term and filters)
       setProducts([]);
+      setExpandedAuditLogs(new Set());
+      setAuditLogsData({});
+      setLoadingAuditLogs(new Set());
       setProductsPagination({
         page: 1,
         limit: 50,
@@ -633,71 +693,112 @@ export default function SaathiAppLogsPage() {
                       <th className="px-4 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wide">
                         Substore
                       </th>
+                      <th className="px-4 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wide">
+                        Audit Logs
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-slate-100">
-                    {products.map((product) => (
-                      <tr key={product._id || product.sku} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="text-sm font-medium text-slate-900 max-w-md">
-                            {product.name}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">
-                            {product.sku}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="text-sm font-semibold text-slate-900">
-                            ₹{product.price.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {product.publish === 1 ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Published
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
-                              <XCircle className="w-3 h-3 mr-1" />
-                              Unpublished
-                            </span>
+                    {products.map((product) => {
+                      const isAuditExpanded = expandedAuditLogs.has(product.sku);
+                      const isAuditLoading = loadingAuditLogs.has(product.sku);
+                      const auditLogs = auditLogsData[product.sku] || [];
+                      
+                      return (
+                        <React.Fragment key={product._id || product.sku}>
+                          <tr className="hover:bg-slate-50 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="text-sm font-medium text-slate-900 max-w-md">
+                                {product.name}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs font-mono text-slate-600 bg-slate-100 px-2 py-1 rounded">
+                                {product.sku}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="text-sm font-semibold text-slate-900">
+                                ₹{product.price.toLocaleString()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {product.publish === 1 ? (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Published
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Unpublished
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
+                                product.inventory_quantity > 0
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : 'bg-rose-100 text-rose-700'
+                              }`}>
+                                {product.inventory_quantity}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center text-xs text-slate-600">
+                                <Calendar className="w-3 h-3 mr-1.5 text-slate-400" />
+                                {formatDate(product.updatedAt)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs text-slate-700 font-medium">
+                                {product.lastUpdatedBy || '-'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs text-slate-700 font-medium">
+                                {product.lastFieldUpdated || '-'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs text-slate-600 capitalize">
+                                {product.substore}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => toggleAuditLogs(product.sku)}
+                                disabled={isAuditLoading}
+                                className="inline-flex items-center space-x-1 px-2 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded transition-colors disabled:opacity-50"
+                                title="View audit logs"
+                              >
+                                {isAuditLoading ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : isAuditExpanded ? (
+                                  <ChevronDown className="w-3 h-3" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3" />
+                                )}
+                                <History className="w-3 h-3" />
+                                <span>{isAuditExpanded ? 'Hide' : 'Logs'}</span>
+                              </button>
+                            </td>
+                          </tr>
+                          
+                          {/* Audit Logs Expanded Row */}
+                          {isAuditExpanded && (
+                            <tr>
+                              <td colSpan={10} className="px-4 py-4 bg-slate-50 border-t border-slate-200">
+                                <AuditLogTimeline 
+                                  auditLogs={auditLogs} 
+                                  loading={isAuditLoading}
+                                />
+                              </td>
+                            </tr>
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${
-                            product.inventory_quantity > 0
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-rose-100 text-rose-700'
-                          }`}>
-                            {product.inventory_quantity}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center text-xs text-slate-600">
-                            <Calendar className="w-3 h-3 mr-1.5 text-slate-400" />
-                            {formatDate(product.updatedAt)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-700 font-medium">
-                            {product.lastUpdatedBy || '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-700 font-medium">
-                            {product.lastFieldUpdated || '-'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs text-slate-600 capitalize">
-                            {product.substore}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                        </React.Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
