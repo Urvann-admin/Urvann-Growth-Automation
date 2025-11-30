@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get audit logs for the SKU, sorted by creation date (newest first)
+    // Get audit logs for the specific SKU
     const [auditLogs, totalCount] = await Promise.all([
       ProductInventoryAuditLogModel.findBySku(sku, limit),
       ProductInventoryAuditLogModel.countBySku(sku),
@@ -27,8 +27,8 @@ export async function GET(request: Request) {
       data: auditLogs,
       meta: {
         sku,
-        total: totalCount,
-        loaded: auditLogs.length,
+        totalLogs: totalCount,
+        showing: auditLogs.length,
       },
     });
   } catch (error: any) {
