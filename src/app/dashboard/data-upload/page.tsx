@@ -157,24 +157,46 @@ export default function DataUploadPage() {
         {/* Instructions Card */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
           <h2 className="text-base font-semibold text-slate-900 mb-3">Upload Instructions</h2>
-          <ul className="space-y-2 text-sm text-slate-600">
-            <li className="flex items-start">
-              <span className="mr-2">1.</span>
-              <span>Download the template file to see the required format</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">2.</span>
-              <span>Fill in your category data following the template structure</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">3.</span>
-              <span>Upload the completed file (CSV or XLSX format)</span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">4.</span>
-              <span>The system will validate and import your data</span>
-            </li>
-          </ul>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-sm font-medium text-slate-900 mb-2">For New Categories:</h3>
+              <ul className="space-y-2 text-sm text-slate-600">
+                <li className="flex items-start">
+                  <span className="mr-2">1.</span>
+                  <span>Download the template file to see the required format</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="mr-2">2.</span>
+                  <span>Fill in your category data following the template structure</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="mr-2">3.</span>
+                  <span>Upload the file (CSV or XLSX format)</span>
+                </li>
+              </ul>
+            </div>
+            <div className="border-t border-slate-200 pt-4">
+              <h3 className="text-sm font-medium text-slate-900 mb-2">For Updating Existing Categories:</h3>
+              <ul className="space-y-2 text-sm text-slate-600">
+                <li className="flex items-start">
+                  <span className="mr-2">•</span>
+                  <span>Include the <span className="bg-slate-100 px-1 rounded font-mono text-xs">_id</span> column with the category ID you want to update</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="mr-2">•</span>
+                  <span>Only include the columns you want to update (you don't need to include all columns)</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="mr-2">•</span>
+                  <span>Leave columns empty if you don't want to update them</span>
+                </li>
+                <li className="flex items-start">
+                  <span className="mr-2">•</span>
+                  <span className="text-amber-600 font-medium">Note: Template is only for new data. For updates, create your own file with _id and the fields to update.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
 
         {/* Upload Section */}
@@ -184,9 +206,10 @@ export default function DataUploadPage() {
             <button
               onClick={handleDownloadTemplate}
               className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium"
+              title="Download template for new category uploads"
             >
               <Download className="w-4 h-4" />
-              <span>Download Template</span>
+              <span>Download Template (New Data)</span>
             </button>
           </div>
 
