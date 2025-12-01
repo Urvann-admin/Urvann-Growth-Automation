@@ -791,7 +791,7 @@ export default function SaathiAppLogsPage() {
                                   <div className="flex items-center space-x-2">
                                     <History className="w-4 h-4 text-indigo-600" />
                                     <span className="text-sm font-semibold text-indigo-900">
-                                      Audit Log Trail ({auditLogsData?.logs?.length || 0} entries)
+                                      Audit Log Trail ({auditLogsData?.logs && auditLogsData.logs.length > 0 ? Math.max(0, auditLogsData.logs.length - 1) : 0} entries)
                                     </span>
                                   </div>
                                 </td>
@@ -819,19 +819,23 @@ export default function SaathiAppLogsPage() {
                               )}
                               
                               {/* Empty State */}
-                              {!auditLogsData?.loading && !auditLogsData?.error && (!auditLogsData?.logs || auditLogsData.logs.length === 0) && (
+                              {!auditLogsData?.loading && !auditLogsData?.error && (!auditLogsData?.logs || auditLogsData.logs.length <= 1) && (
                                 <tr>
                                   <td colSpan={10} className="px-4 py-8 bg-slate-50 text-center">
                                     <FileText className="w-6 h-6 mx-auto mb-2 text-slate-400" />
-                                    <p className="text-xs text-slate-500">No audit logs found for this SKU</p>
+                                    <p className="text-xs text-slate-500">
+                                      {auditLogsData?.logs && auditLogsData.logs.length === 1 
+                                        ? 'No additional audit logs (latest log is shown in the product row above)' 
+                                        : 'No audit logs found for this SKU'}
+                                    </p>
                                   </td>
                                 </tr>
                               )}
                               
                               {/* Audit Log Rows */}
-                              {!auditLogsData?.loading && !auditLogsData?.error && auditLogsData?.logs && auditLogsData.logs.length > 0 && (
+                              {!auditLogsData?.loading && !auditLogsData?.error && auditLogsData?.logs && auditLogsData.logs.length > 1 && (
                                 <>
-                                  {auditLogsData.logs.map((log) => (
+                                  {auditLogsData.logs.slice(1).map((log) => (
                                     <tr key={log._id} className="bg-slate-50/50 hover:bg-slate-100/50 transition-colors">
                                       <td className="px-4 py-2">
                                         <div className="flex items-center space-x-2">
@@ -874,36 +878,9 @@ export default function SaathiAppLogsPage() {
                                         </div>
                                       </td>
                                       <td className="px-4 py-2">
-                                        <div className="text-xs text-slate-700 max-w-xs">
-                                          {log.changedFields && log.changedFields.length > 0 ? (
-                                            <div className="space-y-0.5">
-                                              {log.changedFields.slice(0, 2).map((field) => {
-                                                const fieldChange = log.fieldChanges?.[field];
-                                                return (
-                                                  <div key={field} className="flex items-center space-x-1">
-                                                    <span className="text-slate-500">{field}:</span>
-                                                    <span className="text-red-600 line-through text-[10px]">
-                                                      {fieldChange?.oldValue === null || fieldChange?.oldValue === undefined ? 
-                                                        '' : 
-                                                        String(fieldChange?.oldValue).substring(0, 12)}
-                                                    </span>
-                                                    <span className="text-slate-400">→</span>
-                                                    <span className="text-green-600 text-[10px]">
-                                                      {fieldChange?.newValue === null || fieldChange?.newValue === undefined ? 
-                                                        '' : 
-                                                        String(fieldChange?.newValue).substring(0, 12)}
-                                                    </span>
-                                                  </div>
-                                                );
-                                              })}
-                                              {log.changedFields.length > 2 && (
-                                                <span className="text-slate-400 text-[10px]">+{log.changedFields.length - 2} more</span>
-                                              )}
-                                            </div>
-                                          ) : (
-                                            <span>{log.lastFieldUpdated || '-'}</span>
-                                          )}
-                                        </div>
+                                        <span className="text-xs text-slate-700">
+                                          {log.lastFieldUpdated || '-'}
+                                        </span>
                                       </td>
                                       <td className="px-4 py-2">
                                         <span className="text-xs text-slate-500">-</span>
