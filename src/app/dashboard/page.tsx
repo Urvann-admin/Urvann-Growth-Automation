@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/Button";
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useEffect, useState } from 'react';
-import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Building2, Upload } from 'lucide-react';
+import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Building2, Upload, ShoppingCart } from 'lucide-react';
 import { storage } from '@/shared/utils';
 import { STORAGE_KEYS } from '@/shared/constants';
 import type { AuthUser } from '@/shared/types/api';
@@ -263,9 +263,10 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Second Row - User Management Card */}
-          {(user.role === 'admin' || user.role === 'manager') && (
-            <div className="flex justify-center">
+          {/* Second Row */}
+          <div className="flex justify-center gap-6">
+            {/* User Management Card */}
+            {(user.role === 'admin' || user.role === 'manager') && (
               <div 
                 className="group bg-gradient-to-br from-indigo-50/50 to-purple-50/30 rounded-xl shadow-sm border border-indigo-100 p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all duration-200 w-[280px] flex-shrink-0"
                 onClick={() => router.push('/dashboard/user-management')}
@@ -292,8 +293,34 @@ export default function DashboardPage() {
                   </svg>
                 </div>
               </div>
+            )}
+
+            {/* Frequently Bought Together Card */}
+            <div 
+              className="group bg-gradient-to-br from-teal-50/50 to-emerald-50/30 rounded-xl shadow-sm border border-teal-100 p-5 cursor-pointer hover:shadow-md hover:border-teal-200 transition-all duration-200 w-[280px] flex-shrink-0"
+              onClick={() => router.push('/dashboard/frequently-bought')}
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-11 h-11 bg-gradient-to-br from-teal-500 to-emerald-600 rounded-lg flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
+                  <ShoppingCart className="w-5 h-5 text-white" strokeWidth={2.5} />
+                </div>
+                <div className="px-2 py-0.5 bg-teal-100 text-teal-700 text-[10px] font-semibold rounded-full">
+                  INSIGHTS
+                </div>
+              </div>
+              <h3 className="text-base font-semibold text-slate-900 mb-0.5">Frequently Bought</h3>
+              <p className="text-xs text-slate-600 mb-3">Co-purchase analysis</p>
+              <div className="flex items-end justify-between">
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">Patterns</div>
+                  <div className="text-xs text-teal-600 font-medium mt-0.5">View product pairs</div>
+                </div>
+                <svg className="w-4 h-4 text-slate-400 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
