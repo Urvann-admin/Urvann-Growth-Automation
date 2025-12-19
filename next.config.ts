@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable SWC minification for faster builds (it's actually faster than terser)
-  swcMinify: true,
+  // Compiler optimizations
   compiler: {
     removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
   },
@@ -16,7 +15,11 @@ const nextConfig: NextConfig = {
   },
   // Disable source maps for faster builds and less memory usage
   productionBrowserSourceMaps: false,
-  // Enable webpack optimizations for better code splitting
+  // Configure Turbopack for better code splitting (Next.js 16 default)
+  turbopack: {
+    // Turbopack handles code splitting automatically and efficiently
+  },
+  // Fallback webpack config for explicit webpack usage (use --webpack flag)
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // Optimize client-side bundle splitting
