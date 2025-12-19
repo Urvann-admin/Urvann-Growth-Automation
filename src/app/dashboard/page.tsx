@@ -170,8 +170,8 @@ export default function DashboardPage() {
                   return;
                 }
                 
-                // Build external URL with params - use full URL for returnUrl
-                const externalUrl = 'http://65.0.92.112:5001/dashboard/realtime-orders';
+                // Build external URL with params - use public IP and correct port
+                const externalUrl = 'http://65.0.92.112:5002/dashboard/realtime-orders';
                 const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard`);
                 const params = new URLSearchParams({
                   returnUrl: returnUrl,
