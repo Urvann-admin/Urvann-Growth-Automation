@@ -20,9 +20,15 @@ export async function GET() {
 
     // OPTIMIZATION: 
     // 1. Remove sort - it's expensive and not necessary (frontend can sort if needed)
-    // 2. Use compound index hint for faster filtering
-    // 3. Use projection to minimize data transfer
-    // 4. Fetch without sort for maximum speed
+    // 2. Use projection to minimize data transfer
+    // 3. Fetch without sort for maximum speed
+    // 4. Create index if it doesn't exist for better performance
+    try {
+      await mappingCollection.createIndex({ publish: 1, inventory: 1 });
+    } catch (e) {
+      // Index might already exist, ignore error
+    }
+    
     const uniqueSkus = await mappingCollection
       .find(
         {
@@ -36,8 +42,6 @@ export async function GET() {
             product_id: 1,
             _id: 0,
           },
-          // Hint to use compound index for faster query
-          hint: { publish: 1, inventory: 1 },
           // Increase batch size for faster fetching
           batchSize: 5000,
         }
