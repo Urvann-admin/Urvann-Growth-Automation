@@ -140,6 +140,7 @@ export default function FrequentlyBoughtPage() {
     failures: number;
     elapsedTime: number;
     cancelled: boolean;
+    completed?: boolean;
   } | null>(null);
 
   // Confirmation modals state
@@ -509,13 +510,13 @@ export default function FrequentlyBoughtPage() {
                 // We're done - update progress to reflect completion
                 setSyncProgress(prev => {
                   if (!prev) return null;
-                  // Calculate final percentage based on actual synced count vs 150k
-                  const finalPercentage = Math.min(Math.round((totalSynced / SYNC_EXPECTED_TOTAL) * 100), 100);
+                  // Set to 100% when sync completes naturally (all available products synced)
                   return {
                     ...prev,
                     processed: totalSynced,
                     total: SYNC_EXPECTED_TOTAL, // Keep total as 150k for consistency
-                    percentage: finalPercentage,
+                    percentage: 100, // Set to 100% when completed
+                    completed: true, // Mark as completed
                     logs: [...prev.logs, 'No more products found, sync complete'],
                   };
                 });
@@ -594,13 +595,13 @@ export default function FrequentlyBoughtPage() {
       // Final update - smoothly transition to 100%
       setSyncProgress(prev => {
         if (!prev) return null;
-        // Calculate final percentage based on actual synced count vs 150k
-        const finalPercentage = Math.min(Math.round((totalSynced / SYNC_EXPECTED_TOTAL) * 100), 100);
+        // Set to 100% when sync completes (all available products synced)
         return {
           ...prev,
           processed: totalSynced,
           total: SYNC_EXPECTED_TOTAL, // Keep total as 150k for consistency
-          percentage: finalPercentage,
+          percentage: 100, // Set to 100% when completed
+          completed: true, // Mark as completed
           logs: [...prev.logs, `✓ Sync completed! Total synced: ${totalSynced.toLocaleString()} products`],
         };
       });

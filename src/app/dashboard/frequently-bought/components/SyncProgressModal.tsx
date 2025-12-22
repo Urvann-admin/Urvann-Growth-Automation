@@ -11,6 +11,7 @@ interface SyncProgressModalProps {
     failures: number;
     elapsedTime: number;
     cancelled: boolean;
+    completed?: boolean;
   };
   onCancel: () => void;
   onClose: () => void;
@@ -21,7 +22,7 @@ export default function SyncProgressModal({
   onCancel,
   onClose,
 }: SyncProgressModalProps) {
-  const isComplete = progress.processed >= progress.total || progress.cancelled || progress.percentage >= 100;
+  const isComplete = progress.completed || progress.processed >= progress.total || progress.cancelled || progress.percentage >= 100;
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
