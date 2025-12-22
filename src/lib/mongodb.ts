@@ -10,7 +10,16 @@ if (!uri) {
   throw new Error('Please add your Mongo URI to .env.local');
 }
 
-const options = {};
+const options = {
+  serverSelectionTimeoutMS: 30000, // 30 seconds
+  socketTimeoutMS: 45000, // 45 seconds
+  connectTimeoutMS: 30000, // 30 seconds
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  maxIdleTimeMS: 30000,
+  retryWrites: true,
+  retryReads: true,
+};
 
 let client;
 let clientPromise: Promise<MongoClient>;
@@ -62,7 +71,14 @@ export async function connectDB() {
   try {
     // Connect to GrowthAutomation database explicitly
     await mongoose.connect(uri, {
-      dbName: 'GrowthAutomation'
+      dbName: 'GrowthAutomation',
+      serverSelectionTimeoutMS: 30000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 30000,
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      retryWrites: true,
+      retryReads: true,
     });
     isConnected = true;
     console.log('MongoDB connected via Mongoose to GrowthAutomation database');
