@@ -12,7 +12,7 @@ export const maxDuration = 300; // 5 minutes
  */
 export async function POST() {
   try {
-    let start = 0;
+    let sinceId = '0';
     const limit = 100; // Increased batch size for faster sync
     let totalSynced = 0;
     let hasMore = true;
@@ -21,7 +21,7 @@ export async function POST() {
 
     while (hasMore) {
       try {
-        const { products, hasMore: moreProducts } = await fetchProductsForMapping(start, limit);
+        const { products, hasMore: moreProducts, lastId } = await fetchProductsForMapping(sinceId, limit);
         
         if (products.length === 0) {
           break;
@@ -52,14 +52,14 @@ export async function POST() {
         console.log(`Synced ${totalSynced} SKU mappings so far...`);
 
         hasMore = moreProducts;
-        start += limit;
+        sinceId = lastId;
 
         // Reduced delay for faster sync while respecting rate limits
         await new Promise(resolve => setTimeout(resolve, 50));
       } catch (error) {
-        console.error(`Error syncing batch starting at ${start}:`, error);
-        // Continue with next batch
-        start += limit;
+        console.error(`Error syncing batch at since_id=${sinceId}:`, error);
+        // Continue with next batch - use lastId if available
+        break;
       }
     }
 
