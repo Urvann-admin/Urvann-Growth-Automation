@@ -41,10 +41,22 @@ export async function POST(request: Request) {
 
     const productId = mapping.product_id as string;
     const skuSubstore = (mapping.substore as string) || '';
+    
+    // IMPORTANT: Reject SKUs with substore "hubchange" or "test4"
+    if (skuSubstore === 'hubchange' || skuSubstore === 'test4') {
+      return NextResponse.json(
+        { success: false, message: `SKU excluded: substore "${skuSubstore}" is not allowed` },
+        { status: 400 }
+      );
+    }
+    
     const skuHub = getHubBySubstore(skuSubstore);
 
     // Get all valid SKUs (strict validation: publish === "1" AND inventory > 0)
-    const allMappings = await mappingCollection.find({}, {
+    // IMPORTANT: Exclude SKUs with substore "hubchange" or "test4"
+    const allMappings = await mappingCollection.find({
+      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
+    }, {
       projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 }
     }).toArray();
 
@@ -52,6 +64,12 @@ export async function POST(request: Request) {
     for (const m of allMappings) {
       const publishValue = m.publish;
       const inventoryValue = Number(m.inventory || 0);
+      const substore = (m.substore as string) || '';
+      
+      // Exclude hubchange and test4 substores (double-check)
+      if (substore === 'hubchange' || substore === 'test4') {
+        continue;
+      }
       
       // Strict check: publish must be exactly "1" (string) or 1 (number), inventory must be > 0
       const publishStr = String(publishValue || "").trim();
@@ -66,11 +84,13 @@ export async function POST(request: Request) {
     console.log(`[Push Single] Total mappings: ${allMappings.length}, Valid SKUs: ${validSKUs.size}`);
 
     // Find top paired products
+    // IMPORTANT: Exclude transactions with substore "hubchange" or "test4"
     const frequentlyBoughtCollection = await getCollection('frequentlyBought');
     const transactions = await frequentlyBoughtCollection.find({
       channel: { $ne: 'admin' },
       'items.sku': sku,
       'items.1': { $exists: true },
+      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
     }, {
       projection: { items: 1 }
     }).toArray();
@@ -79,8 +99,9 @@ export async function POST(request: Request) {
     const pairCounts = new Map<string, number>();
 
     for (const doc of transactions) {
+      // Filter items: exclude price == 1 (explicit check to ensure price: 1 items are never included)
       const items = (doc.items as { sku: string; name: string; price?: number }[])
-        .filter(item => item.price !== 1);
+        .filter(item => item.price != null && item.price !== 1); // Explicitly exclude price: 1 and handle undefined/null
       
       let foundMainSku = false;
       for (const item of items) {

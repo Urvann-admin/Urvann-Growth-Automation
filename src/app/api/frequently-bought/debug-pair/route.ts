@@ -24,9 +24,11 @@ export async function GET(request: Request) {
     const collection = await getCollection('frequentlyBought');
 
     // Find all transactions containing both SKUs
+    // IMPORTANT: Exclude transactions with substore "hubchange" or "test4"
     const results = await collection.find({
       channel: { $ne: 'admin' },
       'items.sku': { $all: [sku1, sku2] },
+      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
     }, {
       projection: {
         txn_id: 1,
@@ -37,11 +39,12 @@ export async function GET(request: Request) {
       }
     }).toArray();
 
-    // Filter out transactions where either SKU has price == 1
+    // Filter out transactions where either SKU has price == 1 (explicit check to ensure price: 1 items are never included)
     const validResults = results.filter(doc => {
-      const item1 = doc.items.find((i: { sku: string }) => i.sku === sku1);
-      const item2 = doc.items.find((i: { sku: string }) => i.sku === sku2);
-      return item1?.price !== 1 && item2?.price !== 1;
+      const item1 = doc.items.find((i: { sku: string; price?: number }) => i.sku === sku1);
+      const item2 = doc.items.find((i: { sku: string; price?: number }) => i.sku === sku2);
+      // Explicitly exclude price: 1 and handle undefined/null
+      return (item1?.price != null && item1.price !== 1) && (item2?.price != null && item2.price !== 1);
     });
 
     // Simple format: numbered list with txn_id and order_id

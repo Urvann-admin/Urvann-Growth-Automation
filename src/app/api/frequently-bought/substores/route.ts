@@ -12,8 +12,12 @@ export async function GET() {
   try {
     const collection = await getCollection('frequentlyBought');
 
-    // Get unique substores (excluding admin channel documents)
-    const substores = await collection.distinct('substore', { channel: { $ne: 'admin' } });
+    // Get unique substores (excluding admin channel documents and excluded substores)
+    // IMPORTANT: Exclude substores "hubchange" and "test4"
+    const substores = await collection.distinct('substore', { 
+      channel: { $ne: 'admin' },
+      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
+    });
 
     // Sort alphabetically
     substores.sort((a: string, b: string) => a.localeCompare(b));

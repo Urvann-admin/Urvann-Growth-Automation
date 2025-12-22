@@ -10,6 +10,10 @@ export const maxDuration = 120;
  * Analyzes transaction data to find frequently bought together products.
  * Shows ALL pairings - publish status is checked separately when needed.
  * 
+ * IMPORTANT: Items with price == 1 are ALWAYS excluded from analysis.
+ * This filtering is applied in fetchTransactions() to ensure price: 1 SKUs
+ * never appear in frequently bought together results.
+ * 
  * Query Parameters:
  * - limit: Number of top paired products per SKU (default: 10)
  * - page: Page number for pagination (default: 1)
@@ -104,40 +108,60 @@ async function fetchTransactions(
   collection: ReturnType<typeof getCollection> extends Promise<infer T> ? T : never,
   substores: string[]
 ): Promise<{ items: { sku: string; name: string }[] }[]> {
-  // Build match filter
+  // Build match filter for initial aggregation
+  // IMPORTANT: Exclude substores "hubchange" and "test4" - these must never be included
   const matchFilter: Record<string, unknown> = {
     channel: { $ne: 'admin' },
-    'items.1': { $exists: true },
+    'items.1': { $exists: true }, // At least 2 items
+    substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
   };
   
   if (substores.length > 0) {
-    matchFilter.substore = { $in: substores };
+    // Filter out hubchange and test4 from user-provided substores
+    const filteredSubstores = substores.filter(s => s !== 'hubchange' && s !== 'test4');
+    if (filteredSubstores.length > 0) {
+      matchFilter.substore = { $in: filteredSubstores, $nin: ['hubchange', 'test4'] };
+    } else {
+      // If all substores were filtered out, return empty result
+      return [];
+    }
   }
 
-  // Fetch documents using cursor with optimized batch size
-  const cursor = collection.find(matchFilter, {
-    projection: { txn_id: 1, items: 1 }
-  }).batchSize(5000); // Increased batch size for faster processing
+  // Use aggregation pipeline to properly filter out price: 1 items
+  // This ensures price: 1 items are excluded at MongoDB level before processing
+  const aggregationPipeline: any[] = [
+    { $match: matchFilter },
+    { $unwind: '$items' },
+    // IMPORTANT: Filter out items with price = 1 - these must never be included in frequently bought analysis
+    { $match: { 'items.price': { $ne: 1 } } },
+    // Group back by transaction to get filtered items
+    {
+      $group: {
+        _id: '$txn_id',
+        items: { $push: { sku: '$items.sku', name: '$items.name' } }
+      }
+    },
+    // Filter transactions that still have at least 2 items after filtering
+    { $match: { 'items.1': { $exists: true } } }
+  ];
 
+  const results = await collection.aggregate(aggregationPipeline).toArray();
+
+  // Transform results and deduplicate items by SKU within each transaction
   const txnItemsMap = new Map<string, { sku: string; name: string }[]>();
   
-  for await (const doc of cursor) {
-    const txnId = doc.txn_id as string;
+  for (const doc of results) {
+    const txnId = doc._id as string;
+    const items = doc.items as { sku: string; name: string }[];
     
-    // Filter items: exclude price == 1 only (no publish check here)
-    const filteredItems = (doc.items as { sku: string; name: string; price?: number }[])
-      .filter(item => item.price !== 1)
-      .map(item => ({ sku: item.sku, name: item.name }));
+    // Deduplicate items by SKU (keep first occurrence)
+    const uniqueItems = Array.from(
+      new Map(items.map(item => [item.sku, item])).values()
+    );
     
-    if (filteredItems.length >= 2) {
-      // Deduplicate items by SKU
-      const uniqueItems = Array.from(
-        new Map(filteredItems.map(item => [item.sku, item])).values()
-      );
-      
-      if (uniqueItems.length >= 2) {
-        txnItemsMap.set(txnId, uniqueItems);
-      }
+    // Only include transactions with at least 2 unique items
+    if (uniqueItems.length >= 2) {
+      txnItemsMap.set(txnId, uniqueItems);
     }
   }
 

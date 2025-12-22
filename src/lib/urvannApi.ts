@@ -5,34 +5,41 @@ const SYNC_BASE_URL = 'https://urvann.storehippo.com'; // Use storehippo.com for
 const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
 
 // Rate limiting configuration - optimized for speed while being respectful
-const RATE_LIMIT_DELAY = 50; // 50ms between requests (20 req/sec)
+const RATE_LIMIT_DELAY = 10; // 10ms between requests (100 req/sec) - optimized for speed
+const MAX_CONCURRENT_REQUESTS = 50; // Allow up to 50 concurrent requests for maximum speed
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 500; // 500ms initial retry delay
 
-let lastRequestTime = 0;
-let requestQueue = Promise.resolve();
+// Semaphore-based rate limiting for concurrent requests
+let activeRequests = 0;
+const requestQueue: Array<() => void> = [];
 
-// Utility function to add delay for rate limiting with queue
-async function rateLimitDelay() {
-  // Queue requests to maintain order and rate limit
-  const currentRequest = requestQueue.then(async () => {
-    const now = Date.now();
-    const timeSinceLastRequest = now - lastRequestTime;
-    
-    if (timeSinceLastRequest < RATE_LIMIT_DELAY) {
-      await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY - timeSinceLastRequest));
-    }
-    
-    lastRequestTime = Date.now();
-  });
+// Utility function to add delay for rate limiting with semaphore
+async function rateLimitDelay(): Promise<() => void> {
+  // Wait for available slot if at max concurrency
+  if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
+    await new Promise<void>(resolve => {
+      requestQueue.push(resolve);
+    });
+  }
   
-  requestQueue = currentRequest;
-  await currentRequest;
+  activeRequests++;
+  
+  // Minimal delay - concurrency limit already prevents overwhelming the API
+  // Small delay helps prevent burst requests
+  await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+  
+  // Return release function
+  return () => {
+    activeRequests--;
+    const next = requestQueue.shift();
+    if (next) next();
+  };
 }
 
 // Utility function to make API request with retry logic
 async function makeApiRequest(url: string, options: RequestInit, retryCount = 0): Promise<Response> {
-  await rateLimitDelay();
+  const release = await rateLimitDelay();
   
   try {
     const response = await fetch(url, {
@@ -45,6 +52,8 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
       signal: AbortSignal.timeout(15000),
     });
     
+    release(); // Release slot immediately after request completes
+    
     // Exponential backoff for rate limiting
     if (response.status === 429 && retryCount < MAX_RETRIES) {
       const backoffDelay = RETRY_DELAY * Math.pow(2, retryCount);
@@ -55,6 +64,7 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
     
     return response;
   } catch (error) {
+    release(); // Release slot on error
     if (retryCount < MAX_RETRIES) {
       const backoffDelay = RETRY_DELAY * Math.pow(2, retryCount);
       console.log(`Request failed. Retrying in ${backoffDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
@@ -281,7 +291,8 @@ export async function fetchProductPublishStatus(
 }
 
 /**
- * Batch update multiple products (with rate limiting)
+ * Batch update multiple products (with parallel processing and rate limiting)
+ * OPTIMIZED: Processes updates in parallel batches for much faster execution
  */
 export async function batchUpdateFrequentlyBought(
   updates: { sku: string; productId: string; frequentlyBoughtSkus: string[] }[],
@@ -297,27 +308,40 @@ export async function batchUpdateFrequentlyBought(
     errors: [] as { sku: string; productId: string; error: string }[],
   };
   
-  for (let i = 0; i < updates.length; i++) {
-    const update = updates[i];
+  // Process in parallel batches - rate limiting is handled by makeApiRequest
+  const BATCH_SIZE = 30; // Process 30 updates concurrently
+  
+  for (let i = 0; i < updates.length; i += BATCH_SIZE) {
+    const batch = updates.slice(i, i + BATCH_SIZE);
     
-    if (onProgress) {
-      onProgress(i, updates.length, update.sku);
-    }
+    // Process batch in parallel
+    const batchPromises = batch.map(async (update) => {
+      if (onProgress) {
+        onProgress(i + batch.indexOf(update), updates.length, update.sku);
+      }
+      
+      const result = await updateProductFrequentlyBought(
+        update.productId, 
+        update.frequentlyBoughtSkus
+      );
+      
+      return { update, result };
+    });
     
-    const result = await updateProductFrequentlyBought(
-      update.productId, 
-      update.frequentlyBoughtSkus
-    );
+    const batchResults = await Promise.all(batchPromises);
     
-    if (result.success) {
-      results.successful++;
-    } else {
-      results.failed++;
-      results.errors.push({
-        sku: update.sku,
-        productId: update.productId,
-        error: result.error || 'Unknown error',
-      });
+    // Process results
+    for (const { update, result } of batchResults) {
+      if (result.success) {
+        results.successful++;
+      } else {
+        results.failed++;
+        results.errors.push({
+          sku: update.sku,
+          productId: update.productId,
+          error: result.error || 'Unknown error',
+        });
+      }
     }
   }
   

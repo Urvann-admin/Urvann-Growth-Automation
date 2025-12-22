@@ -92,10 +92,16 @@ export async function POST(request: Request) {
       }
     }
 
-    // Filter valid SKUs (published and in stock)
+    // Filter valid SKUs (published, in stock, and not from excluded substores)
+    // IMPORTANT: Exclude SKUs with substore "hubchange" or "test4"
     const validBatchSkus = batchSkus.filter(({ sku }: any) => {
       const mapping = skuToMapping.get(sku);
-      return mapping && mapping.publish === "1" && mapping.inventory > 0;
+      if (!mapping) return false;
+      // Exclude hubchange and test4 substores
+      if (mapping.substore === 'hubchange' || mapping.substore === 'test4') {
+        return false;
+      }
+      return mapping.publish === "1" && mapping.inventory > 0;
     });
 
     if (validBatchSkus.length === 0) {
@@ -116,16 +122,18 @@ export async function POST(request: Request) {
     
     const pairingsAggregation = await frequentlyBoughtCollection.aggregate([
       // Match transactions that contain any of our batch SKUs and have at least 2 items
+      // IMPORTANT: Exclude substores "hubchange" and "test4"
       {
         $match: {
           channel: { $ne: 'admin' },
           'items.sku': { $in: validSkuList },
           'items.1': { $exists: true }, // At least 2 items
+          substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
         }
       },
       // Unwind items to work with individual products
       { $unwind: '$items' },
-      // Filter out items with price = 1
+      // IMPORTANT: Filter out items with price = 1 - these must never be included in frequently bought analysis
       { $match: { 'items.price': { $ne: 1 } } },
       // Group by transaction to get all items per transaction
       {
@@ -249,16 +257,24 @@ export async function POST(request: Request) {
     }
     
     const pairedMappingsBatch = await mappingCollection.find(
-      { sku: { $in: skusToFetch } },
+      { 
+        sku: { $in: skusToFetch },
+        substore: { $nin: ['hubchange', 'test4'] }, // IMPORTANT: Exclude hubchange and test4 substores
+      },
       { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
     ).toArray();
     
     const globalPairedMappingMap = new Map<string, { publish: string; inventory: number; substore?: string }>();
     for (const m of pairedMappingsBatch) {
+      const substore = (m.substore as string) || '';
+      // Double-check: exclude hubchange and test4 (should already be filtered by query, but extra safety)
+      if (substore === 'hubchange' || substore === 'test4') {
+        continue;
+      }
       globalPairedMappingMap.set(m.sku as string, {
         publish: String(m.publish || "0").trim(),
         inventory: Number(m.inventory || 0),
-        substore: (m.substore as string) || '',
+        substore,
       });
     }
 
@@ -267,8 +283,8 @@ export async function POST(request: Request) {
     console.log(`[Push All Batch] Loaded mappings for ${globalPairedMappingMap.size} SKUs (${allPairedSkusList.length} auto + ${allManualSkusList.length} manual, ${manualMappingsFound} manual mappings found)`);
 
     // OPTIMIZATION 2: Process SKUs in parallel with concurrent API calls
-    const CONCURRENCY = 10; // Increased concurrency
-    const API_CONCURRENCY = 5; // Process 5 API calls concurrently
+    const CONCURRENCY = 30; // Increased concurrency for SKU processing
+    // API calls are processed concurrently - rate limiting (50 concurrent, 10ms delay) handled by urvannApi
 
     const processSku = async (sku: string, name: string) => {
       const productId = skuToProductId.get(sku);
@@ -283,7 +299,17 @@ export async function POST(request: Request) {
       }
 
       const mapping = skuToMapping.get(sku);
-      if (!mapping || mapping.publish !== "1" || mapping.inventory <= 0) {
+      // IMPORTANT: Exclude SKUs with substore "hubchange" or "test4"
+      if (!mapping || mapping.substore === 'hubchange' || mapping.substore === 'test4') {
+        return {
+          sku,
+          success: false,
+          log: `⊘ ${sku}: Excluded substore (${mapping?.substore || 'unknown'}), skipping`,
+          productId,
+          finalValidSkus: undefined,
+        };
+      }
+      if (mapping.publish !== "1" || mapping.inventory <= 0) {
         return {
           sku,
           success: false,
@@ -303,7 +329,12 @@ export async function POST(request: Request) {
           if (autoPairedSkus.length >= limit) break;
           
           const pairedMapping = globalPairedMappingMap.get(pair.pairedSku);
-          if (pairedMapping && pairedMapping.publish === "1" && pairedMapping.inventory > 0) {
+          // IMPORTANT: Exclude paired SKUs with substore "hubchange" or "test4"
+          if (pairedMapping && 
+              pairedMapping.publish === "1" && 
+              pairedMapping.inventory > 0 &&
+              pairedMapping.substore !== 'hubchange' &&
+              pairedMapping.substore !== 'test4') {
             autoPairedSkus.push(pair.pairedSku);
           }
         }
@@ -519,14 +550,11 @@ export async function POST(request: Request) {
           }
         }
 
-        // Process API calls in parallel batches (respecting rate limits via urvannApi)
-        // The urvannApi already has rate limiting built-in, so we can process concurrently
+        // Process API calls in parallel batches (rate limiting handled by urvannApi semaphore)
+        // urvannApi now supports up to 30 concurrent requests with rate limiting
         if (apiCalls.length > 0) {
-          // Process API calls in smaller concurrent batches
-          for (let j = 0; j < apiCalls.length; j += API_CONCURRENCY) {
-            const apiBatch = apiCalls.slice(j, j + API_CONCURRENCY);
-            await Promise.all(apiBatch);
-          }
+          // Process all API calls concurrently - rate limiting is handled internally
+          await Promise.all(apiCalls);
         }
       }
 

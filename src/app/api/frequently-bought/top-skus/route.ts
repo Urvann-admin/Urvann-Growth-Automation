@@ -38,14 +38,28 @@ export async function GET(request: Request) {
     const mappingCollection = await getCollection('skuProductMapping');
 
     // Build match conditions for frequentlyBought aggregation
+    // IMPORTANT: Exclude price == 1 items and substores "hubchange" and "test4"
     const matchConditions: any = { 
       channel: { $ne: 'admin' },
-      'items.price': { $ne: 1 }
+      'items.price': { $ne: 1 }, // Exclude items with price: 1
+      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
     };
     
-    // Add substore filter if provided
+    // Add substore filter if provided (excluding hubchange and test4)
     if (substores.length > 0) {
-      matchConditions.substore = substores.length === 1 ? substores[0] : { $in: substores };
+      const filteredSubstores = substores.filter(s => s !== 'hubchange' && s !== 'test4');
+      if (filteredSubstores.length > 0) {
+        matchConditions.substore = filteredSubstores.length === 1 
+          ? filteredSubstores[0] 
+          : { $in: filteredSubstores, $nin: ['hubchange', 'test4'] };
+      } else {
+        // If all substores were filtered out, return empty result
+        return NextResponse.json({
+          success: true,
+          data: [],
+          total: 0,
+        });
+      }
     }
 
     // Get top SKUs by transaction count (no publish/inventory filter)
@@ -53,6 +67,7 @@ export async function GET(request: Request) {
     const topSkusByCount = await frequentlyBoughtCollection.aggregate([
       { $match: matchConditions },
       { $unwind: '$items' },
+      // IMPORTANT: Double-check to exclude price == 1 items after unwind
       { $match: { 'items.price': { $ne: 1 } } },
       {
         $group: {
@@ -83,12 +98,19 @@ export async function GET(request: Request) {
     const candidateSkus = topSkusByCount.map((item: any) => item.sku);
     
     // Build mapping filter - only filter by SKU list and substore if provided
+    // IMPORTANT: Exclude substores "hubchange" and "test4"
     const mappingFilter: any = {
       sku: { $in: candidateSkus },
+      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
     };
     
     if (substores.length > 0) {
-      mappingFilter.substore = substores.length === 1 ? substores[0] : { $in: substores };
+      const filteredSubstores = substores.filter(s => s !== 'hubchange' && s !== 'test4');
+      if (filteredSubstores.length > 0) {
+        mappingFilter.substore = filteredSubstores.length === 1 
+          ? filteredSubstores[0] 
+          : { $in: filteredSubstores, $nin: ['hubchange', 'test4'] };
+      }
     }
     
     // Fetch all fields including publish and inventory for availability display
