@@ -170,8 +170,8 @@ export default function DashboardPage() {
                   return;
                 }
                 
-                // Build external URL with params - use public IP and correct port
-                const externalUrl = 'http://65.0.138.213:5002/dashboard/realtime-orders';
+                // Build external URL with params - use full URL for returnUrl
+                const externalUrl = 'http://65.0.92.112:5001/dashboard/realtime-orders';
                 const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard`);
                 const params = new URLSearchParams({
                   returnUrl: returnUrl,
@@ -266,7 +266,7 @@ export default function DashboardPage() {
           {/* Second Row */}
           <div className="flex justify-center gap-6">
             {/* User Management Card */}
-            {(user.role === 'admin' || user.role === 'manager') && (
+          {(user.role === 'admin' || user.role === 'manager') && (
               <div 
                 className="group bg-gradient-to-br from-indigo-50/50 to-purple-50/30 rounded-xl shadow-sm border border-indigo-100 p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all duration-200 w-[280px] flex-shrink-0"
                 onClick={() => router.push('/dashboard/user-management')}

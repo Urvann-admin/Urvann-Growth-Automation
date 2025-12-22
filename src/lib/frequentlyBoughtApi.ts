@@ -31,7 +31,7 @@ export async function fetchSubstores(): Promise<SubstoreOption[]> {
 }
 
 /**
- * Fetch unique SKUs
+ * Fetch all unique SKUs from mapping collection
  */
 export async function fetchUniqueSkus(): Promise<SkusApiResponse> {
   try {
@@ -40,6 +40,19 @@ export async function fetchUniqueSkus(): Promise<SkusApiResponse> {
   } catch (err) {
     console.error('Error fetching SKUs:', err);
     return { success: false, message: 'Failed to fetch SKUs' };
+  }
+}
+
+/**
+ * Fetch top 10 SKUs by transaction count
+ */
+export async function fetchTopSkus(): Promise<SkusApiResponse> {
+  try {
+    const response = await fetch(`${API_BASE}/top-skus`);
+    return await response.json();
+  } catch (err) {
+    console.error('Error fetching top SKUs:', err);
+    return { success: false, message: 'Failed to fetch top SKUs' };
   }
 }
 
@@ -72,7 +85,14 @@ export async function fetchAnalysis(options: {
     }
 
     const response = await fetch(`${API_BASE}/analysis?${params.toString()}`, { signal });
-    return await response.json();
+    const data = await response.json();
+    
+    // Handle error responses (like unpublished SKU)
+    if (!response.ok || !data.success) {
+      return data; // Return the error response as-is
+    }
+    
+    return data;
   } catch (err) {
     // Re-throw abort errors so they can be handled by caller
     if (err instanceof Error && err.name === 'AbortError') {

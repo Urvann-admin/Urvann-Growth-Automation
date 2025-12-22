@@ -1,6 +1,7 @@
 // Urvann API utilities with rate limiting
 
 const BASE_URL = 'https://www.urvann.com';
+const SYNC_BASE_URL = 'https://urvann.storehippo.com'; // Use storehippo.com for sync mapping
 const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
 
 // Rate limiting configuration - optimized for speed while being respectful
@@ -65,39 +66,80 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
 }
 
 /**
- * Fetch products with pagination to build SKU to product_id mapping
+ * Fetch products with since_id pagination to build SKU to product_id mapping
  * Fetches ALL products with publish and inventory fields
  */
-export async function fetchProductsForMapping(start = 0, limit = 50): Promise<{
-  products: { sku: string; product_id: string; price: number; publish: string; inventory: number }[];
+export async function fetchProductsForMapping(sinceId: string = '0', limit: number = 500): Promise<{
+  products: { sku: string; product_id: string; price: number; publish: string; inventory: number; name: string }[];
   hasMore: boolean;
+  lastId: string;
 }> {
-  const queryParams = new URLSearchParams({
-    fields: JSON.stringify({ sku: 1, price: 1, publish: 1, inventory: 1 }),
-    limit: limit.toString(),
-    start: start.toString(),
+  // Build query params using since_id pagination
+  // Note: API returns inventory_quantity, not inventory
+  const fieldsParam = encodeURIComponent(JSON.stringify({ sku: 1, price: 1, publish: 1, inventory_quantity: 1, name: 1 }));
+  const queryParams = new URLSearchParams();
+  queryParams.append('fields', decodeURIComponent(fieldsParam));
+  queryParams.append('limit', limit.toString());
+  queryParams.append('since_id', sinceId);
+  
+  const url = `${SYNC_BASE_URL}/api/1.1/entity/ms.products?${queryParams.toString()}`;
+  
+  const response = await makeApiRequest(url, { 
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json',
+    }
   });
   
-  const url = `${BASE_URL}/api/1.1/entity/ms.products?${queryParams}`;
-  
-  const response = await makeApiRequest(url, { method: 'GET' });
+  // Handle 406 Not Acceptable - might mean pagination limit reached
+  if (response.status === 406) {
+    console.warn(`406 Not Acceptable at since_id=${sinceId}, limit=${limit}. Possibly reached pagination limit.`);
+    return {
+      products: [],
+      hasMore: false,
+      lastId: sinceId,
+    };
+  }
   
   if (!response.ok) {
-    throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`);
+    const errorText = await response.text().catch(() => response.statusText);
+    throw new Error(`Failed to fetch products: ${response.status} ${response.statusText} - ${errorText}`);
   }
   
   const data = await response.json();
-  const products = (data.data || []).map((product: any) => ({
-    sku: product.sku,
+  
+  // Handle both array and object responses
+  let productsArray: any[] = [];
+  if (Array.isArray(data.data)) {
+    productsArray = data.data;
+  } else if (data.data && typeof data.data === 'object') {
+    productsArray = Object.values(data.data);
+  }
+  
+  const products = productsArray.map((product: any) => ({
+    sku: product.sku || '',
     product_id: product._id,
     price: product.price || 0,
-    publish: String(product.publish || "0"),
-    inventory: product.inventory || 0,
+    publish: String(product.publish ?? "0"),
+    inventory: product.inventory_quantity ?? 0, // Map inventory_quantity from API to inventory
+    name: product.name || '',
   }));
+  
+  // Get the last product_id for pagination
+  // If products array is empty, use the sinceId
+  const lastId = products.length > 0 ? products[products.length - 1].product_id : sinceId;
+  
+  // hasMore logic:
+  // - If we got exactly the limit (500), there are definitely more products
+  // - If we got fewer than limit, we might still have more (continue to be safe)
+  // - Only stop when we get 0 products (handled by consecutive empty check) or 406 error
+  // Continue fetching as long as we got products (let frontend handle stopping logic)
+  const hasMore = products.length > 0;
   
   return {
     products,
-    hasMore: products.length === limit,
+    hasMore,
+    lastId,
   };
 }
 
@@ -148,6 +190,73 @@ export async function updateProductFrequentlyBought(
       error: error instanceof Error ? error.message : 'Unknown error' 
     };
   }
+}
+
+/**
+ * Fetch real-time publish status for a list of SKUs from Urvann API
+ * Returns a Map of SKU -> {publish, inventory}
+ */
+export async function fetchProductPublishStatus(
+  skus: string[]
+): Promise<Map<string, { publish: string | number; inventory: number }>> {
+  const statusMap = new Map<string, { publish: string | number; inventory: number }>();
+  
+  // Fetch in batches of 50 to avoid too many API calls
+  const BATCH_SIZE = 50;
+  
+  for (let i = 0; i < skus.length; i += BATCH_SIZE) {
+    const batchSkus = skus.slice(i, i + BATCH_SIZE);
+    
+    // Create query to fetch multiple SKUs at once
+    const queryParam = JSON.stringify({ sku: { $in: batchSkus } });
+    const fieldsParam = encodeURIComponent(JSON.stringify({ 
+      sku: 1, 
+      publish: 1, 
+      inventory_quantity: 1 
+    }));
+    
+    const url = `${SYNC_BASE_URL}/api/1.1/entity/ms.products?query=${encodeURIComponent(queryParam)}&fields=${fieldsParam}&limit=${BATCH_SIZE}`;
+    
+    try {
+      const response = await makeApiRequest(url, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        console.warn(`[fetchProductPublishStatus] Failed to fetch batch: ${response.status}`);
+        continue;
+      }
+      
+      const data = await response.json();
+      
+      // Parse response
+      let productsArray: any[] = [];
+      if (Array.isArray(data)) {
+        productsArray = data;
+      } else if (data.data && Array.isArray(data.data)) {
+        productsArray = data.data;
+      } else if (data.data && typeof data.data === 'object') {
+        productsArray = Object.values(data.data);
+      }
+      
+      // Map results
+      for (const product of productsArray) {
+        if (product.sku) {
+          statusMap.set(product.sku, {
+            publish: String(product.publish ?? "0"),
+            inventory: product.inventory_quantity ?? 0,
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`[fetchProductPublishStatus] Error fetching batch:`, error);
+    }
+  }
+  
+  return statusMap;
 }
 
 /**

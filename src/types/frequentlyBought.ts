@@ -15,8 +15,8 @@ export interface FrequentlyBoughtItem {
 
 export interface UniqueSku {
   sku: string;
-  name: string;
-  orderCount: number;
+  name?: string;
+  orderCount?: number;
 }
 
 export interface FrequentlyBoughtPagination {

@@ -21,6 +21,35 @@ export const maxDuration = 120;
 export async function GET(request: Request) {
   try {
     const params = parseQueryParams(request.url);
+    
+    // If searching for a specific SKU (exact match), check if it's published and in stock
+    const searchSku = params.specificSku || (params.search ? params.search.trim() : '');
+    if (searchSku) {
+      const mappingCollection = await getCollection('skuProductMapping');
+      
+      // Check if search term exactly matches a SKU (case-insensitive)
+      const mapping = await mappingCollection.findOne(
+        { sku: { $regex: new RegExp(`^${searchSku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+        { projection: { sku: 1, publish: 1, inventory: 1, name: 1, _id: 0 } }
+      );
+      
+      // Only validate if it's an exact SKU match
+      if (mapping) {
+        // Check if SKU is unpublished or out of stock
+        if (mapping.publish !== '1' || (mapping.inventory as number) <= 0) {
+          return NextResponse.json({
+            success: false,
+            error: 'SKU_UNPUBLISHED',
+            message: `SKU "${mapping.sku}" is unpublished or out of stock.`,
+            sku: mapping.sku,
+            name: mapping.name || '',
+            publish: mapping.publish,
+            inventory: mapping.inventory,
+          }, { status: 400 });
+        }
+      }
+    }
+    
     const collection = await getCollection('frequentlyBought');
     
     // Get transactions and process pairs (no publish filter - show all pairings)

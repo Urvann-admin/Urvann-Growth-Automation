@@ -5,6 +5,7 @@ import { connectDB } from '@/lib/mongodb';
 export interface ISkuProductMapping extends Document {
   sku: string;
   product_id: string;
+  name: string;
   price: number;
   publish: string;
   inventory: number;
@@ -16,6 +17,7 @@ const SkuProductMappingSchema = new Schema<ISkuProductMapping>(
   {
     sku: { type: String, required: true, unique: true, index: true },
     product_id: { type: String, required: true, index: true },
+    name: { type: String, default: '' },
     price: { type: Number, required: true },
     publish: { type: String, default: "0", index: true },
     inventory: { type: Number, default: 0, index: true },
