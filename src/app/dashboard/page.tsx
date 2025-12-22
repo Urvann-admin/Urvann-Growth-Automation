@@ -164,9 +164,6 @@ export default function DashboardPage() {
               <button
                 onClick={handleLogout}
                 className={`inline-flex items-center px-3 py-1.5 text-slate-700 rounded-lg transition-all font-medium text-xs border border-transparent ${isChristmasTheme ? 'bg-slate-100 hover:bg-red-50' : 'bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200'}`}
-                style={isChristmasTheme ? {
-                  hoverBorderColor: CHRISTMAS_COLORS.light,
-                } : {}}
                 onMouseEnter={(e) => {
                   if (isChristmasTheme) {
                     e.currentTarget.style.backgroundColor = CHRISTMAS_COLORS.light;
@@ -614,9 +611,10 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* Frequently Bought Together Card */}
-            <div 
-              className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-teal-50/50 to-emerald-50/30 border border-teal-100 hover:shadow-md hover:border-teal-200'}`}
+            {/* Frequently Bought Together Card - Admin Only */}
+            {user.role === 'admin' && (
+              <div 
+                className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-teal-50/50 to-emerald-50/30 border border-teal-100 hover:shadow-md hover:border-teal-200'}`}
               style={isChristmasTheme ? {
                 background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
                 border: `2px solid ${CHRISTMAS_COLORS.light}`,
@@ -691,6 +689,7 @@ export default function DashboardPage() {
                 </svg>
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>

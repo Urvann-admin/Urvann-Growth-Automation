@@ -32,12 +32,12 @@ interface BatchProgress {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { startIndex = 0, batchSize = 50, allSkus = [], limit = 6, manualSkusByHub = {}, allMappingsCache } = body;
+    const { startIndex = 0, batchSize = 50, allSkus = [], limit = 6, manualSkusByHub = {} as Record<string, string[]>, allMappingsCache } = body;
     
     // Log hub-wise manual SKUs received
-    const totalManualSkus = Object.values(manualSkusByHub).reduce((sum, skus) => sum + skus.length, 0);
+    const totalManualSkus = (Object.values(manualSkusByHub) as string[][]).reduce((sum: number, skus: string[]) => sum + skus.length, 0);
     if (totalManualSkus > 0) {
-      const hubSummary = Object.entries(manualSkusByHub)
+      const hubSummary = (Object.entries(manualSkusByHub) as [string, string[]][])
         .filter(([_, skus]) => skus.length > 0)
         .map(([hub, skus]) => `${hub}: ${skus.join(', ')}`)
         .join(' | ');
@@ -227,7 +227,7 @@ export async function POST(request: Request) {
     
     // Collect all manual SKUs from all hubs for batch fetch
     const allManualSkusSet = new Set<string>();
-    Object.values(manualSkusByHub).forEach((skus: string[]) => {
+    (Object.values(manualSkusByHub) as string[][]).forEach((skus: string[]) => {
       skus.forEach(sku => {
         if (sku && sku.trim() !== '') {
           allManualSkusSet.add(sku.trim().toUpperCase());
