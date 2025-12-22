@@ -113,6 +113,11 @@ export default function AllSkusPage() {
       router.push('/auth/login');
       return;
     }
+    // Only admins can access frequently bought products
+    if (user.role !== 'admin') {
+      router.push('/dashboard');
+      return;
+    }
     loadSubstores();
     loadUniqueSkus();
     loadTopSkus(1, [], ''); // Load first page
