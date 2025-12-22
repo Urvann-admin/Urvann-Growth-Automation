@@ -282,9 +282,9 @@ export async function POST(request: Request) {
     const manualMappingsFound = allManualSkusList.filter(msku => globalPairedMappingMap.has(msku)).length;
     console.log(`[Push All Batch] Loaded mappings for ${globalPairedMappingMap.size} SKUs (${allPairedSkusList.length} auto + ${allManualSkusList.length} manual, ${manualMappingsFound} manual mappings found)`);
 
-    // OPTIMIZATION 2: Process SKUs in parallel with concurrent API calls
-    const CONCURRENCY = 30; // Increased concurrency for SKU processing
-    // API calls are processed concurrently - rate limiting (50 concurrent, 10ms delay) handled by urvannApi
+    // OPTIMIZATION 2 & 3: Process SKUs in parallel with increased concurrency
+    const CONCURRENCY = 50; // Increased concurrency from 30 to 50 for maximum speed
+    // API calls are processed concurrently - rate limiting (100 concurrent, no delay) handled by urvannApi
 
     const processSku = async (sku: string, name: string) => {
       const productId = skuToProductId.get(sku);

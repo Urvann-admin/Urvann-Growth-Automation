@@ -4,17 +4,17 @@ const BASE_URL = 'https://www.urvann.com';
 const SYNC_BASE_URL = 'https://urvann.storehippo.com'; // Use storehippo.com for sync mapping
 const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
 
-// Rate limiting configuration - optimized for speed while being respectful
-const RATE_LIMIT_DELAY = 10; // 10ms between requests (100 req/sec) - optimized for speed
-const MAX_CONCURRENT_REQUESTS = 50; // Allow up to 50 concurrent requests for maximum speed
+// Rate limiting configuration - OPTIMIZED for maximum speed
+// OPTIMIZATION 1 & 2: Removed artificial delay, increased concurrency to 100
+const MAX_CONCURRENT_REQUESTS = 100; // Increased from 50 to 100 for maximum speed
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 500; // 500ms initial retry delay
 
-// Semaphore-based rate limiting for concurrent requests
+// Semaphore-based rate limiting for concurrent requests (NO artificial delay)
 let activeRequests = 0;
 const requestQueue: Array<() => void> = [];
 
-// Utility function to add delay for rate limiting with semaphore
+// OPTIMIZATION 1: Removed 10ms delay - concurrency limit alone is sufficient for maximum speed
 async function rateLimitDelay(): Promise<() => void> {
   // Wait for available slot if at max concurrency
   if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
@@ -25,9 +25,8 @@ async function rateLimitDelay(): Promise<() => void> {
   
   activeRequests++;
   
-  // Minimal delay - concurrency limit already prevents overwhelming the API
-  // Small delay helps prevent burst requests
-  await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY));
+  // NO DELAY - Concurrency limit alone prevents overwhelming the API
+  // This allows maximum throughput while respecting concurrency limits
   
   // Return release function
   return () => {
@@ -309,7 +308,8 @@ export async function batchUpdateFrequentlyBought(
   };
   
   // Process in parallel batches - rate limiting is handled by makeApiRequest
-  const BATCH_SIZE = 30; // Process 30 updates concurrently
+  // OPTIMIZATION 3: Increased batch size from 30 to 50 for faster processing
+  const BATCH_SIZE = 50; // Process 50 updates concurrently (increased from 30)
   
   for (let i = 0; i < updates.length; i += BATCH_SIZE) {
     const batch = updates.slice(i, i + BATCH_SIZE);

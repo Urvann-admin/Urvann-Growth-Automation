@@ -15,6 +15,21 @@ const nextConfig: NextConfig = {
   },
   // Disable source maps for faster builds and less memory usage
   productionBrowserSourceMaps: false,
+  // Optimize font loading to prevent build delays
+  optimizeFonts: true,
+  // Reduce build time by skipping type checking during build (use separate lint command)
+  typescript: {
+    // !! WARN !!
+    // Dangerously allow production builds to successfully complete even if
+    // your project has type errors.
+    // !! WARN !!
+    ignoreBuildErrors: false, // Keep false for safety, but can set to true for faster builds
+  },
+  eslint: {
+    // Warning: This allows production builds to successfully complete even if
+    // your project has ESLint errors.
+    ignoreDuringBuilds: false, // Keep false for safety, but can set to true for faster builds
+  },
   // Configure Turbopack for better code splitting (Next.js 16 default)
   turbopack: {
     // Turbopack handles code splitting automatically and efficiently

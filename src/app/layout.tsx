@@ -7,11 +7,17 @@ import { WorkerInitializer } from "@/components/WorkerInitializer";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap", // Prevent font loading from blocking render
+  preload: true, // Preload fonts for faster initial load
+  fallback: ["system-ui", "arial"], // Fallback fonts while loading
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap", // Prevent font loading from blocking render
+  preload: true, // Preload fonts for faster initial load
+  fallback: ["monospace"], // Fallback fonts while loading
 });
 
 export const metadata: Metadata = {
