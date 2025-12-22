@@ -2,10 +2,15 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { FrequentlyBoughtPagination } from '@/types/frequentlyBought';
 
 interface PaginationProps {
-  pagination: FrequentlyBoughtPagination;
+  pagination: FrequentlyBoughtPagination | {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
   loadingAnalysis: boolean;
   onPageChange: (page: number) => void;
-  getPageNumbers: () => (number | string)[];
+  getPageNumbers: ((current: number, total: number) => (number | string)[]) | (() => (number | string)[]);
 }
 
 export default function Pagination({
@@ -14,12 +19,20 @@ export default function Pagination({
   onPageChange,
   getPageNumbers,
 }: PaginationProps) {
+  // Handle both FrequentlyBoughtPagination (with totalSkus) and simple pagination (with total)
+  const total = 'totalSkus' in pagination ? pagination.totalSkus : pagination.total;
+  
+  // Handle both function signatures: with params or without
+  const pageNumbers = getPageNumbers.length === 2 
+    ? (getPageNumbers as (current: number, total: number) => (number | string)[])(pagination.page, pagination.totalPages)
+    : (getPageNumbers as () => (number | string)[])();
+  
   return (
     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
       <p className="text-sm text-slate-500">
         Showing <span className="font-medium text-slate-700">{((pagination.page - 1) * pagination.pageSize) + 1}</span> to{' '}
-        <span className="font-medium text-slate-700">{Math.min(pagination.page * pagination.pageSize, pagination.totalSkus)}</span> of{' '}
-        <span className="font-medium text-slate-700">{pagination.totalSkus.toLocaleString()}</span> results
+        <span className="font-medium text-slate-700">{Math.min(pagination.page * pagination.pageSize, total)}</span> of{' '}
+        <span className="font-medium text-slate-700">{total.toLocaleString()}</span> results
       </p>
       
       <div className="flex items-center gap-1">
@@ -31,7 +44,7 @@ export default function Pagination({
           <ChevronLeft className="w-5 h-5" />
         </button>
         
-        {getPageNumbers().map((pageNum, idx) => (
+        {pageNumbers.map((pageNum, idx) => (
           <button
             key={idx}
             onClick={() => typeof pageNum === 'number' && onPageChange(pageNum)}

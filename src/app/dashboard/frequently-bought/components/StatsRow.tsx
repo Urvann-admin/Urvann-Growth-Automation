@@ -13,21 +13,25 @@ export default function StatsRow({
 }: StatsRowProps) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-6 mb-8">
-        <StatCardSkeleton />
+      <div className="flex gap-6 mb-8">
+        <div className="flex-1">
+          <StatCardSkeleton />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-6 mb-8">
-      <StatCard 
-        label="Total SKUs" 
-        value={uniqueSkusCount.toLocaleString()} 
-        icon={Package} 
-        iconBg="bg-indigo-50" 
-        iconColor="text-indigo-500" 
-      />
+    <div className="flex gap-6 mb-8">
+      <div className="flex-1">
+        <StatCard 
+          label="Total SKUs" 
+          value={uniqueSkusCount.toLocaleString()} 
+          icon={Package} 
+          iconBg="bg-indigo-50" 
+          iconColor="text-indigo-500" 
+        />
+      </div>
     </div>
   );
 }

@@ -1,17 +1,27 @@
-import { Package } from 'lucide-react';
+import { Package, Check, X } from 'lucide-react';
 import { UniqueSku } from '@/types/frequentlyBought';
 import AllSkusViewSkeleton from './AllSkusViewSkeleton';
+import Pagination from './Pagination';
 
 interface AllSkusViewProps {
   uniqueSkus: UniqueSku[];
   loading?: boolean;
   loadingAnalysis?: boolean;
+  pagination?: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+  onPageChange?: (page: number) => void;
 }
 
 export default function AllSkusView({ 
   uniqueSkus, 
   loading = false,
-  loadingAnalysis = false
+  loadingAnalysis = false,
+  pagination,
+  onPageChange,
 }: AllSkusViewProps) {
   if (loading) {
     return <AllSkusViewSkeleton />;
@@ -33,10 +43,12 @@ export default function AllSkusView({
       )}
 
       <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-        <h2 className="text-base font-semibold text-slate-800">Top 10 SKUs</h2>
-        <p className="text-sm text-slate-500 mt-0.5">
-          Top {uniqueSkus.length} SKUs by transaction count (published & in stock)
-        </p>
+        <div>
+          <h2 className="text-base font-semibold text-slate-800">Top SKUs</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {pagination ? `Showing ${uniqueSkus.length} of ${pagination.total.toLocaleString()} SKUs` : `Top ${uniqueSkus.length} SKUs`} by transaction count
+          </p>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
@@ -45,41 +57,93 @@ export default function AllSkusView({
               <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider w-16">#</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">SKU</th>
               <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Product Name</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Substore</th>
+              <th className="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-24">Available</th>
               <th className="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider w-32">Transactions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {uniqueSkus.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-6 py-16 text-center">
+                <td colSpan={6} className="px-6 py-16 text-center">
                   <Package className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                   <p className="text-sm text-slate-500">No SKUs found</p>
                 </td>
               </tr>
             ) : (
-              uniqueSkus.map((item, index) => (
-                <tr 
-                  key={item.sku} 
-                  className="hover:bg-slate-50 transition-colors"
-                >
-                  <td className="px-6 py-4 text-sm text-slate-400 tabular-nums">{index + 1}</td>
-                  <td className="px-6 py-4">
-                    <span className="font-mono text-sm text-slate-700">
-                      {item.sku}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-slate-600">{item.name || '-'}</td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="inline-flex items-center px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-700 rounded-md">
-                      {item.orderCount ? item.orderCount.toLocaleString() : '0'}
-                    </span>
-                  </td>
-                </tr>
-              ))
+              uniqueSkus.map((item, index) => {
+                const displayIndex = pagination ? (pagination.page - 1) * pagination.pageSize + index + 1 : index + 1;
+                // Check if available: publish == "1" and inventory > 0
+                const isAvailable = String(item.publish || '0').trim() === '1' && (item.inventory || 0) > 0;
+                
+                return (
+                  <tr 
+                    key={item.sku} 
+                    className="hover:bg-slate-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 text-sm text-slate-400 tabular-nums">{displayIndex}</td>
+                    <td className="px-6 py-4">
+                      <span className="font-mono text-sm text-slate-700">
+                        {item.sku}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600">{item.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {item.substore ? (
+                        <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 rounded-md">
+                          {item.substore}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      {isAvailable ? (
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600">
+                          <Check className="w-4 h-4" />
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-red-600">
+                          <X className="w-4 h-4" />
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className="inline-flex items-center px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-700 rounded-md">
+                        {item.orderCount ? item.orderCount.toLocaleString() : '0'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
+      
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && onPageChange && (
+        <div className="px-6 py-4 border-t border-slate-200">
+          <Pagination
+            pagination={pagination}
+            loadingAnalysis={loading || loadingAnalysis}
+            onPageChange={onPageChange}
+            getPageNumbers={(current, total) => {
+              const pages: number[] = [];
+              const maxPages = 5;
+              let start = Math.max(1, current - Math.floor(maxPages / 2));
+              let end = Math.min(total, start + maxPages - 1);
+              if (end - start < maxPages - 1) {
+                start = Math.max(1, end - maxPages + 1);
+              }
+              for (let i = start; i <= end; i++) {
+                pages.push(i);
+              }
+              return pages;
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

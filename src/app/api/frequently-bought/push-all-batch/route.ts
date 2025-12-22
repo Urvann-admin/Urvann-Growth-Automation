@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCollection } from '@/lib/mongodb';
 import { updateProductFrequentlyBought } from '@/lib/urvannApi';
+import { getHubBySubstore } from '@/shared/constants/hubs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 600; // 10 minutes
@@ -23,19 +24,24 @@ interface BatchProgress {
  * Body:
  * - startIndex: number
  * - batchSize: number
- * - allSkus: Array<{sku: string, name: string}>
+ * - allSkus: Array<{sku: string, name: string, substore?: string}>
  * - limit: number (default 6)
- * - manualSkus: string[] (optional, max 6 SKUs to manually add)
- * - allMappingsCache: Map<string, {product_id: string, publish: string, inventory: number}> (optional)
+ * - manualSkusByHub: Record<string, string[]> (optional, hub -> SKUs mapping)
+ * - allMappingsCache: Map<string, {product_id: string, publish: string, inventory: number, substore?: string}> (optional)
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { startIndex = 0, batchSize = 50, allSkus = [], limit = 6, manualSkus = [], allMappingsCache } = body;
+    const { startIndex = 0, batchSize = 50, allSkus = [], limit = 6, manualSkusByHub = {}, allMappingsCache } = body;
     
-    // Log manual SKUs received
-    if (manualSkus && Array.isArray(manualSkus) && manualSkus.length > 0) {
-      console.log(`[Push All Batch] Received ${manualSkus.length} manual SKU(s): ${manualSkus.join(', ')}`);
+    // Log hub-wise manual SKUs received
+    const totalManualSkus = Object.values(manualSkusByHub).reduce((sum, skus) => sum + skus.length, 0);
+    if (totalManualSkus > 0) {
+      const hubSummary = Object.entries(manualSkusByHub)
+        .filter(([_, skus]) => skus.length > 0)
+        .map(([hub, skus]) => `${hub}: ${skus.join(', ')}`)
+        .join(' | ');
+      console.log(`[Push All Batch] Received hub-wise manual SKUs (${totalManualSkus} total): ${hubSummary}`);
     }
 
     const progress: BatchProgress = {
@@ -56,7 +62,7 @@ export async function POST(request: Request) {
     
     // Build mappings map (use cache if provided, otherwise fetch)
     const skuToProductId = new Map<string, string>();
-    const skuToMapping = new Map<string, { publish: string; inventory: number }>();
+    const skuToMapping = new Map<string, { publish: string; inventory: number; substore?: string }>();
     
     if (allMappingsCache && typeof allMappingsCache === 'object') {
       // Use provided cache (convert from object to Map)
@@ -65,13 +71,14 @@ export async function POST(request: Request) {
         skuToMapping.set(sku, {
           publish: (mapping as any).publish || "0",
           inventory: (mapping as any).inventory || 0,
+          substore: (mapping as any).substore || '',
         });
       }
     } else {
       // Fetch mappings only for batch SKUs (fallback if cache not provided)
       const batchMappings = await mappingCollection.find(
         { sku: { $in: batchSkuList } },
-        { projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, _id: 0 } }
+        { projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
       ).toArray();
 
       for (const m of batchMappings) {
@@ -80,6 +87,7 @@ export async function POST(request: Request) {
         skuToMapping.set(sku, {
           publish: String(m.publish || "0").trim(),
           inventory: Number(m.inventory || 0),
+          substore: (m.substore as string) || '',
         });
       }
     }
@@ -217,18 +225,24 @@ export async function POST(request: Request) {
     // OPTIMIZATION 4: Batch fetch mappings for ALL paired SKUs at once (not per SKU)
     const allPairedSkusList = Array.from(allPairedSkusSet);
     
-    // Also include manual SKUs in the fetch if provided
-    const validManualSkus = (manualSkus as string[])
-      .filter((s: string) => s && s.trim() !== '')
-      .map((s: string) => s.trim().toUpperCase());
+    // Collect all manual SKUs from all hubs for batch fetch
+    const allManualSkusSet = new Set<string>();
+    Object.values(manualSkusByHub).forEach((skus: string[]) => {
+      skus.forEach(sku => {
+        if (sku && sku.trim() !== '') {
+          allManualSkusSet.add(sku.trim().toUpperCase());
+        }
+      });
+    });
+    const allManualSkusList = Array.from(allManualSkusSet);
     
-    if (validManualSkus.length > 0) {
-      console.log(`[Push All Batch] Manual SKUs provided: ${validManualSkus.length} - ${validManualSkus.join(', ')}`);
+    if (allManualSkusList.length > 0) {
+      console.log(`[Push All Batch] Manual SKUs from all hubs: ${allManualSkusList.length} - ${allManualSkusList.join(', ')}`);
     }
     
-    // Combine paired SKUs + manual SKUs for single batch fetch
+    // Combine paired SKUs + all manual SKUs for single batch fetch
     const skusToFetch = [...allPairedSkusList];
-    for (const msku of validManualSkus) {
+    for (const msku of allManualSkusList) {
       if (!skusToFetch.includes(msku)) {
         skusToFetch.push(msku);
       }
@@ -236,20 +250,21 @@ export async function POST(request: Request) {
     
     const pairedMappingsBatch = await mappingCollection.find(
       { sku: { $in: skusToFetch } },
-      { projection: { sku: 1, publish: 1, inventory: 1, _id: 0 } }
+      { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
     ).toArray();
     
-    const globalPairedMappingMap = new Map<string, { publish: string; inventory: number }>();
+    const globalPairedMappingMap = new Map<string, { publish: string; inventory: number; substore?: string }>();
     for (const m of pairedMappingsBatch) {
       globalPairedMappingMap.set(m.sku as string, {
         publish: String(m.publish || "0").trim(),
         inventory: Number(m.inventory || 0),
+        substore: (m.substore as string) || '',
       });
     }
 
     // Check how many manual SKU mappings were found
-    const manualMappingsFound = validManualSkus.filter(msku => globalPairedMappingMap.has(msku)).length;
-    console.log(`[Push All Batch] Loaded mappings for ${globalPairedMappingMap.size} SKUs (${allPairedSkusList.length} auto + ${validManualSkus.length} manual, ${manualMappingsFound} manual mappings found)`);
+    const manualMappingsFound = allManualSkusList.filter(msku => globalPairedMappingMap.has(msku)).length;
+    console.log(`[Push All Batch] Loaded mappings for ${globalPairedMappingMap.size} SKUs (${allPairedSkusList.length} auto + ${allManualSkusList.length} manual, ${manualMappingsFound} manual mappings found)`);
 
     // OPTIMIZATION 2: Process SKUs in parallel with concurrent API calls
     const CONCURRENCY = 10; // Increased concurrency
@@ -293,17 +308,34 @@ export async function POST(request: Request) {
           }
         }
 
+        // Determine which hub this SKU belongs to based on its substore
+        const skuMapping = skuToMapping.get(sku);
+        const skuSubstore = skuMapping?.substore || '';
+        const skuHub = getHubBySubstore(skuSubstore);
+        
+        // Get manual SKUs for this SKU's hub only
+        const hubManualSkus = skuHub && manualSkusByHub[skuHub] 
+          ? (manualSkusByHub[skuHub] as string[])
+              .filter((s: string) => s && s.trim() !== '')
+              .map((s: string) => s.trim().toUpperCase())
+          : [];
+        
+        if (skuHub && hubManualSkus.length > 0) {
+          console.log(`[Push All Batch] ${sku} (substore: ${skuSubstore}, hub: ${skuHub}): Using ${hubManualSkus.length} manual SKU(s) from ${skuHub} hub: ${hubManualSkus.join(', ')}`);
+        } else if (skuHub && Object.keys(manualSkusByHub).length > 0) {
+          console.log(`[Push All Batch] ${sku} (substore: ${skuSubstore}, hub: ${skuHub}): No manual SKUs configured for ${skuHub} hub`);
+        }
+
         // Merge logic for manual SKUs + auto-found SKUs
         let finalValidSkus: string[] = [];
-        const validManualSkus = (manualSkus as string[]).filter((s: string) => s && s.trim() !== '').map((s: string) => s.trim().toUpperCase());
         
-        if (validManualSkus.length > 0) {
+        if (hubManualSkus.length > 0) {
           if (autoPairedSkus.length === 0) {
             // Case 1: No auto-found paired products, use manual SKUs (max 6)
             // Validate manual SKUs
             const invalidManualSkus: string[] = [];
             
-            for (const msku of validManualSkus.slice(0, limit)) {
+            for (const msku of hubManualSkus.slice(0, limit)) {
               const mapping = globalPairedMappingMap.get(msku);
               
               if (mapping && mapping.publish === "1" && mapping.inventory > 0) {
@@ -329,7 +361,7 @@ export async function POST(request: Request) {
             const needed = limit - autoPairedSkus.length;
             const manualToAdd: string[] = [];
             
-            for (const msku of validManualSkus) {
+            for (const msku of hubManualSkus) {
               if (manualToAdd.length >= needed) break;
               if (autoPairedSkus.includes(msku)) continue; // Skip duplicates
               
@@ -348,17 +380,18 @@ export async function POST(request: Request) {
         }
 
         if (finalValidSkus.length > 0) {
-          const manualCount = validManualSkus.length > 0 ? finalValidSkus.length - autoPairedSkus.length : 0;
+          const manualCount = hubManualSkus.length > 0 ? finalValidSkus.length - autoPairedSkus.length : 0;
           let logMsg: string;
           
           if (manualCount > 0) {
             const manualSkusList = finalValidSkus.slice(autoPairedSkus.length);
+            const hubInfo = skuHub ? ` [${skuHub} hub]` : '';
             if (autoPairedSkus.length === 0) {
               // Case 1: Only manual SKUs
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} manual SKU${finalValidSkus.length > 1 ? 's' : ''} (${manualSkusList.join(', ')})`;
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} manual SKU${finalValidSkus.length > 1 ? 's' : ''} from ${skuHub || 'unknown'} hub (${manualSkusList.join(', ')})`;
             } else {
               // Case 2: Mixed auto + manual
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${autoPairedSkus.length} auto + ${manualCount} manual: ${manualSkusList.join(', ')})`;
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${autoPairedSkus.length} auto + ${manualCount} manual from ${skuHub || 'unknown'} hub: ${manualSkusList.join(', ')})`;
             }
           } else {
             // Case 3 or no manual: Only auto-found
@@ -375,22 +408,22 @@ export async function POST(request: Request) {
         } else {
           let failReason: string;
           
-          if (validManualSkus.length > 0) {
+          if (hubManualSkus.length > 0) {
             // Check if any manual SKUs were provided but all were invalid
-            const invalidManualList = validManualSkus.filter(msku => {
+            const invalidManualList = hubManualSkus.filter(msku => {
               const mapping = globalPairedMappingMap.get(msku);
               return !mapping || mapping.publish !== "1" || mapping.inventory <= 0;
             });
             
-            if (invalidManualList.length === validManualSkus.length) {
+            if (invalidManualList.length === hubManualSkus.length) {
               // All manual SKUs were invalid
-              failReason = `No auto-found products and all ${validManualSkus.length} manual SKU${validManualSkus.length > 1 ? 's' : ''} [${validManualSkus.join(', ')}] are invalid (unpublished/out of stock)`;
+              failReason = `No auto-found products and all ${hubManualSkus.length} manual SKU${hubManualSkus.length > 1 ? 's' : ''} from ${skuHub || 'unknown'} hub [${hubManualSkus.join(', ')}] are invalid (unpublished/out of stock)`;
             } else {
               // Some were invalid
-              failReason = `No auto-found products and manual SKU(s) [${invalidManualList.join(', ')}] are invalid`;
+              failReason = `No auto-found products and manual SKU(s) from ${skuHub || 'unknown'} hub [${invalidManualList.join(', ')}] are invalid`;
             }
           } else {
-            failReason = 'No paired products found';
+            failReason = 'No paired products found and no valid manual SKUs';
           }
           
           return {

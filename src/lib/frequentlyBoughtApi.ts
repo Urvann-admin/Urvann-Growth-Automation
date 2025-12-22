@@ -44,11 +44,30 @@ export async function fetchUniqueSkus(): Promise<SkusApiResponse> {
 }
 
 /**
- * Fetch top 10 SKUs by transaction count
+ * Fetch top SKUs by transaction count with substore filter and pagination
  */
-export async function fetchTopSkus(): Promise<SkusApiResponse> {
+export async function fetchTopSkus(options?: {
+  substore?: string;
+  substores?: string[];
+  page?: number;
+  pageSize?: number;
+}): Promise<SkusApiResponse & { page?: number; pageSize?: number; totalPages?: number }> {
   try {
-    const response = await fetch(`${API_BASE}/top-skus`);
+    const params = new URLSearchParams();
+    if (options?.substores && options.substores.length > 0) {
+      params.append('substores', options.substores.join(','));
+    } else if (options?.substore) {
+      params.append('substore', options.substore);
+    }
+    if (options?.page) {
+      params.append('page', options.page.toString());
+    }
+    if (options?.pageSize) {
+      params.append('pageSize', options.pageSize.toString());
+    }
+    
+    const url = `${API_BASE}/top-skus${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url);
     return await response.json();
   } catch (err) {
     console.error('Error fetching top SKUs:', err);
@@ -116,6 +135,44 @@ export async function fetchAllForExport(options: {
     limit: 10,
     ...options,
   });
+}
+
+/**
+ * Fetch all SKUs for export with filters
+ */
+export async function fetchAllSkusForExport(options?: {
+  substores?: string[];
+  search?: string;
+}): Promise<SkusApiResponse & { page?: number; pageSize?: number; totalPages?: number }> {
+  try {
+    const params = new URLSearchParams();
+    if (options?.substores && options.substores.length > 0) {
+      params.append('substores', options.substores.join(','));
+    }
+    if (options?.search) {
+      params.append('search', options.search);
+    }
+    // Fetch all records (large page size for export)
+    params.append('page', '1');
+    params.append('pageSize', '10000');
+    
+    const url = `${API_BASE}/top-skus${params.toString() ? `?${params.toString()}` : ''}`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    // Return all data (not paginated) for export
+    if (data.success && data.data) {
+      return {
+        ...data,
+        data: data.data, // All records
+      };
+    }
+    
+    return data;
+  } catch (err) {
+    console.error('Error fetching all SKUs for export:', err);
+    return { success: false, message: 'Failed to fetch SKUs for export' };
+  }
 }
 
 /**

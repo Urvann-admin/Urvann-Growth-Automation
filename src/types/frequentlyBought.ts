@@ -17,6 +17,9 @@ export interface UniqueSku {
   sku: string;
   name?: string;
   orderCount?: number;
+  substore?: string;
+  publish?: string;
+  inventory?: number;
 }
 
 export interface FrequentlyBoughtPagination {
@@ -43,6 +46,9 @@ export interface SkusApiResponse {
   success: boolean;
   data?: UniqueSku[];
   total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
   message?: string;
 }
 

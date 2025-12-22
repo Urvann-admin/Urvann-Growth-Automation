@@ -22,7 +22,7 @@ export async function GET() {
     const mappings = await mappingCollection.find(
       {},
       {
-        projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, _id: 0 },
+        projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, substore: 1, _id: 0 },
         batchSize: 20000, // Maximum batch size for fastest transfer
       }
     ).toArray();
@@ -40,6 +40,7 @@ export async function GET() {
             product_id: m.product_id as string,
             publish: String(m.publish || "0").trim(),
             inventory: Number(m.inventory || 0),
+            substore: (m.substore as string) || '',
           }
         ];
       })

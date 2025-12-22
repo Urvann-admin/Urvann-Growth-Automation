@@ -22,7 +22,7 @@ export async function GET() {
     // 1. Remove sort - it's expensive and not necessary (frontend can sort if needed)
     // 2. Use projection to minimize data transfer
     // 3. Fetch without sort for maximum speed
-    // 4. Create index if it doesn't exist for better performance
+    // 4. Ensure index exists for better performance (ignore if exists)
     try {
       await mappingCollection.createIndex({ publish: 1, inventory: 1 });
     } catch (e) {
@@ -40,6 +40,7 @@ export async function GET() {
             sku: 1,
             name: 1,
             product_id: 1,
+            substore: 1,
             _id: 0,
           },
           // Increase batch size for faster fetching
@@ -53,6 +54,7 @@ export async function GET() {
       sku: doc.sku as string,
       name: (doc.name as string) || '',
       product_id: doc.product_id as string,
+      substore: (doc.substore as string) || '',
     }));
 
     const elapsedTime = Date.now() - startTime;

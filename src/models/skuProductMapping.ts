@@ -9,6 +9,7 @@ export interface ISkuProductMapping extends Document {
   price: number;
   publish: string;
   inventory: number;
+  substore?: string;
   updatedAt: Date;
 }
 
@@ -21,6 +22,7 @@ const SkuProductMappingSchema = new Schema<ISkuProductMapping>(
     price: { type: Number, required: true },
     publish: { type: String, default: "0", index: true },
     inventory: { type: Number, default: 0, index: true },
+    substore: { type: String, default: '', index: true },
     updatedAt: { type: Date, default: Date.now },
   },
   {
@@ -57,3 +59,4 @@ const SkuProductMappingModel = mongoose.models.SkuProductMapping ||
   mongoose.model<ISkuProductMapping>('SkuProductMapping', SkuProductMappingSchema);
 
 export default SkuProductMappingModel;
+

@@ -4,7 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { Leaf, Mail, Lock, Eye, EyeOff, Sprout, TreeDeciduous } from 'lucide-react';
+import { Leaf, Mail, Lock, Eye, EyeOff, Sprout, TreeDeciduous, Sparkles, Gift } from 'lucide-react';
+import { ChristmasTheme } from '@/components/theme/ChristmasTheme';
+import { SnowfallEffect } from '@/components/theme/SnowfallEffect';
+import { SantaFace, Sleigh, Reindeer, ChristmasSock } from '@/components/theme/ChristmasIcons';
+import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
 import './login.css';
 
 export default function LoginPage() {
@@ -39,22 +43,98 @@ export default function LoginPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
+
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel - Brand Section */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-emerald-900 via-emerald-800 to-green-900 relative overflow-hidden">
+    <ChristmasTheme variant="login">
+      <SnowfallEffect enabled={isChristmasTheme} />
+      <div className="min-h-screen flex" style={isChristmasTheme ? { position: 'relative', zIndex: 1 } : {}}>
+        {/* Left Panel - Brand Section */}
+        <div 
+          className={`hidden lg:flex lg:w-1/2 relative overflow-hidden ${isChristmasTheme ? '' : 'bg-gradient-to-br from-emerald-900 via-emerald-800 to-green-900'}`}
+          style={isChristmasTheme ? {
+            background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.gradient.from} 0%, ${CHRISTMAS_COLORS.gradient.via} 50%, ${CHRISTMAS_COLORS.gradient.to} 100%)`,
+          } : {}}
+        >
         {/* Decorative Elements */}
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-20 left-10 w-64 h-64 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-emerald-300 rounded-full blur-3xl"></div>
+          <div className={`absolute bottom-20 right-10 w-96 h-96 rounded-full blur-3xl ${isChristmasTheme ? '' : 'bg-emerald-300'}`}
+            style={isChristmasTheme ? { background: CHRISTMAS_COLORS.gold } : {}}
+          ></div>
         </div>
         
-        {/* Floating Leaf Decorations */}
-        <Leaf className="absolute top-10 right-20 w-12 h-12 text-emerald-300/30 leaf-float" />
-        <Sprout className="absolute bottom-32 left-16 w-16 h-16 text-green-300/20 grow-animation" />
-        <TreeDeciduous className="absolute top-1/3 left-1/4 w-20 h-20 text-emerald-400/20 leaf-float-delayed" />
-        <Leaf className="absolute bottom-1/4 right-1/3 w-10 h-10 text-green-300/25 leaf-float" style={{ animationDelay: '1s' }} />
-        <Sprout className="absolute top-1/2 right-10 w-8 h-8 text-emerald-300/30 grow-animation" style={{ animationDelay: '1.5s' }} />
+        {/* Floating Decorations */}
+        {isChristmasTheme ? (
+          <>
+            {/* Santa Face - Top Left */}
+            <div className="absolute top-8 left-8 leaf-float" style={{ opacity: 0.8 }}>
+              <SantaFace size={50} />
+            </div>
+            
+            {/* Sleigh - Top Right, Flying Animation */}
+            <div 
+              className="absolute top-12 right-16"
+              style={{
+                opacity: 0.7,
+                animation: 'sleigh-fly 20s linear infinite',
+                transform: 'translateX(0)',
+              }}
+            >
+              <Sleigh size={90} />
+            </div>
+            
+            {/* Reindeer 1 - Following Sleigh */}
+            <div 
+              className="absolute top-20 right-24"
+              style={{
+                opacity: 0.6,
+                animation: 'sleigh-fly 20s linear infinite',
+                animationDelay: '-2s',
+              }}
+            >
+              <Reindeer size={40} />
+            </div>
+            
+            {/* Reindeer 2 - Following Sleigh */}
+            <div 
+              className="absolute top-16 right-32"
+              style={{
+                opacity: 0.6,
+                animation: 'sleigh-fly 20s linear infinite',
+                animationDelay: '-1s',
+              }}
+            >
+              <Reindeer size={35} />
+            </div>
+            
+            {/* Christmas Socks - Hanging */}
+            <div className="absolute top-1/4 left-12 leaf-float-delayed" style={{ opacity: 0.7 }}>
+              <ChristmasSock size={45} />
+            </div>
+            <div className="absolute bottom-1/3 left-20 leaf-float" style={{ opacity: 0.6, animationDelay: '2s' }}>
+              <ChristmasSock size={40} />
+            </div>
+            <div className="absolute top-1/2 right-8 leaf-float-delayed" style={{ opacity: 0.65, animationDelay: '1s' }}>
+              <ChristmasSock size={38} />
+            </div>
+            
+            {/* Additional Sparkles and Gifts */}
+            <Gift className="absolute top-10 right-20 w-12 h-12 text-white/40 leaf-float" />
+            <Sparkles className="absolute bottom-32 left-16 w-16 h-16 text-white/30 grow-animation" />
+            <Gift className="absolute top-1/3 left-1/4 w-20 h-20 text-white/25 leaf-float-delayed" />
+            <Sparkles className="absolute bottom-1/4 right-1/3 w-10 h-10 text-white/30 leaf-float" style={{ animationDelay: '1s' }} />
+            <Gift className="absolute bottom-20 left-1/3 w-8 h-8 text-white/35 grow-animation" style={{ animationDelay: '1.5s' }} />
+          </>
+        ) : (
+          <>
+            <Leaf className="absolute top-10 right-20 w-12 h-12 text-emerald-300/30 leaf-float" />
+            <Sprout className="absolute bottom-32 left-16 w-16 h-16 text-green-300/20 grow-animation" />
+            <TreeDeciduous className="absolute top-1/3 left-1/4 w-20 h-20 text-emerald-400/20 leaf-float-delayed" />
+            <Leaf className="absolute bottom-1/4 right-1/3 w-10 h-10 text-green-300/25 leaf-float" style={{ animationDelay: '1s' }} />
+            <Sprout className="absolute top-1/2 right-10 w-8 h-8 text-emerald-300/30 grow-animation" style={{ animationDelay: '1.5s' }} />
+          </>
+        )}
         
         {/* Content */}
         <div className="relative z-10 flex flex-col items-center justify-center w-full px-12 text-white">
@@ -62,64 +142,155 @@ export default function LoginPage() {
           <div className="mb-8">
             <div className="w-24 h-24 bg-white/10 backdrop-blur-md rounded-3xl flex items-center justify-center shadow-2xl border border-white/20">
               <div className="relative">
-                <TreeDeciduous className="w-16 h-16 text-white" strokeWidth={1.5} />
-                <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
-                  <Sprout className="w-4 h-4 text-emerald-300" strokeWidth={2} />
-                  <Sprout className="w-4 h-4 text-green-300" strokeWidth={2} />
-                </div>
+                {isChristmasTheme ? (
+                  <Gift className="w-16 h-16 text-white" strokeWidth={1.5} />
+                ) : (
+                  <>
+                    <TreeDeciduous className="w-16 h-16 text-white" strokeWidth={1.5} />
+                    <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 flex space-x-1">
+                      <Sprout className="w-4 h-4 text-emerald-300" strokeWidth={2} />
+                      <Sprout className="w-4 h-4 text-green-300" strokeWidth={2} />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           {/* Brand Name */}
-          <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-white to-emerald-100 bg-clip-text text-transparent">
-            Urvann Growth
+          <h1 className={`text-5xl font-bold mb-4 bg-clip-text text-transparent ${isChristmasTheme ? '' : 'bg-gradient-to-r from-white to-emerald-100'}`}
+            style={isChristmasTheme ? {
+              background: `linear-gradient(to right, ${CHRISTMAS_COLORS.white}, ${CHRISTMAS_COLORS.gold})`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            } : {}}
+          >
+            {isChristmasTheme ? '🎄 Urvann Growth 🎄' : 'Urvann Growth'}
           </h1>
-          <p className="text-emerald-100 text-lg mb-8 text-center max-w-md">
-            Cultivating Success, One Plant at a Time
+          <p className={`text-lg mb-8 text-center max-w-md ${isChristmasTheme ? 'text-white/90' : 'text-emerald-100'}`}>
+            {isChristmasTheme ? '🎁 Wishing You a Merry Christmas & Happy New Year! 🎉' : 'Cultivating Success, One Plant at a Time'}
           </p>
 
           {/* Feature Pills */}
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 max-w-md border border-white/20 shadow-xl">
             <div className="flex flex-wrap gap-2 justify-center">
-              <span className="px-4 py-2 bg-emerald-500/20 rounded-full text-emerald-100 text-sm border border-emerald-400/30">
-                🌱 Real-time Analytics
-              </span>
-              <span className="px-4 py-2 bg-green-500/20 rounded-full text-green-100 text-sm border border-green-400/30">
-                📊 Growth Tracking
-              </span>
-              <span className="px-4 py-2 bg-emerald-500/20 rounded-full text-emerald-100 text-sm border border-emerald-400/30">
-                🌿 Inventory Management
-              </span>
+              {isChristmasTheme ? (
+                <>
+                  <span className="px-4 py-2 rounded-full text-white text-sm border border-white/30"
+                    style={{ background: `${CHRISTMAS_COLORS.gold}/30` }}
+                  >
+                    🎄 Real-time Analytics
+                  </span>
+                  <span className="px-4 py-2 rounded-full text-white text-sm border border-white/30"
+                    style={{ background: `${CHRISTMAS_COLORS.green}/30` }}
+                  >
+                    🎁 Growth Tracking
+                  </span>
+                  <span className="px-4 py-2 rounded-full text-white text-sm border border-white/30"
+                    style={{ background: `${CHRISTMAS_COLORS.accent}/30` }}
+                  >
+                    ⭐ Inventory Management
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="px-4 py-2 bg-emerald-500/20 rounded-full text-emerald-100 text-sm border border-emerald-400/30">
+                    🌱 Real-time Analytics
+                  </span>
+                  <span className="px-4 py-2 bg-green-500/20 rounded-full text-green-100 text-sm border border-green-400/30">
+                    📊 Growth Tracking
+                  </span>
+                  <span className="px-4 py-2 bg-emerald-500/20 rounded-full text-emerald-100 text-sm border border-emerald-400/30">
+                    🌿 Inventory Management
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       {/* Right Panel - Login Form */}
-      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-slate-50 via-white to-emerald-50/30">
-        <div className="w-full max-w-md">
+      <div 
+        className={`flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 relative ${isChristmasTheme ? '' : 'bg-gradient-to-br from-slate-50 via-white to-emerald-50/30'}`}
+        style={isChristmasTheme ? {
+          background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.background} 0%, ${CHRISTMAS_COLORS.white} 50%, ${CHRISTMAS_COLORS.light} 100%)`,
+        } : {}}
+      >
+        {/* Christmas Decorations on Right Panel */}
+        {isChristmasTheme && (
+          <>
+            {/* Small Santa Face - Top Right */}
+            <div className="absolute top-8 right-8 leaf-float" style={{ opacity: 0.6, zIndex: 0 }}>
+              <SantaFace size={40} />
+            </div>
+            
+            {/* Christmas Socks - Hanging on Right Side */}
+            <div className="absolute top-16 right-4 leaf-float-delayed" style={{ opacity: 0.5, zIndex: 0 }}>
+              <ChristmasSock size={35} />
+            </div>
+            <div className="absolute bottom-24 right-6 leaf-float" style={{ opacity: 0.5, zIndex: 0, animationDelay: '1.5s' }}>
+              <ChristmasSock size={32} />
+            </div>
+            
+            {/* Small Reindeer - Bottom Right */}
+            <div className="absolute bottom-8 right-12 grow-animation" style={{ opacity: 0.4, zIndex: 0 }}>
+              <Reindeer size={45} />
+            </div>
+          </>
+        )}
+        
+        <div className="w-full max-w-md relative z-10">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
             <div className="inline-flex flex-col items-center mb-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl flex items-center justify-center shadow-lg mb-3">
-                <TreeDeciduous className="w-10 h-10 text-white" strokeWidth={1.5} />
+              <div 
+                className={`w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-3 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-emerald-500 to-green-600'}`}
+                style={isChristmasTheme ? {
+                  background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.primary} 0%, ${CHRISTMAS_COLORS.secondary} 100%)`,
+                } : {}}
+              >
+                {isChristmasTheme ? (
+                  <Gift className="w-10 h-10 text-white" strokeWidth={1.5} />
+                ) : (
+                  <TreeDeciduous className="w-10 h-10 text-white" strokeWidth={1.5} />
+                )}
               </div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-700 to-green-600 bg-clip-text text-transparent">
-                Urvann Growth
+              <h1 
+                className={`text-3xl font-bold bg-clip-text text-transparent ${isChristmasTheme ? '' : 'bg-gradient-to-r from-emerald-700 to-green-600'}`}
+                style={isChristmasTheme ? {
+                  background: `linear-gradient(to right, ${CHRISTMAS_COLORS.primary}, ${CHRISTMAS_COLORS.secondary})`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                } : {}}
+              >
+                {isChristmasTheme ? '🎄 Urvann Growth 🎄' : 'Urvann Growth'}
               </h1>
             </div>
           </div>
 
           {/* Form Card */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-emerald-100/50 p-8">
+          <div 
+            className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8 ${isChristmasTheme ? '' : 'border border-emerald-100/50'}`}
+            style={isChristmasTheme ? {
+              border: `2px solid ${CHRISTMAS_COLORS.accent}/30`,
+              boxShadow: `0 20px 25px -5px ${CHRISTMAS_COLORS.primary}/20, 0 10px 10px -5px ${CHRISTMAS_COLORS.primary}/10`,
+            } : {}}
+          >
             {/* Header */}
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold bg-gradient-to-r from-emerald-700 to-green-600 bg-clip-text text-transparent mb-2">
-                Welcome Back
+              <h2 
+                className={`text-3xl font-bold bg-clip-text text-transparent mb-2 ${isChristmasTheme ? '' : 'bg-gradient-to-r from-emerald-700 to-green-600'}`}
+                style={isChristmasTheme ? {
+                  background: `linear-gradient(to right, ${CHRISTMAS_COLORS.primary}, ${CHRISTMAS_COLORS.secondary})`,
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                } : {}}
+              >
+                {isChristmasTheme ? '🎄 Welcome Back! 🎁' : 'Welcome Back'}
               </h2>
-              <p className="text-slate-600 text-sm">
-                Sign in to access your growth dashboard
+              <p className={`text-sm ${isChristmasTheme ? 'text-slate-700' : 'text-slate-600'}`}>
+                {isChristmasTheme ? 'Sign in to access your dashboard' : 'Sign in to access your growth dashboard'}
               </p>
             </div>
 
@@ -132,7 +303,9 @@ export default function LoginPage() {
               </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-emerald-500" />
+                    <Mail className={`h-5 w-5 ${isChristmasTheme ? '' : 'text-emerald-500'}`}
+                      style={isChristmasTheme ? { color: CHRISTMAS_COLORS.primary } : {}}
+                    />
                   </div>
               <input
                 id="email"
@@ -142,8 +315,20 @@ export default function LoginPage() {
                 required
                 value={formData.email}
                 onChange={handleChange}
-                    className="block w-full pl-10 pr-3 py-3 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all bg-white/50"
+                    className={`block w-full pl-10 pr-3 py-3 border rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none transition-all bg-white/50 ${isChristmasTheme ? 'border-slate-300' : 'border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-transparent'}`}
                     placeholder="Enter your email"
+                    onFocus={(e) => {
+                      if (isChristmasTheme) {
+                        e.target.style.borderColor = CHRISTMAS_COLORS.primary;
+                        e.target.style.boxShadow = `0 0 0 2px ${CHRISTMAS_COLORS.primary}40`;
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (isChristmasTheme) {
+                        e.target.style.borderColor = '';
+                        e.target.style.boxShadow = '';
+                      }
+                    }}
               />
                 </div>
             </div>
@@ -155,7 +340,9 @@ export default function LoginPage() {
               </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-emerald-500" />
+                    <Lock className={`h-5 w-5 ${isChristmasTheme ? '' : 'text-emerald-500'}`}
+                      style={isChristmasTheme ? { color: CHRISTMAS_COLORS.primary } : {}}
+                    />
                   </div>
               <input
                 id="password"
@@ -165,8 +352,20 @@ export default function LoginPage() {
                 required
                 value={formData.password}
                 onChange={handleChange}
-                    className="block w-full pl-10 pr-12 py-3 border border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all bg-white/50"
+                    className={`block w-full pl-10 pr-12 py-3 border rounded-xl text-slate-900 placeholder-slate-400 focus:outline-none transition-all bg-white/50 ${isChristmasTheme ? 'border-slate-300' : 'border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-transparent'}`}
                 placeholder="Enter your password"
+                onFocus={(e) => {
+                  if (isChristmasTheme) {
+                    e.target.style.borderColor = CHRISTMAS_COLORS.primary;
+                    e.target.style.boxShadow = `0 0 0 2px ${CHRISTMAS_COLORS.primary}40`;
+                  }
+                }}
+                onBlur={(e) => {
+                  if (isChristmasTheme) {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = '';
+                  }
+                }}
               />
                   <button
                     type="button"
@@ -189,7 +388,10 @@ export default function LoginPage() {
                 type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500 focus:ring-2 cursor-pointer"
+                    className={`w-4 h-4 border-slate-300 rounded focus:ring-2 cursor-pointer ${isChristmasTheme ? '' : 'text-emerald-600 focus:ring-emerald-500'}`}
+                    style={isChristmasTheme ? {
+                      accentColor: CHRISTMAS_COLORS.primary,
+                    } : {}}
               />
                   <span className="ml-2 text-sm text-slate-700 group-hover:text-emerald-700 transition-colors">
                     Remember me
@@ -211,7 +413,23 @@ export default function LoginPage() {
               <button
               type="submit"
                 disabled={isLoading}
-                className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center space-x-2"
+                className={`w-full text-white font-semibold py-3.5 px-4 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center space-x-2 ${isChristmasTheme ? '' : 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700'}`}
+                style={isChristmasTheme ? {
+                  background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.primary} 0%, ${CHRISTMAS_COLORS.secondary} 100%)`,
+                  boxShadow: `0 10px 15px -3px ${CHRISTMAS_COLORS.primary}/40`,
+                } : {}}
+                onMouseEnter={(e) => {
+                  if (isChristmasTheme && !isLoading) {
+                    e.currentTarget.style.background = `linear-gradient(135deg, ${CHRISTMAS_COLORS.secondary} 0%, ${CHRISTMAS_COLORS.dark} 100%)`;
+                    e.currentTarget.style.boxShadow = `0 20px 25px -5px ${CHRISTMAS_COLORS.primary}/50`;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (isChristmasTheme && !isLoading) {
+                    e.currentTarget.style.background = `linear-gradient(135deg, ${CHRISTMAS_COLORS.primary} 0%, ${CHRISTMAS_COLORS.secondary} 100%)`;
+                    e.currentTarget.style.boxShadow = `0 10px 15px -3px ${CHRISTMAS_COLORS.primary}/40`;
+                  }
+                }}
               >
                 {isLoading ? (
                   <>
@@ -223,7 +441,7 @@ export default function LoginPage() {
                   </>
                 ) : (
                   <>
-                    <span>Login</span>
+                    <span>{isChristmasTheme ? '🎄 Login 🎁' : 'Login'}</span>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
@@ -234,9 +452,24 @@ export default function LoginPage() {
 
             {/* Footer */}
           <div className="mt-6 text-center">
-              <p className="text-sm text-slate-600">
+              <p className={`text-sm ${isChristmasTheme ? 'text-slate-700' : 'text-slate-600'}`}>
                 Need access?{' '}
-                <button className="font-semibold text-emerald-600 hover:text-emerald-700 transition-colors">
+                <button 
+                  className={`font-semibold transition-colors ${isChristmasTheme ? '' : 'text-emerald-600 hover:text-emerald-700'}`}
+                  style={isChristmasTheme ? {
+                    color: CHRISTMAS_COLORS.primary,
+                  } : {}}
+                  onMouseEnter={(e) => {
+                    if (isChristmasTheme) {
+                      e.currentTarget.style.color = CHRISTMAS_COLORS.secondary;
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (isChristmasTheme) {
+                      e.currentTarget.style.color = CHRISTMAS_COLORS.primary;
+                    }
+                  }}
+                >
                   Contact Administrator
                 </button>
             </p>
@@ -244,14 +477,49 @@ export default function LoginPage() {
           </div>
 
           {/* Bottom Note */}
-          <p className="mt-6 text-center text-xs text-slate-500">
+          <p className={`mt-6 text-center text-xs ${isChristmasTheme ? 'text-slate-600' : 'text-slate-500'}`}>
             By signing in, you agree to our{' '}
-            <button className="text-emerald-600 hover:text-emerald-700 font-medium">Terms of Service</button>
+            <button 
+              className={`font-medium ${isChristmasTheme ? '' : 'text-emerald-600 hover:text-emerald-700'}`}
+              style={isChristmasTheme ? {
+                color: CHRISTMAS_COLORS.primary,
+              } : {}}
+              onMouseEnter={(e) => {
+                if (isChristmasTheme) {
+                  e.currentTarget.style.color = CHRISTMAS_COLORS.secondary;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (isChristmasTheme) {
+                  e.currentTarget.style.color = CHRISTMAS_COLORS.primary;
+                }
+              }}
+            >
+              Terms of Service
+            </button>
             {' '}and{' '}
-            <button className="text-emerald-600 hover:text-emerald-700 font-medium">Privacy Policy</button>
+            <button 
+              className={`font-medium ${isChristmasTheme ? '' : 'text-emerald-600 hover:text-emerald-700'}`}
+              style={isChristmasTheme ? {
+                color: CHRISTMAS_COLORS.primary,
+              } : {}}
+              onMouseEnter={(e) => {
+                if (isChristmasTheme) {
+                  e.currentTarget.style.color = CHRISTMAS_COLORS.secondary;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (isChristmasTheme) {
+                  e.currentTarget.style.color = CHRISTMAS_COLORS.primary;
+                }
+              }}
+            >
+              Privacy Policy
+            </button>
           </p>
         </div>
       </div>
-    </div>
+      </div>
+    </ChristmasTheme>
   );
 }

@@ -6,22 +6,52 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/frequently-bought/top-skus
  * 
- * Retrieves top 10 SKUs from skuProductMapping collection (published & in stock)
+ * Retrieves top 100 SKUs from skuProductMapping collection (all SKUs, no publish/inventory filter)
  * sorted by transaction count (unique txn_ids) from frequentlyBought collection.
- * OPTIMIZED: Gets top SKUs first, then filters by published/in-stock (much faster)
+ * Supports substore filtering and pagination (10 per page).
+ * 
+ * Query params:
+ * - substore: string (optional) - filter by substore
+ * - page: number (default 1) - page number
+ * - pageSize: number (default 10) - items per page
+ * 
+ * Returns publish and inventory fields for frontend to display availability status.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    console.log('[Top SKUs API] Starting fetch...');
+    const { searchParams } = new URL(request.url);
+    const substoreParam = searchParams.get('substore') || '';
+    const substoresParam = searchParams.get('substores') || '';
+    const search = searchParams.get('search') || '';
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
+    
+    // Support both single substore and multiple substores (comma-separated)
+    const substores = substoresParam 
+      ? substoresParam.split(',').map(s => s.trim()).filter(Boolean)
+      : (substoreParam ? [substoreParam] : []);
+    
+    console.log(`[Top SKUs API] Starting fetch... (substores: ${substores.length > 0 ? substores.join(',') : 'all'}, search: ${search || 'none'}, page: ${page}, pageSize: ${pageSize})`);
     const startTime = Date.now();
 
     const frequentlyBoughtCollection = await getCollection('frequentlyBought');
     const mappingCollection = await getCollection('skuProductMapping');
 
-    // OPTIMIZATION: Get top SKUs by transaction count FIRST (no mapping filter)
-    // This is much faster - we'll filter for published/in-stock later
+    // Build match conditions for frequentlyBought aggregation
+    const matchConditions: any = { 
+      channel: { $ne: 'admin' },
+      'items.price': { $ne: 1 }
+    };
+    
+    // Add substore filter if provided
+    if (substores.length > 0) {
+      matchConditions.substore = substores.length === 1 ? substores[0] : { $in: substores };
+    }
+
+    // Get top SKUs by transaction count (no publish/inventory filter)
+    // Get top 100 SKUs directly
     const topSkusByCount = await frequentlyBoughtCollection.aggregate([
-      { $match: { channel: { $ne: 'admin' } } },
+      { $match: matchConditions },
       { $unwind: '$items' },
       { $match: { 'items.price': { $ne: 1 } } },
       {
@@ -38,7 +68,7 @@ export async function GET() {
         },
       },
       { $sort: { orderCount: -1 } }, // Sort by transaction count descending
-      { $limit: 50 }, // Get top 50 candidates (we'll filter to top 10 published ones)
+      { $limit: pageSize >= 1000 ? 10000 : 200 }, // Higher limit for export (10000) or normal (200)
     ]).toArray();
 
     if (topSkusByCount.length === 0) {
@@ -49,45 +79,79 @@ export async function GET() {
       });
     }
 
-    // OPTIMIZATION: Fetch mapping details ONLY for top candidate SKUs (50 instead of 38k!)
+    // Fetch mapping details for all top SKUs (no publish/inventory filter)
     const candidateSkus = topSkusByCount.map((item: any) => item.sku);
+    
+    // Build mapping filter - only filter by SKU list and substore if provided
+    const mappingFilter: any = {
+      sku: { $in: candidateSkus },
+    };
+    
+    if (substores.length > 0) {
+      mappingFilter.substore = substores.length === 1 ? substores[0] : { $in: substores };
+    }
+    
+    // Fetch all fields including publish and inventory for availability display
     const candidateMappings = await mappingCollection.find(
+      mappingFilter,
       {
-        sku: { $in: candidateSkus },
-        publish: '1',
-        inventory: { $gt: 0 },
-      },
-      {
-        projection: { sku: 1, name: 1, _id: 0 },
+        projection: { sku: 1, name: 1, substore: 1, publish: 1, inventory: 1, _id: 0 },
       }
     ).toArray();
 
-    // Create map for quick lookup
+    // Create maps for quick lookup
     const skuToNameMap = new Map<string, string>();
-    const validSkuSet = new Set<string>();
+    const skuToSubstoreMap = new Map<string, string>();
+    const skuToPublishMap = new Map<string, string>();
+    const skuToInventoryMap = new Map<string, number>();
+    const foundSkuSet = new Set<string>();
+    
     for (const m of candidateMappings) {
       const sku = m.sku as string;
       skuToNameMap.set(sku, (m.name as string) || '');
-      validSkuSet.add(sku);
+      skuToSubstoreMap.set(sku, (m.substore as string) || '');
+      skuToPublishMap.set(sku, (m.publish as string) || '0');
+      skuToInventoryMap.set(sku, (m.inventory as number) ?? 0);
+      foundSkuSet.add(sku);
     }
 
-    // Filter top SKUs to only include published & in-stock, then take top 10
-    const topSkusWithNames = topSkusByCount
-      .filter((item: any) => validSkuSet.has(item.sku))
-      .slice(0, 10)
+    // Map all top SKUs with their details (including publish/inventory for availability check)
+    let allTopSkusWithNames = topSkusByCount
       .map((item: any) => ({
         sku: item.sku,
         orderCount: item.orderCount,
         name: skuToNameMap.get(item.sku) || '',
+        substore: skuToSubstoreMap.get(item.sku) || '',
+        publish: skuToPublishMap.get(item.sku) || '0',
+        inventory: skuToInventoryMap.get(item.sku) ?? 0,
       }));
 
+    // Apply search filter if provided (client-side filtering for search)
+    if (search && search.trim() !== '') {
+      const searchLower = search.toLowerCase().trim();
+      allTopSkusWithNames = allTopSkusWithNames.filter(sku => 
+        sku.sku.toLowerCase().includes(searchLower) ||
+        (sku.name && sku.name.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Apply pagination (10 per page, or all if pageSize is large for export)
+    const total = allTopSkusWithNames.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedSkus = allTopSkusWithNames.slice(startIndex, endIndex);
+
     const elapsedTime = Date.now() - startTime;
-    console.log(`[Top SKUs API] Found ${topSkusWithNames.length} top SKUs in ${elapsedTime}ms`);
+    console.log(`[Top SKUs API] Found ${total} top SKUs (page ${page}/${totalPages}, showing ${paginatedSkus.length}) in ${elapsedTime}ms`);
 
     return NextResponse.json({
       success: true,
-      data: topSkusWithNames,
-      total: topSkusWithNames.length,
+      data: paginatedSkus,
+      total,
+      page,
+      pageSize,
+      totalPages,
     });
   } catch (error: unknown) {
     console.error('Error fetching top SKUs:', error);

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getCollection } from '@/lib/mongodb';
 import { updateProductFrequentlyBought } from '@/lib/urvannApi';
+import { getHubBySubstore } from '@/shared/constants/hubs';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -13,12 +14,12 @@ export const maxDuration = 60;
  * Body:
  * - sku: string
  * - limit: number (default 6)
- * - manualSkus: string[] (optional, max 6 SKUs to manually add)
+ * - manualSkusByHub: Record<string, string[]> (optional, hub -> SKUs mapping)
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sku, limit = 6, manualSkus = [] } = body;
+    const { sku, limit = 6, manualSkusByHub = {} } = body;
 
     if (!sku) {
       return NextResponse.json(
@@ -39,10 +40,12 @@ export async function POST(request: Request) {
     }
 
     const productId = mapping.product_id as string;
+    const skuSubstore = (mapping.substore as string) || '';
+    const skuHub = getHubBySubstore(skuSubstore);
 
     // Get all valid SKUs (strict validation: publish === "1" AND inventory > 0)
     const allMappings = await mappingCollection.find({}, {
-      projection: { sku: 1, publish: 1, inventory: 1, _id: 0 }
+      projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 }
     }).toArray();
 
     const validSKUs = new Set<string>();
@@ -105,15 +108,27 @@ export async function POST(request: Request) {
 
     console.log(`[Push Single] Auto-found paired SKUs: ${autoPairedSkus.length}`);
 
+    // Get manual SKUs for this SKU's hub only
+    const hubManualSkus = skuHub && manualSkusByHub[skuHub] 
+      ? (manualSkusByHub[skuHub] as string[])
+          .filter((s: string) => s && s.trim() !== '')
+          .map((s: string) => s.trim().toUpperCase())
+      : [];
+    
+    if (skuHub && hubManualSkus.length > 0) {
+      console.log(`[Push Single] ${sku} (substore: ${skuSubstore}, hub: ${skuHub}): Using ${hubManualSkus.length} manual SKU(s) from ${skuHub} hub: ${hubManualSkus.join(', ')}`);
+    } else if (skuHub && Object.keys(manualSkusByHub).length > 0) {
+      console.log(`[Push Single] ${sku} (substore: ${skuSubstore}, hub: ${skuHub}): No manual SKUs configured for ${skuHub} hub`);
+    }
+
     // Merge logic for manual SKUs + auto-found SKUs
     let topPairedSkus: string[] = [];
-    const validManualSkus = (manualSkus as string[]).filter((s: string) => s && s.trim() !== '').map((s: string) => s.trim().toUpperCase());
     
     // Pre-fetch mappings for manual SKUs to validate them early
     let manualSkuMappings = new Map<string, { publish: any; inventory: any }>();
-    if (validManualSkus.length > 0) {
+    if (hubManualSkus.length > 0) {
       const manualMappings = await mappingCollection.find(
-        { sku: { $in: validManualSkus } },
+        { sku: { $in: hubManualSkus } },
         { projection: { sku: 1, publish: 1, inventory: 1, _id: 0 } }
       ).toArray();
       
@@ -124,17 +139,16 @@ export async function POST(request: Request) {
         });
       }
       
-      console.log(`[Push Single] Manual SKUs provided: ${validManualSkus.length} - ${validManualSkus.join(', ')}`);
-      console.log(`[Push Single] Manual SKU mappings found: ${manualSkuMappings.size}/${validManualSkus.length}`);
+      console.log(`[Push Single] Manual SKU mappings found: ${manualSkuMappings.size}/${hubManualSkus.length}`);
     }
     
-    if (validManualSkus.length > 0) {
+    if (hubManualSkus.length > 0) {
       if (autoPairedSkus.length === 0) {
         // Case 1: No auto-found paired products, use manual SKUs (max 6) - but validate first
         const validatedManualSkus: string[] = [];
         const invalidManualSkus: string[] = [];
         
-        for (const msku of validManualSkus.slice(0, limit)) {
+        for (const msku of hubManualSkus.slice(0, limit)) {
           const mapping = manualSkuMappings.get(msku);
           if (mapping) {
             const publishStr = String(mapping.publish || "").trim();
@@ -169,7 +183,7 @@ export async function POST(request: Request) {
         const manualToAdd: string[] = [];
         const invalidManualSkus: string[] = [];
         
-        for (const msku of validManualSkus) {
+        for (const msku of hubManualSkus) {
           if (manualToAdd.length >= needed) break;
           if (autoPairedSkus.includes(msku)) continue; // Skip duplicates
           
@@ -205,9 +219,10 @@ export async function POST(request: Request) {
     }
 
     if (topPairedSkus.length === 0) {
+      const hubInfo = skuHub ? ` (hub: ${skuHub})` : '';
       return NextResponse.json({
         success: false,
-        message: 'No valid paired products found and no manual SKUs provided',
+        message: `No valid paired products found and no valid manual SKUs${hubInfo}`,
       }, { status: 404 });
     }
 

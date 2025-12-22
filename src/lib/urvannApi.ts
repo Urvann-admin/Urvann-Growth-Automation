@@ -70,13 +70,13 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
  * Fetches ALL products with publish and inventory fields
  */
 export async function fetchProductsForMapping(sinceId: string = '0', limit: number = 500): Promise<{
-  products: { sku: string; product_id: string; price: number; publish: string; inventory: number; name: string }[];
+  products: { sku: string; product_id: string; price: number; publish: string; inventory: number; name: string; substore?: string }[];
   hasMore: boolean;
   lastId: string;
 }> {
   // Build query params using since_id pagination
   // Note: API returns inventory_quantity, not inventory
-  const fieldsParam = encodeURIComponent(JSON.stringify({ sku: 1, price: 1, publish: 1, inventory_quantity: 1, name: 1 }));
+  const fieldsParam = encodeURIComponent(JSON.stringify({ sku: 1, price: 1, publish: 1, inventory_quantity: 1, name: 1, substore: 1 }));
   const queryParams = new URLSearchParams();
   queryParams.append('fields', decodeURIComponent(fieldsParam));
   queryParams.append('limit', limit.toString());
@@ -116,14 +116,35 @@ export async function fetchProductsForMapping(sinceId: string = '0', limit: numb
     productsArray = Object.values(data.data);
   }
   
-  const products = productsArray.map((product: any) => ({
-    sku: product.sku || '',
-    product_id: product._id,
-    price: product.price || 0,
-    publish: String(product.publish ?? "0"),
-    inventory: product.inventory_quantity ?? 0, // Map inventory_quantity from API to inventory
-    name: product.name || '',
-  }));
+  const products = productsArray.map((product: any) => {
+    // Handle substore - convert array to string if needed, or use first value
+    let substoreValue = '';
+    if (product.substore) {
+      if (Array.isArray(product.substore)) {
+        // If it's an array, take the first value (e.g., ["gurugram"] -> "gurugram")
+        substoreValue = product.substore[0] || '';
+      } else {
+        substoreValue = String(product.substore);
+      }
+    } else if (product.store) {
+      // Fallback to store field
+      if (Array.isArray(product.store)) {
+        substoreValue = product.store[0] || '';
+      } else {
+        substoreValue = String(product.store);
+      }
+    }
+    
+    return {
+      sku: product.sku || '',
+      product_id: product._id,
+      price: product.price || 0,
+      publish: String(product.publish ?? "0"),
+      inventory: product.inventory_quantity ?? 0, // Map inventory_quantity from API to inventory
+      name: product.name || '',
+      substore: substoreValue, // Always a string, not an array
+    };
+  });
   
   // Get the last product_id for pagination
   // If products array is empty, use the sinceId
