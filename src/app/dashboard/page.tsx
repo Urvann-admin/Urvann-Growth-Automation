@@ -311,7 +311,7 @@ export default function DashboardPage() {
                 }
                 
                 // Build external URL with params - use full URL for returnUrl
-                const externalUrl = 'http://65.0.138.213:5002/dashboard/realtime-orders';
+                const externalUrl = 'http://13.233.100.27:5002/dashboard/realtime-orders';
                 const returnUrl = encodeURIComponent(`${window.location.origin}/dashboard`);
                 const params = new URLSearchParams({
                   returnUrl: returnUrl,
