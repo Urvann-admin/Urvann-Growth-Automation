@@ -12,6 +12,7 @@ import {
   fetchAllSkusForExport,
 } from '@/lib/frequentlyBoughtApi';
 import { exportAllSkusToExcel } from '@/lib/excelExport';
+import { HUB_MAPPINGS, getSubstoresByHub } from '@/shared/constants/hubs';
 
 // Components
 import LoadingScreen from '../components/LoadingScreen';
@@ -40,10 +41,14 @@ export default function AllSkusPage() {
     totalPages: 0,
   });
 
-  // Fetch substores
+  // Initialize hubs list (no need to fetch from API)
   const loadSubstores = useCallback(async () => {
-    const data = await fetchSubstoresApi();
-    setSubstores(data);
+    // Convert hubs to options format
+    const hubOptions: SubstoreOption[] = HUB_MAPPINGS.map(mapping => ({
+      value: mapping.hub,
+      label: mapping.hub,
+    }));
+    setSubstores(hubOptions);
   }, []);
 
   // Fetch unique SKU count
@@ -54,19 +59,34 @@ export default function AllSkusPage() {
     }
   }, []);
 
-  // Get selected substore values
-  const getSelectedSubstoreValues = useCallback((): string[] => 
-    selectedSubstores.map(s => s.value), [selectedSubstores]
-  );
+  // Convert selected hubs to substores for API calls
+  const getSelectedSubstoreValues = useCallback((): string[] => {
+    const selectedHubs = selectedSubstores.map(s => s.value);
+    // Map each selected hub to its substores
+    const substoreValues: string[] = [];
+    selectedHubs.forEach(hub => {
+      const hubSubstores = getSubstoresByHub(hub);
+      substoreValues.push(...hubSubstores);
+    });
+    return substoreValues;
+  }, [selectedSubstores]);
 
   // Fetch top SKUs for display with pagination and filters
   const loadTopSkus = useCallback(async (page = 1, substoreFilter: string[] = [], search = '') => {
     setLoadingAllSkus(true);
     try {
-      // Use provided substores or selected substores
+      // Use provided substores (already converted from hubs) or convert selected hubs to substores
       const substores = substoreFilter.length > 0 
         ? substoreFilter 
-        : selectedSubstores.map(s => s.value);
+        : (() => {
+            const selectedHubs = selectedSubstores.map(s => s.value);
+            const substoreValues: string[] = [];
+            selectedHubs.forEach(hub => {
+              const hubSubstores = getSubstoresByHub(hub);
+              substoreValues.push(...hubSubstores);
+            });
+            return substoreValues;
+          })();
       
       const result = await fetchTopSkusApi({
         substores: substores.length > 0 ? substores : undefined,
@@ -145,10 +165,10 @@ export default function AllSkusPage() {
   const handleSubstoreChange = useCallback((selected: MultiValue<SubstoreOption>) => {
     const newSelected = selected as SubstoreOption[];
     setSelectedSubstores(newSelected);
-    // Use all selected substores for filtering
-    const substores = newSelected.map(s => s.value);
+    // Convert selected hubs to substores for filtering
+    const substores = getSelectedSubstoreValues();
     loadTopSkus(1, substores, activeSearch);
-  }, [activeSearch, loadTopSkus]);
+  }, [activeSearch, loadTopSkus, getSelectedSubstoreValues]);
 
   const handleRefresh = useCallback(() => {
     loadTopSkus(1, getSelectedSubstoreValues(), activeSearch);
@@ -239,9 +259,15 @@ export default function AllSkusPage() {
           loadingAnalysis={false}
           pagination={allSkusPagination.total > 0 ? allSkusPagination : undefined}
           onPageChange={handlePageChange}
+          onSkuClick={(sku) => {
+            // Navigate to analysis page with this SKU
+            router.push(`/dashboard/frequently-bought/analysis?sku=${encodeURIComponent(sku)}`);
+          }}
         />
       </main>
     </div>
   );
 }
+
+
 

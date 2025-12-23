@@ -38,28 +38,17 @@ export async function GET(request: Request) {
     const mappingCollection = await getCollection('skuProductMapping');
 
     // Build match conditions for frequentlyBought aggregation
-    // IMPORTANT: Exclude price == 1 items and substores "hubchange" and "test4"
+    // IMPORTANT: Exclude price == 1 items
     const matchConditions: any = { 
       channel: { $ne: 'admin' },
       'items.price': { $ne: 1 }, // Exclude items with price: 1
-      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
     };
     
-    // Add substore filter if provided (excluding hubchange and test4)
+    // Add substore filter if provided
     if (substores.length > 0) {
-      const filteredSubstores = substores.filter(s => s !== 'hubchange' && s !== 'test4');
-      if (filteredSubstores.length > 0) {
-        matchConditions.substore = filteredSubstores.length === 1 
-          ? filteredSubstores[0] 
-          : { $in: filteredSubstores, $nin: ['hubchange', 'test4'] };
-      } else {
-        // If all substores were filtered out, return empty result
-        return NextResponse.json({
-          success: true,
-          data: [],
-          total: 0,
-        });
-      }
+      matchConditions.substore = substores.length === 1 
+        ? substores[0] 
+        : { $in: substores };
     }
 
     // Get top SKUs by transaction count (no publish/inventory filter)
@@ -98,19 +87,14 @@ export async function GET(request: Request) {
     const candidateSkus = topSkusByCount.map((item: any) => item.sku);
     
     // Build mapping filter - only filter by SKU list and substore if provided
-    // IMPORTANT: Exclude substores "hubchange" and "test4"
     const mappingFilter: any = {
       sku: { $in: candidateSkus },
-      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
     };
     
     if (substores.length > 0) {
-      const filteredSubstores = substores.filter(s => s !== 'hubchange' && s !== 'test4');
-      if (filteredSubstores.length > 0) {
-        mappingFilter.substore = filteredSubstores.length === 1 
-          ? filteredSubstores[0] 
-          : { $in: filteredSubstores, $nin: ['hubchange', 'test4'] };
-      }
+      mappingFilter.substore = substores.length === 1 
+        ? substores[0] 
+        : { $in: substores };
     }
     
     // Fetch all fields including publish and inventory for availability display
@@ -123,7 +107,7 @@ export async function GET(request: Request) {
 
     // Create maps for quick lookup
     const skuToNameMap = new Map<string, string>();
-    const skuToSubstoreMap = new Map<string, string>();
+    const skuToSubstoreMap = new Map<string, string | string[]>(); // Can be string or array
     const skuToPublishMap = new Map<string, string>();
     const skuToInventoryMap = new Map<string, number>();
     const foundSkuSet = new Set<string>();
@@ -131,7 +115,9 @@ export async function GET(request: Request) {
     for (const m of candidateMappings) {
       const sku = m.sku as string;
       skuToNameMap.set(sku, (m.name as string) || '');
-      skuToSubstoreMap.set(sku, (m.substore as string) || '');
+      // Handle substore as array or string (for backward compatibility)
+      const substore = m.substore;
+      skuToSubstoreMap.set(sku, Array.isArray(substore) ? substore : (substore as string) || '');
       skuToPublishMap.set(sku, (m.publish as string) || '0');
       skuToInventoryMap.set(sku, (m.inventory as number) ?? 0);
       foundSkuSet.add(sku);

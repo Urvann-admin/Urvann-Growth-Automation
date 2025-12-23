@@ -92,15 +92,10 @@ export async function POST(request: Request) {
       }
     }
 
-    // Filter valid SKUs (published, in stock, and not from excluded substores)
-    // IMPORTANT: Exclude SKUs with substore "hubchange" or "test4"
+    // Filter valid SKUs (published and in stock)
     const validBatchSkus = batchSkus.filter(({ sku }: any) => {
       const mapping = skuToMapping.get(sku);
       if (!mapping) return false;
-      // Exclude hubchange and test4 substores
-      if (mapping.substore === 'hubchange' || mapping.substore === 'test4') {
-        return false;
-      }
       return mapping.publish === "1" && mapping.inventory > 0;
     });
 
@@ -128,7 +123,6 @@ export async function POST(request: Request) {
           channel: { $ne: 'admin' },
           'items.sku': { $in: validSkuList },
           'items.1': { $exists: true }, // At least 2 items
-          substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
         }
       },
       // Unwind items to work with individual products
@@ -259,22 +253,17 @@ export async function POST(request: Request) {
     const pairedMappingsBatch = await mappingCollection.find(
       { 
         sku: { $in: skusToFetch },
-        substore: { $nin: ['hubchange', 'test4'] }, // IMPORTANT: Exclude hubchange and test4 substores
       },
       { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
     ).toArray();
     
-    const globalPairedMappingMap = new Map<string, { publish: string; inventory: number; substore?: string }>();
+    const globalPairedMappingMap = new Map<string, { publish: string; inventory: number; substore?: string[] }>();
     for (const m of pairedMappingsBatch) {
-      const substore = (m.substore as string) || '';
-      // Double-check: exclude hubchange and test4 (should already be filtered by query, but extra safety)
-      if (substore === 'hubchange' || substore === 'test4') {
-        continue;
-      }
+      const substores = (m.substore as string[]) || [];
       globalPairedMappingMap.set(m.sku as string, {
         publish: String(m.publish || "0").trim(),
         inventory: Number(m.inventory || 0),
-        substore,
+        substore: substores,
       });
     }
 
@@ -299,12 +288,11 @@ export async function POST(request: Request) {
       }
 
       const mapping = skuToMapping.get(sku);
-      // IMPORTANT: Exclude SKUs with substore "hubchange" or "test4"
-      if (!mapping || mapping.substore === 'hubchange' || mapping.substore === 'test4') {
+      if (!mapping) {
         return {
           sku,
           success: false,
-          log: `⊘ ${sku}: Excluded substore (${mapping?.substore || 'unknown'}), skipping`,
+          log: `⊘ ${sku}: No product mapping found`,
           productId,
           finalValidSkus: undefined,
         };
@@ -320,29 +308,102 @@ export async function POST(request: Request) {
       }
 
       try {
-        // Get pairings from aggregation result
-        const pairs = skuPairingsMap.get(sku) || [];
-
-        // Filter valid auto-found paired SKUs
-        const autoPairedSkus: string[] = [];
-        for (const pair of pairs) {
-          if (autoPairedSkus.length >= limit) break;
+        // NEW LOGIC: Get top SKUs based on this SKU's substore array instead of frequently bought together
+        let autoPairedSkus: string[] = [];
+        
+        // Get this SKU's substore array
+        const skuMappingForSubstores = skuToMapping.get(sku);
+        const skuSubstores = (skuMappingForSubstores?.substore as string[]) || [];
+        
+        if (skuSubstores.length > 0) {
+          // Query top SKUs directly from frequentlyBought collection for this SKU's substores
+          const matchConditions: any = { 
+            channel: { $ne: 'admin' },
+            'items.price': { $ne: 1 },
+          };
           
-          const pairedMapping = globalPairedMappingMap.get(pair.pairedSku);
-          // IMPORTANT: Exclude paired SKUs with substore "hubchange" or "test4"
-          if (pairedMapping && 
-              pairedMapping.publish === "1" && 
-              pairedMapping.inventory > 0 &&
-              pairedMapping.substore !== 'hubchange' &&
-              pairedMapping.substore !== 'test4') {
-            autoPairedSkus.push(pair.pairedSku);
+          if (skuSubstores.length === 1) {
+            matchConditions.substore = skuSubstores[0];
+          } else {
+            matchConditions.substore = { $in: skuSubstores };
+          }
+          
+          const topSkusByCount = await frequentlyBoughtCollection.aggregate([
+            { $match: matchConditions },
+            { $unwind: '$items' },
+            { $match: { 'items.price': { $ne: 1 } } },
+            {
+              $group: {
+                _id: '$items.sku',
+                txnIds: { $addToSet: '$txn_id' },
+              },
+            },
+            {
+              $project: {
+                sku: '$_id',
+                orderCount: { $size: '$txnIds' },
+                _id: 0,
+              },
+            },
+            { $sort: { orderCount: -1 } },
+            { $limit: limit * 2 }, // Get more candidates for filtering
+          ]).toArray();
+          
+          // Get mappings for top SKUs to check availability
+          const candidateSkus = topSkusByCount.map((item: any) => item.sku).filter((s: string) => s !== sku);
+          if (candidateSkus.length > 0) {
+            const topSkuMappings = await mappingCollection.find(
+              { sku: { $in: candidateSkus } },
+              { projection: { sku: 1, publish: 1, inventory: 1, _id: 0 } }
+            ).toArray();
+            
+            // Create a map of orderCount for sorting
+            const orderCountMap = new Map<string, number>();
+            for (const item of topSkusByCount) {
+              if (item.sku !== sku) {
+                orderCountMap.set(item.sku, item.orderCount);
+              }
+            }
+            
+            // Filter for available products and sort by orderCount
+            const availableTopSkus = topSkuMappings
+              .filter((m: any) => 
+                String(m.publish || '0').trim() === '1' &&
+                (m.inventory || 0) > 0
+              )
+              .map((m: any) => ({
+                sku: m.sku as string,
+                orderCount: orderCountMap.get(m.sku as string) || 0,
+              }))
+              .sort((a, b) => b.orderCount - a.orderCount)
+              .slice(0, limit)
+              .map(item => item.sku);
+            
+            autoPairedSkus = availableTopSkus;
+            console.log(`[Push All Batch] ${sku} (substores: ${skuSubstores.join(', ')}): Found ${autoPairedSkus.length} top SKUs based on substore array`);
+          }
+        }
+        
+        // Fallback to old logic if no substores or no top SKUs found
+        if (autoPairedSkus.length === 0) {
+          const pairs = skuPairingsMap.get(sku) || [];
+          for (const pair of pairs) {
+            if (autoPairedSkus.length >= limit) break;
+            
+            const pairedMapping = globalPairedMappingMap.get(pair.pairedSku);
+            if (pairedMapping && 
+                pairedMapping.publish === "1" && 
+                pairedMapping.inventory > 0) {
+              autoPairedSkus.push(pair.pairedSku);
+            }
           }
         }
 
         // Determine which hub this SKU belongs to based on its substore
         const skuMapping = skuToMapping.get(sku);
-        const skuSubstore = skuMapping?.substore || '';
-        const skuHub = getHubBySubstore(skuSubstore);
+        const skuSubstores = (skuMapping?.substore as string[]) || [];
+        const skuSubstore = skuSubstores.length > 0 ? skuSubstores[0] : '';
+        const skuHub = skuSubstore ? getHubBySubstore(skuSubstore) : null;
         
         // Get manual SKUs for this SKU's hub only
         const hubManualSkus = skuHub && manualSkusByHub[skuHub] 
@@ -522,10 +583,21 @@ export async function POST(request: Request) {
             // Add API call to queue
             apiCalls.push(
               updateProductFrequentlyBought(result.productId, result.finalValidSkus)
-                .then(() => {
-                  progress.successes.push(result.sku);
-                  progress.logs.push(result.log);
-                  console.log(`[Push All Batch] ✅ Pushed ${result.finalValidSkus!.length} SKUs for ${result.sku}`);
+                .then((pushResult) => {
+                  if (pushResult.success) {
+                    progress.successes.push(result.sku);
+                    progress.logs.push(result.log);
+                    console.log(`[Push All Batch] ✅ Pushed ${result.finalValidSkus!.length} SKUs for ${result.sku}`);
+                  } else {
+                    const errorMsg = pushResult.error || 'Unknown error';
+                    progress.failures.push({
+                      sku: result.sku,
+                      productId: result.productId!,
+                      error: errorMsg,
+                    });
+                    progress.logs.push(`✗ ${result.sku}: API error - ${errorMsg}`);
+                    console.error(`[Push All Batch] ❌ API error for ${result.sku}:`, errorMsg);
+                  }
                 })
                 .catch((error) => {
                   const errorMsg = error instanceof Error ? error.message : 'Unknown error';

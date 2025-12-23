@@ -19,11 +19,8 @@ export async function GET() {
     const startTime = Date.now();
     
     // OPTIMIZATION: Fetch with maximum batch size for fastest network transfer
-    // IMPORTANT: Exclude SKUs with substore "hubchange" or "test4"
     const mappings = await mappingCollection.find(
-      {
-        substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
-      },
+      {},
       {
         projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, substore: 1, _id: 0 },
         batchSize: 20000, // Maximum batch size for fastest transfer
@@ -43,7 +40,7 @@ export async function GET() {
             product_id: m.product_id as string,
             publish: String(m.publish || "0").trim(),
             inventory: Number(m.inventory || 0),
-            substore: (m.substore as string) || '',
+            substore: (m.substore as string[]) || [], // Return as array
           }
         ];
       })

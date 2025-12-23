@@ -37,7 +37,7 @@ export async function POST() {
                 price: product.price,
                 publish: product.publish,
                 inventory: product.inventory,
-                substore: product.substore || '',
+                substore: product.substore || [], // Store as array
                 updatedAt: new Date(),
               }
             },

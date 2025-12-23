@@ -17,7 +17,7 @@ export interface UniqueSku {
   sku: string;
   name?: string;
   orderCount?: number;
-  substore?: string;
+  substore?: string | string[]; // Can be string (legacy) or array (new)
   publish?: string;
   inventory?: number;
 }

@@ -74,7 +74,7 @@ export default function DashboardPage() {
             background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.background} 0%, ${CHRISTMAS_COLORS.white} 50%, ${CHRISTMAS_COLORS.light} 100%)`,
           } : {}}
         >
-          <div className="flex flex-col items-center space-y-4">
+        <div className="flex flex-col items-center space-y-4">
             <div 
               className={`animate-spin rounded-full h-12 w-12 border-3 border-t-transparent ${isChristmasTheme ? '' : 'border-emerald-500'}`}
               style={isChristmasTheme ? {
@@ -102,7 +102,7 @@ export default function DashboardPage() {
           background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.background} 0%, ${CHRISTMAS_COLORS.white} 50%, ${CHRISTMAS_COLORS.light} 100%)`,
         } : {}}
       >
-        {/* Header */}
+      {/* Header */}
         <div 
           className={`bg-white shadow-sm sticky top-0 z-10 ${isChristmasTheme ? '' : 'border-b border-emerald-100/50'}`}
           style={isChristmasTheme ? {
@@ -122,7 +122,7 @@ export default function DashboardPage() {
                 {isChristmasTheme ? (
                   <Gift className="w-6 h-6 text-white" strokeWidth={1.5} />
                 ) : (
-                  <TreeDeciduous className="w-6 h-6 text-white" strokeWidth={1.5} />
+                <TreeDeciduous className="w-6 h-6 text-white" strokeWidth={1.5} />
                 )}
               </div>
               <div>
@@ -689,7 +689,7 @@ export default function DashboardPage() {
                 </svg>
               </div>
             </div>
-            )}
+          )}
           </div>
         </div>
       </div>

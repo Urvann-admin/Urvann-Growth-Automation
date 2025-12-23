@@ -2,6 +2,7 @@ import React from 'react';
 import { Search, X, RefreshCw, Download } from 'lucide-react';
 import Select, { MultiValue } from 'react-select';
 import { SubstoreOption } from '@/types/frequentlyBought';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import FiltersBarSkeleton from './FiltersBarSkeleton';
 
 interface FiltersBarProps {
@@ -89,6 +90,12 @@ export default function FiltersBar({
     return <FiltersBarSkeleton />;
   }
 
+  // Convert hubs to options for the dropdown
+  const hubOptions: SubstoreOption[] = HUB_MAPPINGS.map(mapping => ({
+    value: mapping.hub,
+    label: mapping.hub,
+  }));
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-6">
       <div className="flex items-center gap-4">
@@ -97,8 +104,8 @@ export default function FiltersBar({
             isMulti
             value={selectedSubstores}
             onChange={onSubstoreChange}
-            options={substores}
-            placeholder="Filter by substore..."
+            options={hubOptions}
+            placeholder="Filter by hub..."
             className="text-sm"
             classNamePrefix="select"
             isClearable

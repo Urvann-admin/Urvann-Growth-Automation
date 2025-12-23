@@ -70,6 +70,7 @@ import PushProgressModal from '../components/PushProgressModal';
 import SyncProgressModal from '../components/SyncProgressModal';
 import ConfirmationModal from '../components/ConfirmationModal';
 import ManualSkuDialog from '../components/ManualSkuDialog';
+import { HUB_MAPPINGS, getSubstoresByHub } from '@/shared/constants/hubs';
 
 // Column helper
 const columnHelper = createColumnHelper<FrequentlyBoughtItem>();
@@ -161,15 +162,26 @@ export default function FrequentlyBoughtPage() {
   const syncTimerIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const searchCancelledRef = useRef<boolean>(false); // Track if search was cancelled
 
-  // Get selected substore values
-  const getSelectedSubstoreValues = useCallback(() => 
-    selectedSubstores.map(s => s.value), [selectedSubstores]
-  );
+  // Convert selected hubs to substores for API calls
+  const getSelectedSubstoreValues = useCallback(() => {
+    const selectedHubs = selectedSubstores.map(s => s.value);
+    // Map each selected hub to its substores
+    const substoreValues: string[] = [];
+    selectedHubs.forEach(hub => {
+      const hubSubstores = getSubstoresByHub(hub);
+      substoreValues.push(...hubSubstores);
+    });
+    return substoreValues;
+  }, [selectedSubstores]);
 
-  // Fetch substores
+  // Initialize hubs list (no need to fetch from API)
   const loadSubstores = useCallback(async () => {
-    const data = await fetchSubstoresApi();
-    setSubstores(data);
+    // Convert hubs to options format
+    const hubOptions: SubstoreOption[] = HUB_MAPPINGS.map(mapping => ({
+      value: mapping.hub,
+      label: mapping.hub,
+    }));
+    setSubstores(hubOptions);
   }, []);
 
   // Fetch unique SKU count

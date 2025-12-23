@@ -24,11 +24,9 @@ export async function GET(request: Request) {
     const collection = await getCollection('frequentlyBought');
 
     // Find all transactions containing both SKUs
-    // IMPORTANT: Exclude transactions with substore "hubchange" or "test4"
     const results = await collection.find({
       channel: { $ne: 'admin' },
       'items.sku': { $all: [sku1, sku2] },
-      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
     }, {
       projection: {
         txn_id: 1,

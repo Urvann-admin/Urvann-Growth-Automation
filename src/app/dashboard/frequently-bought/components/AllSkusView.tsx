@@ -14,6 +14,7 @@ interface AllSkusViewProps {
     totalPages: number;
   };
   onPageChange?: (page: number) => void;
+  onSkuClick?: (sku: string) => void;
 }
 
 export default function AllSkusView({ 
@@ -22,6 +23,7 @@ export default function AllSkusView({
   loadingAnalysis = false,
   pagination,
   onPageChange,
+  onSkuClick,
 }: AllSkusViewProps) {
   if (loading) {
     return <AllSkusViewSkeleton />;
@@ -79,7 +81,8 @@ export default function AllSkusView({
                 return (
                   <tr 
                     key={item.sku} 
-                    className="hover:bg-slate-50 transition-colors"
+                    className="hover:bg-slate-50 transition-colors cursor-pointer"
+                    onClick={() => onSkuClick?.(item.sku)}
                   >
                     <td className="px-6 py-4 text-sm text-slate-400 tabular-nums">{displayIndex}</td>
                     <td className="px-6 py-4">
@@ -90,9 +93,13 @@ export default function AllSkusView({
                     <td className="px-6 py-4 text-sm text-slate-600">{item.name || '-'}</td>
                     <td className="px-6 py-4 text-sm text-slate-600">
                       {item.substore ? (
-                        <span className="inline-flex items-center px-2.5 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 rounded-md">
-                          {item.substore}
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {(Array.isArray(item.substore) ? item.substore : [item.substore]).map((substore, idx) => (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-1 text-xs font-medium bg-indigo-50 text-indigo-700 rounded-md">
+                              {substore}
+                            </span>
+                          ))}
+                        </div>
                       ) : (
                         <span className="text-slate-400">-</span>
                       )}

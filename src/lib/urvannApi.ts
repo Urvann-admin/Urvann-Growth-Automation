@@ -79,7 +79,7 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
  * Fetches ALL products with publish and inventory fields
  */
 export async function fetchProductsForMapping(sinceId: string = '0', limit: number = 500): Promise<{
-  products: { sku: string; product_id: string; price: number; publish: string; inventory: number; name: string; substore?: string }[];
+  products: { sku: string; product_id: string; price: number; publish: string; inventory: number; name: string; substore?: string[] }[];
   hasMore: boolean;
   lastId: string;
 }> {
@@ -126,21 +126,28 @@ export async function fetchProductsForMapping(sinceId: string = '0', limit: numb
   }
   
   const products = productsArray.map((product: any) => {
-    // Handle substore - convert array to string if needed, or use first value
-    let substoreValue = '';
+    // Handle substore - keep as array to store all substores
+    let substoreArray: string[] = [];
     if (product.substore) {
       if (Array.isArray(product.substore)) {
-        // If it's an array, take the first value (e.g., ["gurugram"] -> "gurugram")
-        substoreValue = product.substore[0] || '';
+        // If it's already an array, use it (filter out empty values)
+        substoreArray = product.substore.filter((s: any) => s && String(s).trim() !== '').map((s: any) => String(s).toLowerCase().trim());
       } else {
-        substoreValue = String(product.substore);
+        // If it's a string, convert to array
+        const substoreStr = String(product.substore).trim();
+        if (substoreStr) {
+          substoreArray = [substoreStr.toLowerCase()];
+        }
       }
     } else if (product.store) {
       // Fallback to store field
       if (Array.isArray(product.store)) {
-        substoreValue = product.store[0] || '';
+        substoreArray = product.store.filter((s: any) => s && String(s).trim() !== '').map((s: any) => String(s).toLowerCase().trim());
       } else {
-        substoreValue = String(product.store);
+        const storeStr = String(product.store).trim();
+        if (storeStr) {
+          substoreArray = [storeStr.toLowerCase()];
+        }
       }
     }
     
@@ -151,7 +158,7 @@ export async function fetchProductsForMapping(sinceId: string = '0', limit: numb
       publish: String(product.publish ?? "0"),
       inventory: product.inventory_quantity ?? 0, // Map inventory_quantity from API to inventory
       name: product.name || '',
-      substore: substoreValue, // Always a string, not an array
+      substore: substoreArray, // Array of substores
     };
   });
   
@@ -195,26 +202,177 @@ export async function updateProductFrequentlyBought(
   productId: string, 
   frequentlyBoughtSkus: string[]
 ): Promise<{ success: boolean; error?: string }> {
+  // Use BASE_URL (www.urvann.com) for updates - this is the main API endpoint
+  // SYNC_BASE_URL (storehippo.com) is only for read operations (sync mapping)
   const url = `${BASE_URL}/api/1.1/entity/ms.products/${productId}`;
   
   try {
-    const response = await makeApiRequest(url, {
-      method: 'PUT',
-      body: JSON.stringify({
-        frequently_bought_together: frequentlyBoughtSkus,
-      }),
-    });
+    // CRITICAL: Always fetch full product first, then update with all fields
+    // Some APIs require the full object to be sent, not just the field
+    console.log(`[updateProductFrequentlyBought] Step 1: Fetching full product...`);
+    const getUrl = `${BASE_URL}/api/1.1/entity/ms.products/${productId}`;
+    const getResponse = await makeApiRequest(getUrl, { method: 'GET' });
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      return { 
-        success: false, 
-        error: `HTTP ${response.status}: ${errorText}` 
+    if (!getResponse.ok) {
+      const errorText = await getResponse.text().catch(() => getResponse.statusText);
+      console.error(`[updateProductFrequentlyBought] ❌ Failed to fetch product: HTTP ${getResponse.status}`, {
+        productId,
+        error: errorText,
+      });
+      return {
+        success: false,
+        error: `Failed to fetch product: HTTP ${getResponse.status}: ${errorText}`,
       };
     }
     
-    return { success: true };
+    const fullProduct = await getResponse.json();
+    console.log(`[updateProductFrequentlyBought] Fetched product, current frequently_bought_together:`, 
+      fullProduct.frequently_bought_together || fullProduct.data?.frequently_bought_together || 'Not found');
+    
+    // Update the field in the full product object
+    // Try both possible locations for the field
+    if (fullProduct.data) {
+      fullProduct.data.frequently_bought_together = frequentlyBoughtSkus;
+    } else {
+      fullProduct.frequently_bought_together = frequentlyBoughtSkus;
+    }
+    
+    const requestBody = fullProduct;
+    
+    console.log(`[updateProductFrequentlyBought] Step 2: PUT ${url}`, {
+      productId,
+      skuCount: frequentlyBoughtSkus.length,
+      skus: frequentlyBoughtSkus,
+      productKeys: Object.keys(fullProduct).slice(0, 20),
+    });
+    
+    const response = await makeApiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(requestBody),
+    });
+    
+    // Log full response details
+    const responseStatus = response.status;
+    const responseStatusText = response.statusText;
+    const responseHeaders = Object.fromEntries(response.headers.entries());
+    
+    console.log(`[updateProductFrequentlyBought] Response:`, {
+      productId,
+      status: responseStatus,
+      statusText: responseStatusText,
+      headers: responseHeaders,
+      ok: response.ok,
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => responseStatusText);
+      console.error(`[updateProductFrequentlyBought] ❌ Failed: HTTP ${responseStatus}`, {
+        productId,
+        status: responseStatus,
+        statusText: responseStatusText,
+        error: errorText,
+        requestBodyKeys: Object.keys(requestBody).slice(0, 20),
+      });
+      return { 
+        success: false, 
+        error: `HTTP ${responseStatus}: ${errorText}` 
+      };
+    }
+    
+    // Try to parse response to verify it was successful
+    let responseData: any = null;
+    try {
+      const responseText = await response.text();
+      console.log(`[updateProductFrequentlyBought] Response body (raw):`, responseText.substring(0, 500));
+      
+      if (responseText) {
+        try {
+          responseData = JSON.parse(responseText);
+        } catch (e) {
+          // Not JSON, that's okay
+          responseData = responseText;
+        }
+      }
+    } catch (e) {
+      // Couldn't read response, that's okay
+      console.log(`[updateProductFrequentlyBought] Could not read response body:`, e);
+    }
+    
+    // Verify the update by checking if frequently_bought_together is in the response
+    const updateVerified = responseData && (
+      (responseData.frequently_bought_together && 
+       Array.isArray(responseData.frequently_bought_together) &&
+       JSON.stringify(responseData.frequently_bought_together.sort()) === JSON.stringify(frequentlyBoughtSkus.sort())) ||
+      (responseData.data && responseData.data.frequently_bought_together)
+    );
+    
+    console.log(`[updateProductFrequentlyBought] ✅ Success:`, {
+      productId,
+      skuCount: frequentlyBoughtSkus.length,
+      responseData: responseData ? (typeof responseData === 'object' ? 'Object received' : 'Text received') : 'No response data',
+      updateVerified: updateVerified ? 'YES' : 'NO (response does not contain updated field)',
+    });
+    
+    // Always verify by fetching the product (even if response shows success)
+    // This ensures the update was actually persisted to the database
+    console.log(`[updateProductFrequentlyBought] Step 3: Verifying update by fetching product...`);
+    try {
+      // Wait for the update to propagate to the database
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second should be enough
+      
+      // Fetch full product to verify
+      const verifyUrl = `${BASE_URL}/api/1.1/entity/ms.products/${productId}`;
+      const verifyResponse = await makeApiRequest(verifyUrl, { method: 'GET' });
+        
+      if (verifyResponse.ok) {
+        const verifyData = await verifyResponse.json();
+        const actualValue = verifyData.frequently_bought_together || verifyData.data?.frequently_bought_together;
+        
+        console.log(`[updateProductFrequentlyBought] Verification - Expected:`, frequentlyBoughtSkus);
+        console.log(`[updateProductFrequentlyBought] Verification - Actual:`, actualValue);
+        
+        if (actualValue && Array.isArray(actualValue)) {
+          const expectedSorted = [...frequentlyBoughtSkus].sort();
+          const actualSorted = [...actualValue].sort();
+          const matches = JSON.stringify(expectedSorted) === JSON.stringify(actualSorted);
+          
+          if (matches) {
+            console.log(`[updateProductFrequentlyBought] ✅ Verified: Product was successfully updated and persisted`);
+            return { success: true };
+          } else {
+            console.warn(`[updateProductFrequentlyBought] ⚠️  Verification failed: Expected ${JSON.stringify(expectedSorted)}, got ${JSON.stringify(actualSorted)}`);
+            return {
+              success: false,
+              error: `Update verification failed: Expected ${frequentlyBoughtSkus.length} SKUs (${frequentlyBoughtSkus.join(', ')}), but product has ${actualValue.length} SKUs (${actualValue.join(', ')})`,
+            };
+          }
+        } else {
+          console.warn(`[updateProductFrequentlyBought] ⚠️  Verification: Product does not have frequently_bought_together field or it's not an array. Field value:`, actualValue);
+          return {
+            success: false,
+            error: `Update verification failed: frequently_bought_together field not found or not an array in the product`,
+          };
+        }
+      } else {
+        console.warn(`[updateProductFrequentlyBought] ⚠️  Could not verify update: HTTP ${verifyResponse.status}`);
+        return {
+          success: false,
+          error: `Could not verify update: HTTP ${verifyResponse.status}`,
+        };
+      }
+    } catch (verifyError) {
+      console.error(`[updateProductFrequentlyBought] ⚠️  Verification error:`, verifyError);
+      return {
+        success: false,
+        error: `Verification error: ${verifyError instanceof Error ? verifyError.message : 'Unknown error'}`,
+      };
+    }
   } catch (error) {
+    console.error(`[updateProductFrequentlyBought] ❌ Exception:`, {
+      productId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Unknown error' 

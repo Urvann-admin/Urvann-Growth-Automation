@@ -109,22 +109,13 @@ async function fetchTransactions(
   substores: string[]
 ): Promise<{ items: { sku: string; name: string }[] }[]> {
   // Build match filter for initial aggregation
-  // IMPORTANT: Exclude substores "hubchange" and "test4" - these must never be included
   const matchFilter: Record<string, unknown> = {
     channel: { $ne: 'admin' },
     'items.1': { $exists: true }, // At least 2 items
-    substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
   };
   
   if (substores.length > 0) {
-    // Filter out hubchange and test4 from user-provided substores
-    const filteredSubstores = substores.filter(s => s !== 'hubchange' && s !== 'test4');
-    if (filteredSubstores.length > 0) {
-      matchFilter.substore = { $in: filteredSubstores, $nin: ['hubchange', 'test4'] };
-    } else {
-      // If all substores were filtered out, return empty result
-      return [];
-    }
+    matchFilter.substore = { $in: substores };
   }
 
   // Use aggregation pipeline to properly filter out price: 1 items

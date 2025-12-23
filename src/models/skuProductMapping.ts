@@ -9,7 +9,7 @@ export interface ISkuProductMapping extends Document {
   price: number;
   publish: string;
   inventory: number;
-  substore?: string;
+  substore?: string[]; // Changed to array to store all substores
   updatedAt: Date;
 }
 
@@ -22,7 +22,7 @@ const SkuProductMappingSchema = new Schema<ISkuProductMapping>(
     price: { type: Number, required: true },
     publish: { type: String, default: "0", index: true },
     inventory: { type: Number, default: 0, index: true },
-    substore: { type: String, default: '', index: true },
+    substore: { type: [String], default: [], index: true },
     updatedAt: { type: Date, default: Date.now },
   },
   {

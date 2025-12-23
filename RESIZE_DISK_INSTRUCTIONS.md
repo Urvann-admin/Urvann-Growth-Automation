@@ -68,3 +68,5 @@ df -h /
 Once resized to 10GB, you should have approximately **3.8GB free space** (from current 6.1GB used).
 
 
+
+

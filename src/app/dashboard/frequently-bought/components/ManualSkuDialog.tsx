@@ -71,29 +71,43 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
   const handleAutoPopulateHub = async (hub: string) => {
     setLoadingHub(hub);
     try {
-      // Get all substores for this hub
-      const substores = getSubstoresByHub(hub);
+      // NEW LOGIC: Get substore arrays from topSkus that belong to this hub
+      const hubSubstores = getSubstoresByHub(hub);
+      const allSubstores = new Set<string>();
       
-      if (substores.length === 0) {
+      // Collect all substores from topSkus that match this hub's substores
+      for (const sku of topSkus) {
+        const skuSubstores = Array.isArray(sku.substore) ? sku.substore : (sku.substore ? [sku.substore] : []);
+        for (const substore of skuSubstores) {
+          if (hubSubstores.includes(substore.toLowerCase())) {
+            allSubstores.add(substore.toLowerCase());
+          }
+        }
+      }
+      
+      // If no substores found from topSkus, fallback to hub's substores
+      const substoresToUse = allSubstores.size > 0 ? Array.from(allSubstores) : hubSubstores;
+      
+      if (substoresToUse.length === 0) {
         alert(`No substores found for hub: ${hub}`);
         setLoadingHub(null);
         return;
       }
 
-      // Fetch top SKUs for each substore and combine
+      // Fetch top SKUs for the collected substores
       const allTopSkus: UniqueSku[] = [];
       
-      for (const substore of substores) {
-        try {
-          const response = await fetch(`/api/frequently-bought/top-skus?substore=${encodeURIComponent(substore)}&page=1&pageSize=100`);
-          const data = await response.json();
-          
-          if (data.success && data.data) {
-            allTopSkus.push(...data.data);
-          }
-        } catch (error) {
-          console.error(`Error fetching top SKUs for substore ${substore}:`, error);
+      // Use substores array for query
+      const substoresParam = substoresToUse.join(',');
+      try {
+        const response = await fetch(`/api/frequently-bought/top-skus?substores=${encodeURIComponent(substoresParam)}&page=1&pageSize=100`);
+        const data = await response.json();
+        
+        if (data.success && data.data) {
+          allTopSkus.push(...data.data);
         }
+      } catch (error) {
+        console.error(`Error fetching top SKUs for substores ${substoresParam}:`, error);
       }
 
       // Remove duplicates and filter for available products only (publish == "1" and inventory > 0)
@@ -144,27 +158,41 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
       const populatePromises = HUB_MAPPINGS.map(async (hubMapping) => {
         const hub = hubMapping.hub;
         try {
-          // Get all substores for this hub
-          const substores = getSubstoresByHub(hub);
+          // NEW LOGIC: Get substore arrays from topSkus that belong to this hub
+          const hubSubstores = getSubstoresByHub(hub);
+          const allSubstores = new Set<string>();
           
-          if (substores.length === 0) {
+          // Collect all substores from topSkus that match this hub's substores
+          for (const sku of topSkus) {
+            const skuSubstores = Array.isArray(sku.substore) ? sku.substore : (sku.substore ? [sku.substore] : []);
+            for (const substore of skuSubstores) {
+              if (hubSubstores.includes(substore.toLowerCase())) {
+                allSubstores.add(substore.toLowerCase());
+              }
+            }
+          }
+          
+          // If no substores found from topSkus, fallback to hub's substores
+          const substoresToUse = allSubstores.size > 0 ? Array.from(allSubstores) : hubSubstores;
+          
+          if (substoresToUse.length === 0) {
             return;
           }
 
-          // Fetch top SKUs for each substore and combine
+          // Fetch top SKUs for the collected substores
           const allTopSkus: UniqueSku[] = [];
           
-          for (const substore of substores) {
-            try {
-              const response = await fetch(`/api/frequently-bought/top-skus?substore=${encodeURIComponent(substore)}&page=1&pageSize=100`);
-              const data = await response.json();
-              
-              if (data.success && data.data) {
-                allTopSkus.push(...data.data);
-              }
-            } catch (error) {
-              console.error(`Error fetching top SKUs for substore ${substore}:`, error);
+          // Use substores array for query
+          const substoresParam = substoresToUse.join(',');
+          try {
+            const response = await fetch(`/api/frequently-bought/top-skus?substores=${encodeURIComponent(substoresParam)}&page=1&pageSize=100`);
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+              allTopSkus.push(...data.data);
             }
+          } catch (error) {
+            console.error(`Error fetching top SKUs for substores ${substoresParam}:`, error);
           }
 
           // Remove duplicates and filter for available products only

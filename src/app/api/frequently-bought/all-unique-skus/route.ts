@@ -29,13 +29,11 @@ export async function GET() {
       // Index might already exist, ignore error
     }
     
-    // IMPORTANT: Exclude SKUs with substore "hubchange" or "test4"
     const uniqueSkus = await mappingCollection
       .find(
         {
           publish: '1',
           inventory: { $gt: 0 },
-          substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
         },
         {
           projection: {
