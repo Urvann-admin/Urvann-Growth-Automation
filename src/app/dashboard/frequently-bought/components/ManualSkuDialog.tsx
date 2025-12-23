@@ -288,7 +288,7 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-lg z-50 animate-in fade-in zoom-in-95 duration-200">
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-200">
           {/* Header with gradient */}
           <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-t-2xl px-6 py-5">
             <div className="flex items-center justify-between">
@@ -431,27 +431,6 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
               })}
             </div>
 
-            {/* Success Banner */}
-            {totalValidSkus > 0 && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <div className="flex flex-wrap items-center gap-2">
-                  <CheckCircle2 className="text-green-600 flex-shrink-0" size={18} />
-                  <p className="text-sm text-green-800 font-semibold">
-                    {totalValidSkus} SKU{totalValidSkus > 1 ? 's' : ''} across {hubsWithSkus.length} hub{hubsWithSkus.length > 1 ? 's' : ''}
-                  </p>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-green-800">
-                  {hubsWithSkus.map(([hub, skus]) => (
-                    <span
-                      key={hub}
-                      className="inline-flex items-center px-2 py-1 bg-white/70 rounded-md"
-                    >
-                      {hub}: {skus.length} SKU{skus.length > 1 ? 's' : ''}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Action Buttons */}
             <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
