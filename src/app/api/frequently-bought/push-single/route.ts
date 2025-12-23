@@ -91,9 +91,9 @@ export async function POST(request: Request) {
     const pairCounts = new Map<string, number>();
 
     for (const doc of transactions) {
-      // Filter items: exclude price == 1 (explicit check to ensure price: 1 items are never included)
+      // Filter items: exclude price == 1; allow undefined/null prices (keep them)
       const items = (doc.items as { sku: string; name: string; price?: number }[])
-        .filter(item => item.price != null && item.price !== 1); // Explicitly exclude price: 1 and handle undefined/null
+        .filter(item => item.price !== 1);
       
       let foundMainSku = false;
       for (const item of items) {
