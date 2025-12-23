@@ -40,10 +40,9 @@ export async function POST(request: Request) {
     }
 
     const productId = mapping.product_id as string;
-    const skuSubstores = (mapping.substore as string[]) || [];
-    
-    // Get the first substore for hub mapping (or empty string if none)
-    const skuSubstore = skuSubstores.length > 0 ? skuSubstores[0] : '';
+    // Get substores for hub mapping
+    const initialSkuSubstores = (mapping.substore as string[]) || [];
+    const skuSubstore = initialSkuSubstores.length > 0 ? initialSkuSubstores[0] : '';
     const skuHub = skuSubstore ? getHubBySubstore(skuSubstore) : null;
 
     // Get all valid SKUs (strict validation: publish === "1" AND inventory > 0)
@@ -106,12 +105,13 @@ export async function POST(request: Request) {
     // NEW LOGIC: Get top SKUs based on this SKU's substore array instead of frequently bought together
     let autoPairedSkus: string[] = [];
     
-    // Get this SKU's substore array
-    const skuMappingForSubstores = await mappingCollection.findOne(
-      { sku: sku },
-      { projection: { substore: 1, _id: 0 } }
-    );
-    const skuSubstores = (skuMappingForSubstores?.substore as string[]) || [];
+    // Get this SKU's substore array (reuse from initial mapping if available, otherwise fetch)
+    const skuSubstores = initialSkuSubstores.length > 0 
+      ? initialSkuSubstores 
+      : ((await mappingCollection.findOne(
+          { sku: sku },
+          { projection: { substore: 1, _id: 0 } }
+        ))?.substore as string[]) || [];
     
     if (skuSubstores.length > 0) {
       // Query top SKUs directly from frequentlyBought collection for this SKU's substores

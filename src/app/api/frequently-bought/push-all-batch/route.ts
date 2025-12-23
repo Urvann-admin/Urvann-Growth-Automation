@@ -400,8 +400,7 @@ export async function POST(request: Request) {
         }
 
         // Determine which hub this SKU belongs to based on its substore
-        const skuMapping = skuToMapping.get(sku);
-        const skuSubstores = (skuMapping?.substore as string[]) || [];
+        // Reuse skuSubstores from above (already defined at line 316)
         const skuSubstore = skuSubstores.length > 0 ? skuSubstores[0] : '';
         const skuHub = skuSubstore ? getHubBySubstore(skuSubstore) : null;
         
