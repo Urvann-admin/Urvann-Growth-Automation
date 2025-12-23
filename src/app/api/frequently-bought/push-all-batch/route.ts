@@ -276,7 +276,7 @@ export async function POST(request: Request) {
     console.log(`[Push All Batch] Loaded mappings for ${globalPairedMappingMap.size} SKUs (${allPairedSkusList.length} auto + ${allManualSkusList.length} manual, ${manualMappingsFound} manual mappings found)`);
 
     // OPTIMIZATION 2 & 3: Process SKUs in parallel with increased concurrency
-    const CONCURRENCY = 50; // Increased concurrency from 30 to 50 for maximum speed
+    const CONCURRENCY = 120; // Increased concurrency for faster pushes (rate limiting handled in urvannApi)
     // API calls are processed concurrently - rate limiting (100 concurrent, no delay) handled by urvannApi
 
     const processSku = async (sku: string, name: string) => {
@@ -587,7 +587,7 @@ export async function POST(request: Request) {
           if (result.success && result.finalValidSkus && result.productId) {
             // Add API call to queue
             apiCalls.push(
-              updateProductFrequentlyBought(result.productId, result.finalValidSkus)
+              updateProductFrequentlyBought(result.productId, result.finalValidSkus, { skipVerification: true })
                 .then((pushResult) => {
                   if (pushResult.success) {
                     progress.successes.push(result.sku);

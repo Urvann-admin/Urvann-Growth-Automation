@@ -200,7 +200,8 @@ export async function getProductById(productId: string): Promise<any> {
  */
 export async function updateProductFrequentlyBought(
   productId: string, 
-  frequentlyBoughtSkus: string[]
+  frequentlyBoughtSkus: string[],
+  options?: { skipVerification?: boolean }
 ): Promise<{ success: boolean; error?: string }> {
   // Use BASE_URL (www.urvann.com) for updates - this is the main API endpoint
   // SYNC_BASE_URL (storehippo.com) is only for read operations (sync mapping)
@@ -341,6 +342,11 @@ export async function updateProductFrequentlyBought(
       responseData: responseData ? (typeof responseData === 'object' ? 'Object received' : 'Text received') : 'No response data',
       updateVerified: updateVerified ? 'YES' : 'NO (response does not contain updated field)',
     });
+    
+    // Skip verification if requested (batch pushes)
+    if (options?.skipVerification) {
+      return { success: true };
+    }
     
     // Always verify by fetching the product (even if response shows success)
     // This ensures the update was actually persisted to the database
@@ -515,7 +521,8 @@ export async function batchUpdateFrequentlyBought(
       
       const result = await updateProductFrequentlyBought(
         update.productId, 
-        update.frequentlyBoughtSkus
+        update.frequentlyBoughtSkus,
+        { skipVerification: true }
       );
       
       return { update, result };
