@@ -288,9 +288,9 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in duration-200" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-200">
-          {/* Header with gradient */}
-          <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-t-2xl px-6 py-5">
+        <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] z-50 animate-in fade-in zoom-in-95 duration-200 flex flex-col">
+          {/* Header with gradient - Fixed */}
+          <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-t-2xl px-6 py-5 flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
@@ -313,8 +313,8 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
             </div>
           </div>
 
-          {/* Content */}
-          <div className="p-6">
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-6">
             {/* Overall Auto-Populate Button */}
             <div className="mb-6">
               <button
@@ -430,10 +430,10 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
                 );
               })}
             </div>
+          </div>
 
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+          {/* Action Buttons - Fixed */}
+          <div className="flex items-center gap-3 pt-4 px-6 pb-6 border-t border-gray-200 flex-shrink-0 bg-white rounded-b-2xl">
               <button
                 onClick={handleCancel}
                 className="flex-1 px-5 py-3 border-2 border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all duration-200 font-medium"
@@ -457,7 +457,6 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
                   </span>
                 )}
               </button>
-            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
