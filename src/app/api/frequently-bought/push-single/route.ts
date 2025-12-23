@@ -115,29 +115,41 @@ export async function POST(request: Request) {
     // Priority: first use actual pairings; if not enough, fill remaining with top sellers
     let autoPairedSkus: string[] = [];
     
-    // 1) Pairings from transactions (respect valid SKUs set)
+    // 1) Pairings from transactions
+    // Sort all pairings by count (highest first)
     const allPairings = Array.from(pairCounts.entries())
       .sort((a, b) => b[1] - a[1]);
     
     console.log(`[Push Single] ${sku}: Found ${allPairings.length} total paired SKUs from transactions`);
     console.log(`[Push Single] ${sku}: Top 10 pairings: ${allPairings.slice(0, 10).map(([s, c]) => `${s}(${c}x)`).join(', ')}`);
     
+    // IMPORTANT: Filter for valid (published + in-stock) SKUs FIRST, then take top 6
+    // This searches through ALL pairings to find up to 6 available ones
     const pairingCandidates = allPairings
-      .filter(([pairedSku]) => validSKUs.has(pairedSku))
-      .slice(0, limit)
+      .filter(([pairedSku]) => {
+        const isValid = validSKUs.has(pairedSku);
+        if (!isValid && allPairings.indexOf([pairedSku, pairCounts.get(pairedSku)!]) < 10) {
+          // Log why top 10 pairings are rejected
+          console.log(`[Push Single] ${sku}: Pairing ${pairedSku} rejected (not published or out of stock)`);
+        }
+        return isValid;
+      })
+      .slice(0, limit)  // Take top 6 AFTER filtering
       .map(([pairedSku]) => pairedSku);
     
-    console.log(`[Push Single] ${sku}: After filtering for valid (published + in-stock), got ${pairingCandidates.length} pairing candidates: ${pairingCandidates.join(', ')}`);
+    console.log(`[Push Single] ${sku}: Found ${pairingCandidates.length}/${limit} valid available pairings: ${pairingCandidates.join(', ') || 'none'}`);
     
     if (pairingCandidates.length >= limit) {
-      // We have enough pairings - use them!
+      // We have 6+ available pairings - use them, no need for top sellers!
       autoPairedSkus = pairingCandidates;
-      console.log(`[Push Single] ✓ Using ${autoPairedSkus.length} pairing-based SKUs for ${sku}`);
+      console.log(`[Push Single] ✓ Using ${autoPairedSkus.length} pairing-based SKUs (NO top sellers needed)`);
     } else if (pairingCandidates.length > 0) {
       // We have some pairings but not enough - use what we have and fill the rest with top sellers
       autoPairedSkus = pairingCandidates;
       const needed = limit - pairingCandidates.length;
-      console.log(`[Push Single] ⚠ Only ${pairingCandidates.length} valid pairings found for ${sku}, need ${needed} more from top sellers`);
+      console.log(`[Push Single] ⚠ Only ${pairingCandidates.length} valid pairings found, need ${needed} more from top sellers`);
+    } else {
+      console.log(`[Push Single] ⚠ No valid pairings found, will use top sellers`);
     }
     
     // 2) If we need more SKUs, get top sellers by this SKU's substores

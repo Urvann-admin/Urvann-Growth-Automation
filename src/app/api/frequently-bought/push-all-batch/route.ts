@@ -322,10 +322,12 @@ export async function POST(request: Request) {
           : (skuMappingForSubstores?.substore ? [skuMappingForSubstores.substore as string] : []);
         
         // 1) Pairings from aggregation
+        // IMPORTANT: Search through ALL pairs to find up to 6 available ones
         const pairs = skuPairingsMap.get(sku) || [];
         const pairingCandidates: string[] = [];
+        
         for (const pair of pairs) {
-          if (pairingCandidates.length >= limit) break;
+          // Don't break early - search through ALL pairs to find available ones
           const pairedMapping = globalPairedMappingMap.get(pair.pairedSku);
           if (pairedMapping && 
               pairedMapping.publish === "1" && 
@@ -335,15 +337,20 @@ export async function POST(request: Request) {
               pairingCandidates.push(pair.pairedSku);
             }
           }
+          
+          // Once we have enough, we can stop
+          if (pairingCandidates.length >= limit) break;
         }
         
         autoPairedSkus = pairingCandidates;
         
         if (pairingCandidates.length >= limit) {
-          console.log(`[Push All Batch] ✓ ${sku}: Using ${pairingCandidates.length} pairing-based SKUs`);
+          console.log(`[Push All Batch] ✓ ${sku}: Found ${pairingCandidates.length} available pairings (NO top sellers needed)`);
         } else if (pairingCandidates.length > 0) {
           const needed = limit - pairingCandidates.length;
           console.log(`[Push All Batch] ⚠ ${sku}: Only ${pairingCandidates.length} valid pairings, need ${needed} more from top sellers`);
+        } else {
+          console.log(`[Push All Batch] ⚠ ${sku}: No valid pairings found, will use top sellers`);
         }
         
         // 2) If we need more SKUs, get top sellers by substore
