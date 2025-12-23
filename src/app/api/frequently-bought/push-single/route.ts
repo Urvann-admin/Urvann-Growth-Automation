@@ -112,95 +112,90 @@ export async function POST(request: Request) {
       }
     }
 
-    // NEW LOGIC: Get top SKUs based on this SKU's substore array instead of frequently bought together
+    // Priority: first use actual pairings; if none, fall back to top sellers by substore
     let autoPairedSkus: string[] = [];
     
-    // Get this SKU's substore array (reuse from initial mapping if available, otherwise fetch)
-    const skuSubstores = initialSkuSubstores.length > 0 
-      ? initialSkuSubstores 
-      : ((await mappingCollection.findOne(
-          { sku: sku },
-          { projection: { substore: 1, _id: 0 } }
-        ))?.substore as string[]) || [];
+    // 1) Pairings from transactions (respect valid SKUs set)
+    const pairingCandidates = Array.from(pairCounts.entries())
+      .filter(([pairedSku]) => validSKUs.has(pairedSku))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([pairedSku]) => pairedSku);
     
-    if (skuSubstores.length > 0) {
-      // Query top SKUs directly from frequentlyBought collection for this SKU's substores
-      const matchConditions: any = { 
-        channel: { $ne: 'admin' },
-        'items.price': { $ne: 1 },
-        substore: { $nin: ['hubchange', 'test4'] },
-      };
+    if (pairingCandidates.length > 0) {
+      autoPairedSkus = pairingCandidates;
+      console.log(`[Push Single] Using pairing-based SKUs for ${sku}: ${autoPairedSkus.join(', ')}`);
+    } else {
+      // 2) Fallback: Top sellers by this SKU's substores
+      const skuSubstores = filteredSkuSubstores.length > 0 
+        ? filteredSkuSubstores 
+        : ((await mappingCollection.findOne(
+            { sku: sku },
+            { projection: { substore: 1, _id: 0 } }
+          ))?.substore as string[])?.filter(s => s !== 'hubchange' && s !== 'test4') || [];
       
-      if (skuSubstores.length === 1) {
-        matchConditions.substore = skuSubstores[0];
-      } else {
-        matchConditions.substore = { $in: skuSubstores };
-      }
-      
-      const topSkusByCount = await frequentlyBoughtCollection.aggregate([
-        { $match: matchConditions },
-        { $unwind: '$items' },
-        { $match: { 'items.price': { $ne: 1 } } },
-        {
-          $group: {
-            _id: '$items.sku',
-            txnIds: { $addToSet: '$txn_id' },
-          },
-        },
-        {
-          $project: {
-            sku: '$_id',
-            orderCount: { $size: '$txnIds' },
-            _id: 0,
-          },
-        },
-        { $sort: { orderCount: -1 } },
-        { $limit: limit * 2 }, // Get more candidates for filtering
-      ]).toArray();
-      
-      // Get mappings for top SKUs to check availability
-      const candidateSkus = topSkusByCount.map((item: any) => item.sku).filter((s: string) => s !== sku);
-      if (candidateSkus.length > 0) {
-        const topSkuMappings = await mappingCollection.find(
-          { sku: { $in: candidateSkus } },
-          { projection: { sku: 1, publish: 1, inventory: 1, _id: 0 } }
-        ).toArray();
+      if (skuSubstores.length > 0) {
+        const matchConditions: any = { 
+          channel: { $ne: 'admin' },
+          'items.price': { $ne: 1 },
+          substore: { $nin: ['hubchange', 'test4'] },
+        };
         
-        // Create a map of orderCount for sorting
-        const orderCountMap = new Map<string, number>();
-        for (const item of topSkusByCount) {
-          if (item.sku !== sku) {
-            orderCountMap.set(item.sku, item.orderCount);
+        matchConditions.substore = skuSubstores.length === 1
+          ? skuSubstores[0]
+          : { $in: skuSubstores };
+        
+        const topSkusByCount = await frequentlyBoughtCollection.aggregate([
+          { $match: matchConditions },
+          { $unwind: '$items' },
+          { $match: { 'items.price': { $ne: 1 } } },
+          {
+            $group: {
+              _id: '$items.sku',
+              txnIds: { $addToSet: '$txn_id' },
+            },
+          },
+          {
+            $project: {
+              sku: '$_id',
+              orderCount: { $size: '$txnIds' },
+              _id: 0,
+            },
+          },
+          { $sort: { orderCount: -1 } },
+          { $limit: limit * 2 },
+        ]).toArray();
+        
+        const candidateSkus = topSkusByCount.map((item: any) => item.sku).filter((s: string) => s !== sku);
+        if (candidateSkus.length > 0) {
+          const topSkuMappings = await mappingCollection.find(
+            { sku: { $in: candidateSkus }, substore: { $nin: ['hubchange', 'test4'] } },
+            { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
+          ).toArray();
+          
+          const orderCountMap = new Map<string, number>();
+          for (const item of topSkusByCount) {
+            if (item.sku !== sku) {
+              orderCountMap.set(item.sku, item.orderCount);
+            }
           }
+          
+          autoPairedSkus = topSkuMappings
+            .filter((m: any) => 
+              String(m.publish || '0').trim() === '1' &&
+              (m.inventory || 0) > 0
+            )
+            .map((m: any) => ({
+              sku: m.sku as string,
+              orderCount: orderCountMap.get(m.sku as string) || 0,
+            }))
+            .sort((a, b) => b.orderCount - a.orderCount)
+            .slice(0, limit)
+            .map(item => item.sku);
+          
+          console.log(`[Push Single] Fallback to substore top sellers for ${sku} (substores: ${skuSubstores.join(', ')}): ${autoPairedSkus.join(', ')}`);
         }
-        
-        // Filter for available products and sort by orderCount
-        const availableTopSkus = topSkuMappings
-          .filter((m: any) => 
-            String(m.publish || '0').trim() === '1' &&
-            (m.inventory || 0) > 0
-          )
-          .map((m: any) => ({
-            sku: m.sku as string,
-            orderCount: orderCountMap.get(m.sku as string) || 0,
-          }))
-          .sort((a, b) => b.orderCount - a.orderCount)
-          .slice(0, limit)
-          .map(item => item.sku);
-        
-        autoPairedSkus = availableTopSkus;
-        console.log(`[Push Single] ${sku} (substores: ${skuSubstores.join(', ')}): Found ${autoPairedSkus.length} top SKUs based on substore array`);
       }
-    }
-    
-    // Fallback to old logic if no substores or no top SKUs found
-    if (autoPairedSkus.length === 0) {
-      autoPairedSkus = Array.from(pairCounts.entries())
-        .filter(([pairedSku]) => validSKUs.has(pairedSku))
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, limit)
-        .map(([pairedSku]) => pairedSku);
-      console.log(`[Push Single] Auto-found paired SKUs (fallback): ${autoPairedSkus.length}`);
     }
 
     // Get manual SKUs for this SKU's hub only
