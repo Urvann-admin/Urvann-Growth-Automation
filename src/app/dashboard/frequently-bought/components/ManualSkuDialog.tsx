@@ -433,16 +433,19 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
 
             {/* Success Banner */}
             {totalValidSkus > 0 && (
-              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl">
-                <div className="flex items-center gap-3 mb-2">
-                  <CheckCircle2 className="text-green-600 flex-shrink-0" size={20} />
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex flex-wrap items-center gap-2">
+                  <CheckCircle2 className="text-green-600 flex-shrink-0" size={18} />
                   <p className="text-sm text-green-800 font-semibold">
                     {totalValidSkus} SKU{totalValidSkus > 1 ? 's' : ''} across {hubsWithSkus.length} hub{hubsWithSkus.length > 1 ? 's' : ''}
                   </p>
                 </div>
-                <div className="text-xs text-green-700 ml-8">
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-green-800">
                   {hubsWithSkus.map(([hub, skus]) => (
-                    <span key={hub} className="inline-block mr-3">
+                    <span
+                      key={hub}
+                      className="inline-flex items-center px-2 py-1 bg-white/70 rounded-md"
+                    >
                       {hub}: {skus.length} SKU{skus.length > 1 ? 's' : ''}
                     </span>
                   ))}
