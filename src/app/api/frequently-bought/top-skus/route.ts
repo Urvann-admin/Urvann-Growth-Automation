@@ -144,10 +144,46 @@ export async function GET(request: Request) {
         inventory: skuToInventoryMap.get(item.sku) ?? 0,
       }));
 
-    // Apply search filter if provided (client-side filtering for search)
+    // If search term is provided, ensure the searched SKU/name shows up even if not in the top list
     if (search && search.trim() !== '') {
       const searchLower = search.toLowerCase().trim();
-      allTopSkusWithNames = allTopSkusWithNames.filter(sku => 
+
+      // Try to find a direct SKU match from mapping (no publish/inventory filter; substore-respected)
+      const directMatches = await mappingCollection.find(
+        {
+          sku: { $regex: new RegExp(searchLower, 'i') },
+          substore: { $nin: ['hubchange', 'test4'] },
+          ...(substores.length > 0
+            ? {
+                substore:
+                  substores.length === 1
+                    ? substores[0]
+                    : { $in: substores, $nin: ['hubchange', 'test4'] },
+              }
+            : {}),
+        },
+        { projection: { sku: 1, name: 1, substore: 1, publish: 1, inventory: 1, _id: 0 } }
+      ).toArray();
+
+      const directMatchSkus = new Set(directMatches.map((m) => m.sku as string));
+
+      // Add direct matches (with orderCount 0 if not already present)
+      const directMatchItems = directMatches.map((m) => ({
+        sku: m.sku as string,
+        orderCount: skuToNameMap.has(m.sku as string) ? (allTopSkusWithNames.find(i => i.sku === m.sku)?.orderCount || 0) : 0,
+        name: (m.name as string) || '',
+        substore: Array.isArray(m.substore) ? m.substore : (m.substore as string) || '',
+        publish: (m.publish as string) || '0',
+        inventory: (m.inventory as number) ?? 0,
+      }));
+
+      const merged = [...allTopSkusWithNames];
+      for (const item of directMatchItems) {
+        if (!merged.find((i) => i.sku === item.sku)) {
+          merged.push(item);
+        }
+      }
+      allTopSkusWithNames = merged.filter((sku) => 
         sku.sku.toLowerCase().includes(searchLower) ||
         (sku.name && sku.name.toLowerCase().includes(searchLower))
       );
