@@ -20,6 +20,7 @@ export async function GET() {
       publish: '1',
       inventory: { $gt: 0 },
       price: { $ne: 1 }, // Exclude price: 1 SKUs
+      substore: { $nin: ['hubchange', 'test4'] },
     });
 
     console.log(`[SKUs API] Found ${count} unique SKUs from mapping (excluding price:1)`);

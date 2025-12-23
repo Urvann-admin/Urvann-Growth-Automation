@@ -34,6 +34,7 @@ export async function GET() {
         {
           publish: '1',
           inventory: { $gt: 0 },
+          substore: { $nin: ['hubchange', 'test4'] },
         },
         {
           projection: {

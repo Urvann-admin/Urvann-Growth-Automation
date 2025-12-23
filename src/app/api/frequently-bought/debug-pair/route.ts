@@ -27,6 +27,7 @@ export async function GET(request: Request) {
     const results = await collection.find({
       channel: { $ne: 'admin' },
       'items.sku': { $all: [sku1, sku2] },
+      substore: { $nin: ['hubchange', 'test4'] },
     }, {
       projection: {
         txn_id: 1,

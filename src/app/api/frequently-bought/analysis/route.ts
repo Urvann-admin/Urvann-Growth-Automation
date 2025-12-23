@@ -112,10 +112,15 @@ async function fetchTransactions(
   const matchFilter: Record<string, unknown> = {
     channel: { $ne: 'admin' },
     'items.1': { $exists: true }, // At least 2 items
+    substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange and test4 substores
   };
   
   if (substores.length > 0) {
-    matchFilter.substore = { $in: substores };
+    const filteredSubstores = substores.filter(s => s !== 'hubchange' && s !== 'test4');
+    if (filteredSubstores.length === 0) {
+      return []; // all filtered out
+    }
+    matchFilter.substore = { $in: filteredSubstores, $nin: ['hubchange', 'test4'] };
   }
 
   // Use aggregation pipeline to properly filter out price: 1 items

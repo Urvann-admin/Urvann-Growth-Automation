@@ -40,13 +40,22 @@ export async function POST(request: Request) {
     }
 
     const productId = mapping.product_id as string;
-    // Get substores for hub mapping
+    // Get substores for hub mapping; exclude hubchange/test4
     const initialSkuSubstores = (mapping.substore as string[]) || [];
-    const skuSubstore = initialSkuSubstores.length > 0 ? initialSkuSubstores[0] : '';
+    const filteredSkuSubstores = initialSkuSubstores.filter(s => s !== 'hubchange' && s !== 'test4');
+    if (filteredSkuSubstores.length === 0) {
+      return NextResponse.json(
+        { success: false, message: `SKU excluded: substore contains hubchange/test4` },
+        { status: 400 }
+      );
+    }
+    const skuSubstore = filteredSkuSubstores[0];
     const skuHub = skuSubstore ? getHubBySubstore(skuSubstore) : null;
 
     // Get all valid SKUs (strict validation: publish === "1" AND inventory > 0)
-    const allMappings = await mappingCollection.find({}, {
+    const allMappings = await mappingCollection.find({
+      substore: { $nin: ['hubchange', 'test4'] },
+    }, {
       projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 }
     }).toArray();
 
@@ -73,6 +82,7 @@ export async function POST(request: Request) {
       channel: { $ne: 'admin' },
       'items.sku': sku,
       'items.1': { $exists: true },
+      substore: { $nin: ['hubchange', 'test4'] },
     }, {
       projection: { items: 1 }
     }).toArray();
@@ -118,6 +128,7 @@ export async function POST(request: Request) {
       const matchConditions: any = { 
         channel: { $ne: 'admin' },
         'items.price': { $ne: 1 },
+        substore: { $nin: ['hubchange', 'test4'] },
       };
       
       if (skuSubstores.length === 1) {

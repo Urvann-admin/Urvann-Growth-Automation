@@ -20,7 +20,7 @@ export async function GET() {
     
     // OPTIMIZATION: Fetch with maximum batch size for fastest network transfer
     const mappings = await mappingCollection.find(
-      {},
+      { substore: { $nin: ['hubchange', 'test4'] } },
       {
         projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, substore: 1, _id: 0 },
         batchSize: 20000, // Maximum batch size for fastest transfer

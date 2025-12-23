@@ -15,6 +15,7 @@ export async function GET() {
     // Get unique substores (excluding admin channel documents)
     const substores = await collection.distinct('substore', { 
       channel: { $ne: 'admin' },
+      substore: { $nin: ['hubchange', 'test4'] },
     });
 
     // Sort alphabetically

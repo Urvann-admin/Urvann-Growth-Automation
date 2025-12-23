@@ -92,10 +92,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // Filter valid SKUs (published and in stock)
+    // Filter valid SKUs (published, in stock, and not in excluded substores)
     const validBatchSkus = batchSkus.filter(({ sku }: any) => {
       const mapping = skuToMapping.get(sku);
       if (!mapping) return false;
+      const substores = Array.isArray(mapping.substore) ? mapping.substore : (mapping.substore ? [mapping.substore as string] : []);
+      if (substores.includes('hubchange') || substores.includes('test4')) return false;
       return mapping.publish === "1" && mapping.inventory > 0;
     });
 
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
           channel: { $ne: 'admin' },
           'items.sku': { $in: validSkuList },
           'items.1': { $exists: true }, // At least 2 items
+          substore: { $nin: ['hubchange', 'test4'] },
         }
       },
       // Unwind items to work with individual products
@@ -253,6 +256,7 @@ export async function POST(request: Request) {
     const pairedMappingsBatch = await mappingCollection.find(
       { 
         sku: { $in: skusToFetch },
+        substore: { $nin: ['hubchange', 'test4'] },
       },
       { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
     ).toArray();

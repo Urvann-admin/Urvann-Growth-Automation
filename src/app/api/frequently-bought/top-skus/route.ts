@@ -42,13 +42,18 @@ export async function GET(request: Request) {
     const matchConditions: any = { 
       channel: { $ne: 'admin' },
       'items.price': { $ne: 1 }, // Exclude items with price: 1
+      substore: { $nin: ['hubchange', 'test4'] }, // Exclude hubchange/test4
     };
     
     // Add substore filter if provided
     if (substores.length > 0) {
-      matchConditions.substore = substores.length === 1 
-        ? substores[0] 
-        : { $in: substores };
+      const filtered = substores.filter(s => s !== 'hubchange' && s !== 'test4');
+      if (filtered.length === 0) {
+        return NextResponse.json({ success: true, data: [], total: 0 });
+      }
+      matchConditions.substore = filtered.length === 1 
+        ? filtered[0] 
+        : { $in: filtered, $nin: ['hubchange', 'test4'] };
     }
 
     // Get top SKUs by transaction count (no publish/inventory filter)
@@ -89,12 +94,17 @@ export async function GET(request: Request) {
     // Build mapping filter - only filter by SKU list and substore if provided
     const mappingFilter: any = {
       sku: { $in: candidateSkus },
+      substore: { $nin: ['hubchange', 'test4'] },
     };
     
     if (substores.length > 0) {
-      mappingFilter.substore = substores.length === 1 
-        ? substores[0] 
-        : { $in: substores };
+      const filtered = substores.filter(s => s !== 'hubchange' && s !== 'test4');
+      if (filtered.length === 0) {
+        return NextResponse.json({ success: true, data: [], total: 0 });
+      }
+      mappingFilter.substore = filtered.length === 1 
+        ? filtered[0] 
+        : { $in: filtered, $nin: ['hubchange', 'test4'] };
     }
     
     // Fetch all fields including publish and inventory for availability display
