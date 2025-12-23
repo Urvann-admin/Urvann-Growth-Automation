@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     // Update last login
     if (user._id) {
-      await UserModel.updateLastLogin(user._id);
+    await UserModel.updateLastLogin(user._id);
     }
 
     // Generate JWT token

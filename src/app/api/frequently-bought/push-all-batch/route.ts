@@ -313,7 +313,9 @@ export async function POST(request: Request) {
         
         // Get this SKU's substore array
         const skuMappingForSubstores = skuToMapping.get(sku);
-        const skuSubstores = (skuMappingForSubstores?.substore as string[]) || [];
+        const skuSubstores = Array.isArray(skuMappingForSubstores?.substore) 
+          ? (skuMappingForSubstores.substore as string[])
+          : (skuMappingForSubstores?.substore ? [skuMappingForSubstores.substore as string] : []);
         
         if (skuSubstores.length > 0) {
           // Query top SKUs directly from frequentlyBought collection for this SKU's substores
