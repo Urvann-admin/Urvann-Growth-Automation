@@ -7,8 +7,8 @@ const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
 // Rate limiting configuration - OPTIMIZED for maximum speed
 // OPTIMIZATION 1 & 2: Removed artificial delay, increased concurrency to 100
 const MAX_CONCURRENT_REQUESTS = 100; // Increased from 50 to 100 for maximum speed
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 500; // 500ms initial retry delay
+const MAX_RETRIES = 5; // allow a few more retries to ride out 429s
+const RETRY_DELAY = 800; // base delay for backoff (will jitter)
 
 // Semaphore-based rate limiting for concurrent requests (NO artificial delay)
 let activeRequests = 0;
@@ -53,10 +53,14 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
     
     release(); // Release slot immediately after request completes
     
-    // Exponential backoff for rate limiting
-    if (response.status === 429 && retryCount < MAX_RETRIES) {
-      const backoffDelay = RETRY_DELAY * Math.pow(2, retryCount);
-      console.log(`Rate limited. Retrying in ${backoffDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+    // Exponential backoff for rate limiting and transient failures (429/503)
+    if ((response.status === 429 || response.status === 503) && retryCount < MAX_RETRIES) {
+      // Respect Retry-After header if present
+      const retryAfterHeader = response.headers.get('retry-after');
+      const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : null;
+      const jitter = Math.floor(Math.random() * 200); // small jitter to avoid thundering herd
+      const backoffDelay = retryAfterMs ?? (RETRY_DELAY * Math.pow(2, retryCount) + jitter);
+      console.log(`Rate limited (${response.status}). Retrying in ${backoffDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, backoffDelay));
       return makeApiRequest(url, options, retryCount + 1);
     }
