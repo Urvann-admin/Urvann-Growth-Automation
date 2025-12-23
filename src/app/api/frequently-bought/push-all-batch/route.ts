@@ -315,6 +315,12 @@ export async function POST(request: Request) {
         // Priority: first use pairings; if none, fall back to top sellers by substore
         let autoPairedSkus: string[] = [];
         
+        // Get SKU substores for hub mapping (needed later)
+        const skuMappingForSubstores = skuToMapping.get(sku);
+        const skuSubstores = Array.isArray(skuMappingForSubstores?.substore) 
+          ? (skuMappingForSubstores.substore as string[])
+          : (skuMappingForSubstores?.substore ? [skuMappingForSubstores.substore as string] : []);
+        
         // 1) Pairings from aggregation
         const pairs = skuPairingsMap.get(sku) || [];
         const pairingCandidates: string[] = [];
@@ -331,15 +337,17 @@ export async function POST(request: Request) {
           }
         }
         
-        if (pairingCandidates.length > 0) {
-          autoPairedSkus = pairingCandidates;
-          console.log(`[Push All Batch] ${sku}: Using pairing-based SKUs: ${autoPairedSkus.join(', ')}`);
-        } else {
-          // 2) Fallback to top sellers by substore
-          const skuMappingForSubstores = skuToMapping.get(sku);
-          const skuSubstores = Array.isArray(skuMappingForSubstores?.substore) 
-            ? (skuMappingForSubstores.substore as string[])
-            : (skuMappingForSubstores?.substore ? [skuMappingForSubstores.substore as string] : []);
+        autoPairedSkus = pairingCandidates;
+        
+        if (pairingCandidates.length >= limit) {
+          console.log(`[Push All Batch] ✓ ${sku}: Using ${pairingCandidates.length} pairing-based SKUs`);
+        } else if (pairingCandidates.length > 0) {
+          const needed = limit - pairingCandidates.length;
+          console.log(`[Push All Batch] ⚠ ${sku}: Only ${pairingCandidates.length} valid pairings, need ${needed} more from top sellers`);
+        }
+        
+        // 2) If we need more SKUs, get top sellers by substore
+        if (autoPairedSkus.length < limit) {
           
           if (skuSubstores.length > 0) {
             const matchConditions: any = { 
@@ -387,26 +395,32 @@ export async function POST(request: Request) {
                 }
               }
               
-              autoPairedSkus = topSkuMappings
-                .filter((m: any) => 
-                  String(m.publish || '0').trim() === '1' &&
-                  (m.inventory || 0) > 0
-                )
+              const topSellerSkus = topSkuMappings
+                .filter((m: any) => {
+                  const sku = m.sku as string;
+                  // Exclude if already in autoPairedSkus
+                  if (autoPairedSkus.includes(sku)) return false;
+                  return String(m.publish || '0').trim() === '1' && (m.inventory || 0) > 0;
+                })
                 .map((m: any) => ({
                   sku: m.sku as string,
                   orderCount: orderCountMap.get(m.sku as string) || 0,
                 }))
                 .sort((a, b) => b.orderCount - a.orderCount)
-                .slice(0, limit)
+                .slice(0, limit - autoPairedSkus.length)
                 .map(item => item.sku);
               
-              console.log(`[Push All Batch] ${sku} fallback top sellers (substores: ${skuSubstores.join(', ')}): ${autoPairedSkus.join(', ')}`);
+              if (topSellerSkus.length > 0) {
+                autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
+                console.log(`[Push All Batch] ✓ ${sku}: Added ${topSellerSkus.length} top sellers to fill remaining slots`);
+              } else {
+                console.log(`[Push All Batch] ⚠ ${sku}: No valid top sellers found to fill remaining slots`);
+              }
             }
           }
         }
 
         // Determine which hub this SKU belongs to based on its substore
-        // Reuse skuSubstores from above (already defined at line 316)
         const skuSubstore = skuSubstores.length > 0 ? skuSubstores[0] : '';
         const skuHub = skuSubstore ? getHubBySubstore(skuSubstore) : null;
         

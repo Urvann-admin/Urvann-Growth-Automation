@@ -91,9 +91,9 @@ export async function POST(request: Request) {
     const pairCounts = new Map<string, number>();
 
     for (const doc of transactions) {
-      // Filter items: exclude price == 1; allow undefined/null prices (keep them)
+      // Filter items: exclude price == 1 (explicit check to ensure price: 1 items are never included)
       const items = (doc.items as { sku: string; name: string; price?: number }[])
-        .filter(item => item.price !== 1);
+        .filter(item => item.price != null && item.price !== 1); // Explicitly exclude price: 1 and handle undefined/null
       
       let foundMainSku = false;
       for (const item of items) {
@@ -112,21 +112,36 @@ export async function POST(request: Request) {
       }
     }
 
-    // Priority: first use actual pairings; if none, fall back to top sellers by substore
+    // Priority: first use actual pairings; if not enough, fill remaining with top sellers
     let autoPairedSkus: string[] = [];
     
     // 1) Pairings from transactions (respect valid SKUs set)
-    const pairingCandidates = Array.from(pairCounts.entries())
+    const allPairings = Array.from(pairCounts.entries())
+      .sort((a, b) => b[1] - a[1]);
+    
+    console.log(`[Push Single] ${sku}: Found ${allPairings.length} total paired SKUs from transactions`);
+    console.log(`[Push Single] ${sku}: Top 10 pairings: ${allPairings.slice(0, 10).map(([s, c]) => `${s}(${c}x)`).join(', ')}`);
+    
+    const pairingCandidates = allPairings
       .filter(([pairedSku]) => validSKUs.has(pairedSku))
-      .sort((a, b) => b[1] - a[1])
       .slice(0, limit)
       .map(([pairedSku]) => pairedSku);
     
-    if (pairingCandidates.length > 0) {
+    console.log(`[Push Single] ${sku}: After filtering for valid (published + in-stock), got ${pairingCandidates.length} pairing candidates: ${pairingCandidates.join(', ')}`);
+    
+    if (pairingCandidates.length >= limit) {
+      // We have enough pairings - use them!
       autoPairedSkus = pairingCandidates;
-      console.log(`[Push Single] Using pairing-based SKUs for ${sku}: ${autoPairedSkus.join(', ')}`);
-    } else {
-      // 2) Fallback: Top sellers by this SKU's substores
+      console.log(`[Push Single] ✓ Using ${autoPairedSkus.length} pairing-based SKUs for ${sku}`);
+    } else if (pairingCandidates.length > 0) {
+      // We have some pairings but not enough - use what we have and fill the rest with top sellers
+      autoPairedSkus = pairingCandidates;
+      const needed = limit - pairingCandidates.length;
+      console.log(`[Push Single] ⚠ Only ${pairingCandidates.length} valid pairings found for ${sku}, need ${needed} more from top sellers`);
+    }
+    
+    // 2) If we need more SKUs, get top sellers by this SKU's substores
+    if (autoPairedSkus.length < limit) {
       const skuSubstores = filteredSkuSubstores.length > 0 
         ? filteredSkuSubstores 
         : ((await mappingCollection.findOne(
@@ -180,20 +195,27 @@ export async function POST(request: Request) {
             }
           }
           
-          autoPairedSkus = topSkuMappings
-            .filter((m: any) => 
-              String(m.publish || '0').trim() === '1' &&
-              (m.inventory || 0) > 0
-            )
+          const topSellerSkus = topSkuMappings
+            .filter((m: any) => {
+              const sku = m.sku as string;
+              // Exclude if already in autoPairedSkus
+              if (autoPairedSkus.includes(sku)) return false;
+              return String(m.publish || '0').trim() === '1' && (m.inventory || 0) > 0;
+            })
             .map((m: any) => ({
               sku: m.sku as string,
               orderCount: orderCountMap.get(m.sku as string) || 0,
             }))
             .sort((a, b) => b.orderCount - a.orderCount)
-            .slice(0, limit)
+            .slice(0, limit - autoPairedSkus.length)
             .map(item => item.sku);
           
-          console.log(`[Push Single] Fallback to substore top sellers for ${sku} (substores: ${skuSubstores.join(', ')}): ${autoPairedSkus.join(', ')}`);
+          if (topSellerSkus.length > 0) {
+            autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
+            console.log(`[Push Single] ✓ Added ${topSellerSkus.length} top sellers to fill remaining slots. Final: ${autoPairedSkus.join(', ')}`);
+          } else {
+            console.log(`[Push Single] ⚠ No valid top sellers found to fill remaining slots`);
+          }
         }
       }
     }
