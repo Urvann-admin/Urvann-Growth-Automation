@@ -204,7 +204,8 @@ export async function updateProductFrequentlyBought(
 ): Promise<{ success: boolean; error?: string }> {
   // Use BASE_URL (www.urvann.com) for updates - this is the main API endpoint
   // SYNC_BASE_URL (storehippo.com) is only for read operations (sync mapping)
-  const url = `${BASE_URL}/api/1.1/entity/ms.products/${productId}`;
+  const primaryUrl = `${BASE_URL}/api/1.1/entity/ms.products/${productId}`;
+  const secondaryUrl = `${SYNC_BASE_URL}/api/1.1/entity/ms.products/${productId}`; // fallback write endpoint
   
   try {
     // CRITICAL: Always fetch full product first, then update with all fields
@@ -237,16 +238,26 @@ export async function updateProductFrequentlyBought(
       fullProduct.frequently_bought_together = frequentlyBoughtSkus;
     }
     
-    const requestBody = fullProduct;
+    // Build payload:
+    // - top-level frequently_bought (primary field)
+    // - also inside metafields to cover alternate storage
+    const requestBody = {
+      ...fullProduct,
+      frequently_bought: frequentlyBoughtSkus,
+      metafields: {
+        ...(fullProduct.metafields || {}),
+        frequently_bought: frequentlyBoughtSkus,
+      },
+    };
     
-    console.log(`[updateProductFrequentlyBought] Step 2: PUT ${url}`, {
+    console.log(`[updateProductFrequentlyBought] Step 2: PUT ${primaryUrl}`, {
       productId,
       skuCount: frequentlyBoughtSkus.length,
       skus: frequentlyBoughtSkus,
       productKeys: Object.keys(fullProduct).slice(0, 20),
     });
     
-    const response = await makeApiRequest(url, {
+    const response = await makeApiRequest(primaryUrl, {
       method: 'PUT',
       body: JSON.stringify(requestBody),
     });
@@ -264,25 +275,43 @@ export async function updateProductFrequentlyBought(
       ok: response.ok,
     });
     
+    // If primary failed, attempt fallback to SYNC_BASE_URL
+    let effectiveResponse = response;
     if (!response.ok) {
       const errorText = await response.text().catch(() => responseStatusText);
-      console.error(`[updateProductFrequentlyBought] ❌ Failed: HTTP ${responseStatus}`, {
+      console.warn(`[updateProductFrequentlyBought] Primary PUT failed (HTTP ${responseStatus}), trying fallback SYNC endpoint`, {
         productId,
         status: responseStatus,
         statusText: responseStatusText,
         error: errorText,
-        requestBodyKeys: Object.keys(requestBody).slice(0, 20),
       });
-      return { 
-        success: false, 
-        error: `HTTP ${responseStatus}: ${errorText}` 
-      };
+      const fallbackResp = await makeApiRequest(secondaryUrl, {
+        method: 'PUT',
+        body: JSON.stringify(requestBody),
+      });
+      effectiveResponse = fallbackResp;
+      if (!fallbackResp.ok) {
+        const fallbackStatus = fallbackResp.status;
+        const fallbackStatusText = fallbackResp.statusText;
+        const fallbackError = await fallbackResp.text().catch(() => fallbackStatusText);
+        console.error(`[updateProductFrequentlyBought] ❌ Fallback PUT failed: HTTP ${fallbackStatus}`, {
+          productId,
+          status: fallbackStatus,
+          statusText: fallbackStatusText,
+          error: fallbackError,
+          requestBodyKeys: Object.keys(requestBody).slice(0, 20),
+        });
+        return {
+          success: false,
+          error: `HTTP ${fallbackStatus}: ${fallbackError}`,
+        };
+      }
     }
     
     // Try to parse response to verify it was successful
     let responseData: any = null;
     try {
-      const responseText = await response.text();
+      const responseText = await effectiveResponse.text();
       console.log(`[updateProductFrequentlyBought] Response body (raw):`, responseText.substring(0, 500));
       
       if (responseText) {
@@ -326,7 +355,11 @@ export async function updateProductFrequentlyBought(
         
       if (verifyResponse.ok) {
         const verifyData = await verifyResponse.json();
-        const actualValue = verifyData.frequently_bought_together || verifyData.data?.frequently_bought_together;
+        const actualValue =
+          verifyData.frequently_bought ||
+          verifyData.data?.frequently_bought ||
+          verifyData.metafields?.frequently_bought ||
+          verifyData.data?.metafields?.frequently_bought;
         
         console.log(`[updateProductFrequentlyBought] Verification - Expected:`, frequentlyBoughtSkus);
         console.log(`[updateProductFrequentlyBought] Verification - Actual:`, actualValue);
