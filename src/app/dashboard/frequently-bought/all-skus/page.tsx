@@ -165,10 +165,17 @@ export default function AllSkusPage() {
   const handleSubstoreChange = useCallback((selected: MultiValue<SubstoreOption>) => {
     const newSelected = selected as SubstoreOption[];
     setSelectedSubstores(newSelected);
-    // Convert selected hubs to substores for filtering
-    const substores = getSelectedSubstoreValues();
-    loadTopSkus(1, substores, activeSearch);
-  }, [activeSearch, loadTopSkus, getSelectedSubstoreValues]);
+
+    // IMPORTANT: derive substores from the freshly selected hubs (not stale state)
+    const substoresFromSelection: string[] = [];
+    newSelected.forEach(hubOption => {
+      const hubSubstores = getSubstoresByHub(hubOption.value);
+      substoresFromSelection.push(...hubSubstores);
+    });
+
+    // Immediately reload with the new substore filter (no search click required)
+    loadTopSkus(1, substoresFromSelection, activeSearch);
+  }, [activeSearch, loadTopSkus]);
 
   const handleRefresh = useCallback(() => {
     loadTopSkus(1, getSelectedSubstoreValues(), activeSearch);
