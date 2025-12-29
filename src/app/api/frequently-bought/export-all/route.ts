@@ -7,7 +7,8 @@ export const maxDuration = 600; // 10 minutes for large export
 /**
  * GET /api/frequently-bought/export-all
  * 
- * Exports ALL SKUs with their top 6 paired products for Excel export.
+ * Exports ALL SKUs (no availability filter) with their top 6 paired products for Excel export.
+ * Paired products are filtered to only include available ones (publish == "1" AND inventory > 0).
  * OPTIMIZED: Removed large $in filter, processes all transactions and filters in-memory.
  * 
  * Performance optimizations:
@@ -37,21 +38,27 @@ export async function GET() {
       }
     ).toArray();
 
-    // Filter for available SKUs only (publish == "1" AND inventory > 0)
-    const availableMappings = allMappings.filter(m => {
-      const publish = String(m.publish || '0').trim();
-      const inventory = Number(m.inventory || 0);
-      return publish === '1' && inventory > 0;
-    });
-
-    const allSkus = availableMappings.map(m => m.sku as string);
-    // Create Set for O(1) lookups - only available SKUs
-    const availableSkusSet = new Set(allSkus);
+    // Get ALL SKUs (no filter) for export
+    const allSkus = allMappings.map(m => m.sku as string);
     const skuToNameMap = new Map<string, string>();
-    for (const m of availableMappings) {
+    for (const m of allMappings) {
       skuToNameMap.set(m.sku as string, (m.name as string) || '');
     }
-    console.log(`[Export All] Step 1: Found ${allMappings.length} total SKUs, ${allSkus.length} available SKUs in ${Date.now() - step1Start}ms`);
+
+    // Create Set of ALL SKUs for pairing processing
+    const allSkusSet = new Set(allSkus);
+    
+    // Create Set of available SKUs ONLY for filtering paired products
+    const availableSkusSet = new Set<string>();
+    for (const m of allMappings) {
+      const publish = String(m.publish || '0').trim();
+      const inventory = Number(m.inventory || 0);
+      if (publish === '1' && inventory > 0) {
+        availableSkusSet.add(m.sku as string);
+      }
+    }
+    
+    console.log(`[Export All] Step 1: Found ${allSkus.length} total SKUs, ${availableSkusSet.size} available SKUs in ${Date.now() - step1Start}ms`);
 
     // Step 2: OPTIMIZED - Process ALL transactions (no $in filter on 36k+ items)
     // MongoDB can use indexes on channel and substore efficiently
@@ -111,10 +118,10 @@ export async function GET() {
         return null;
       }).filter((sku): sku is string => sku !== null && typeof sku === 'string');
       
-      // Filter items to only include available SKUs (O(1) lookup with Set)
-      const validItems = items.filter(sku => availableSkusSet.has(sku));
+      // Filter items to only include SKUs that exist in our mapping (O(1) lookup with Set)
+      const validItems = items.filter(sku => allSkusSet.has(sku));
       
-      // Skip if less than 2 available items
+      // Skip if less than 2 valid items
       if (validItems.length < 2) continue;
 
       // Create all pairs within this transaction
@@ -137,17 +144,18 @@ export async function GET() {
     }
 
     // Convert to top 6 pairs per SKU - only include available paired SKUs
+    // Include pairs for ALL SKUs, but filter paired products to only available ones
     const skuTopPairsMap = new Map<string, Array<{ pairedSku: string; count: number }>>();
     for (const [mainSku, pairMap] of skuPairingsMap.entries()) {
-      // Filter to only include available paired SKUs
+      // Filter to only include available paired SKUs (but include pairs for all main SKUs)
       const topPairs = Array.from(pairMap.entries())
         .filter(([pairedSku]) => availableSkusSet.has(pairedSku)) // Only available paired SKUs
         .map(([pairedSku, count]) => ({ pairedSku, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 6);
       
-      // Only add if there are pairs (and main SKU is available)
-      if (topPairs.length > 0 && availableSkusSet.has(mainSku)) {
+      // Add pairs for ALL SKUs (not just available ones)
+      if (topPairs.length > 0) {
         skuTopPairsMap.set(mainSku, topPairs);
       }
     }
@@ -189,14 +197,11 @@ export async function GET() {
     }
     console.log(`[Export All] Step 3: Fetched ${pairedSkuToNameMap.size} available paired SKU names in ${Date.now() - step3Start}ms`);
 
-    // Step 4: Build final export data - ALL available SKUs (even if they have no pairings)
-    // IMPORTANT: Include ALL available SKUs, not just those with pairings
+    // Step 4: Build final export data - ALL SKUs with only available paired products
     const step4Start = Date.now();
     const exportData = allSkus.map(sku => {
-      // Get pairings for this SKU (empty array if none)
       const pairs = skuTopPairsMap.get(sku) || [];
-      
-      // Filter paired products to only include available ones (double-check)
+      // Filter paired products to only include available ones
       const topPaired = pairs
         .filter(p => availableSkusSet.has(p.pairedSku)) // Ensure paired SKU is available
         .map(p => ({
@@ -205,17 +210,13 @@ export async function GET() {
           count: p.count,
         }));
 
-      // Include this SKU in export (even if topPaired is empty)
       return {
         sku,
         name: skuToNameMap.get(sku) || '',
-        topPaired, // Will be empty array [] if no pairings found
+        topPaired,
       };
     });
-    
-    const skusWithPairings = exportData.filter(item => item.topPaired.length > 0).length;
-    const skusWithoutPairings = exportData.length - skusWithPairings;
-    console.log(`[Export All] Step 4: Built export data for ${exportData.length} available SKUs (${skusWithPairings} with pairings, ${skusWithoutPairings} without pairings) in ${Date.now() - step4Start}ms`);
+    console.log(`[Export All] Step 4: Built export data for ${exportData.length} SKUs (all SKUs, only available pairings) in ${Date.now() - step4Start}ms`);
 
     const elapsedTime = Date.now() - startTime;
     console.log(`[Export All] ✅ Completed export for ${exportData.length} SKUs in ${elapsedTime}ms (${(elapsedTime / 1000).toFixed(2)}s)`);
