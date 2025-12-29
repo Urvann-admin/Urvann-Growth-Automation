@@ -189,10 +189,13 @@ export async function GET() {
     }
     console.log(`[Export All] Step 3: Fetched ${pairedSkuToNameMap.size} available paired SKU names in ${Date.now() - step3Start}ms`);
 
-    // Step 4: Build final export data - only available SKUs with available paired products
+    // Step 4: Build final export data - ALL available SKUs (even if they have no pairings)
+    // IMPORTANT: Include ALL available SKUs, not just those with pairings
     const step4Start = Date.now();
     const exportData = allSkus.map(sku => {
+      // Get pairings for this SKU (empty array if none)
       const pairs = skuTopPairsMap.get(sku) || [];
+      
       // Filter paired products to only include available ones (double-check)
       const topPaired = pairs
         .filter(p => availableSkusSet.has(p.pairedSku)) // Ensure paired SKU is available
@@ -202,13 +205,17 @@ export async function GET() {
           count: p.count,
         }));
 
+      // Include this SKU in export (even if topPaired is empty)
       return {
         sku,
         name: skuToNameMap.get(sku) || '',
-        topPaired,
+        topPaired, // Will be empty array [] if no pairings found
       };
     });
-    console.log(`[Export All] Step 4: Built export data for ${exportData.length} available SKUs in ${Date.now() - step4Start}ms`);
+    
+    const skusWithPairings = exportData.filter(item => item.topPaired.length > 0).length;
+    const skusWithoutPairings = exportData.length - skusWithPairings;
+    console.log(`[Export All] Step 4: Built export data for ${exportData.length} available SKUs (${skusWithPairings} with pairings, ${skusWithoutPairings} without pairings) in ${Date.now() - step4Start}ms`);
 
     const elapsedTime = Date.now() - startTime;
     console.log(`[Export All] ✅ Completed export for ${exportData.length} SKUs in ${elapsedTime}ms (${(elapsedTime / 1000).toFixed(2)}s)`);
