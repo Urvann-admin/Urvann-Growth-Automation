@@ -388,21 +388,36 @@ export default function FrequentlyBoughtPage() {
 
   const handleExportExcel = useCallback(async () => {
     try {
-      const result = await fetchAllForExport({
-        search: activeSearch,
-        substores: getSelectedSubstoreValues(),
-      });
+      // Show loading message
+      const loadingMsg = 'Preparing export for all SKUs... This may take a few minutes.';
+      if (window.confirm(loadingMsg + '\n\nClick OK to continue.')) {
+        const response = await fetch('/api/frequently-bought/export-all');
+        const result = await response.json();
 
-      if (!result.success || !result.data) {
-        alert('Failed to fetch data for export');
-        return;
+        if (!result.success || !result.data) {
+          alert('Failed to fetch data for export');
+          return;
+        }
+
+        // Transform the data to match FrequentlyBoughtItem format
+        const transformedData = result.data.map((item: any) => ({
+          sku: item.sku,
+          name: item.name,
+          totalPairings: item.topPaired.length,
+          topPaired: item.topPaired.map((p: any) => ({
+            sku: p.sku,
+            name: p.name,
+            count: p.count,
+          })),
+        }));
+
+        exportFrequentlyBoughtToExcel(transformedData);
       }
-
-      exportFrequentlyBoughtToExcel(result.data);
-    } catch {
-      alert('Failed to export data');
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Failed to export data. Please try again.');
     }
-  }, [activeSearch, getSelectedSubstoreValues]);
+  }, []);
 
   const handleClearAllFilters = useCallback(() => {
     setSelectedSubstores([]);
