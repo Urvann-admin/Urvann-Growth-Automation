@@ -155,7 +155,7 @@ export default function FiltersBar({
 
         <button
           onClick={onExport}
-          disabled={loading || loadingAnalysis || analysisDataLength === 0}
+          disabled={loading || loadingAnalysis}
           className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 rounded-lg transition-colors border border-emerald-200"
         >
           <Download className="w-4 h-4" />

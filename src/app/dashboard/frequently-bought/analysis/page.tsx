@@ -390,32 +390,45 @@ export default function FrequentlyBoughtPage() {
     try {
       // Show loading message
       const loadingMsg = 'Preparing export for all SKUs... This may take a few minutes.';
-      if (window.confirm(loadingMsg + '\n\nClick OK to continue.')) {
-        const response = await fetch('/api/frequently-bought/export-all');
-        const result = await response.json();
-
-        if (!result.success || !result.data) {
-          alert('Failed to fetch data for export');
-          return;
-        }
-
-        // Transform the data to match FrequentlyBoughtItem format
-        const transformedData = result.data.map((item: any) => ({
-          sku: item.sku,
-          name: item.name,
-          totalPairings: item.topPaired.length,
-          topPaired: item.topPaired.map((p: any) => ({
-            sku: p.sku,
-            name: p.name,
-            count: p.count,
-          })),
-        }));
-
-        exportFrequentlyBoughtToExcel(transformedData);
+      if (!window.confirm(loadingMsg + '\n\nClick OK to continue.')) {
+        return; // User cancelled
       }
+
+      console.log('[Export] Starting export...');
+      const response = await fetch('/api/frequently-bought/export-all');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[Export] Response received:', { success: result.success, dataLength: result.data?.length });
+
+      if (!result.success || !result.data) {
+        const errorMsg = result.error || result.message || 'Unknown error';
+        alert(`Failed to fetch data for export: ${errorMsg}`);
+        return;
+      }
+
+      // Transform the data to match FrequentlyBoughtItem format
+      const transformedData = result.data.map((item: any) => ({
+        sku: item.sku,
+        name: item.name,
+        totalPairings: item.topPaired?.length || 0,
+        topPaired: (item.topPaired || []).map((p: any) => ({
+          sku: p.sku,
+          name: p.name || '',
+          count: p.count || 0,
+        })),
+      }));
+
+      console.log('[Export] Exporting to Excel...', transformedData.length, 'items');
+      exportFrequentlyBoughtToExcel(transformedData);
+      console.log('[Export] Export completed successfully');
     } catch (error) {
-      console.error('Export error:', error);
-      alert('Failed to export data. Please try again.');
+      console.error('[Export] Error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to export data: ${errorMsg}\n\nPlease check the console for details.`);
     }
   }, []);
 
