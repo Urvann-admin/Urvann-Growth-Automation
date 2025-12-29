@@ -116,6 +116,7 @@ export default function FrequentlyBoughtPage() {
   const [pushingUpdates, setPushingUpdates] = useState(false);
   const [syncingMapping, setSyncingMapping] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportElapsedTime, setExportElapsedTime] = useState(0);
   const [pushProgress, setPushProgress] = useState<{
     show: boolean;
     processed: number;
@@ -305,6 +306,22 @@ export default function FrequentlyBoughtPage() {
     // Don't load analysis data on first load - user must search
     setLoading(false);
   }, [user, authLoading, router, loadSubstores, loadUniqueSkus, loadTopSkus]);
+
+  // Timer for export process
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (exporting) {
+      setExportElapsedTime(0);
+      interval = setInterval(() => {
+        setExportElapsedTime((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setExportElapsedTime(0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [exporting]);
 
   // Handlers
   const handleSearch = useCallback(() => {
@@ -1153,6 +1170,7 @@ export default function FrequentlyBoughtPage() {
           loading={loading}
           loadingAnalysis={loadingAnalysis}
           exporting={exporting}
+          exportElapsedTime={exportElapsedTime}
           analysisDataLength={analysisData.length}
           onSubstoreChange={handleSubstoreChange}
           onSearchTermChange={setSearchTerm}

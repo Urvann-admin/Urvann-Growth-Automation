@@ -13,6 +13,7 @@ interface FiltersBarProps {
   loading: boolean;
   loadingAnalysis: boolean;
   exporting?: boolean;
+  exportElapsedTime?: number;
   analysisDataLength: number;
   onSubstoreChange: (selected: MultiValue<SubstoreOption>) => void;
   onSearchTermChange: (value: string) => void;
@@ -77,6 +78,7 @@ export default function FiltersBar({
   loading,
   loadingAnalysis,
   exporting = false,
+  exportElapsedTime = 0,
   analysisDataLength,
   onSubstoreChange,
   onSearchTermChange,
@@ -163,7 +165,10 @@ export default function FiltersBar({
           {exporting ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              Exporting...
+              <span>Exporting...</span>
+              <span className="text-xs font-mono">
+                ({Math.floor(exportElapsedTime / 60)}:{(exportElapsedTime % 60).toString().padStart(2, '0')})
+              </span>
             </>
           ) : (
             <>
