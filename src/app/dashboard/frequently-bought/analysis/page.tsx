@@ -115,6 +115,7 @@ export default function FrequentlyBoughtPage() {
   // Push updates state
   const [pushingUpdates, setPushingUpdates] = useState(false);
   const [syncingMapping, setSyncingMapping] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [pushProgress, setPushProgress] = useState<{
     show: boolean;
     processed: number;
@@ -394,6 +395,7 @@ export default function FrequentlyBoughtPage() {
         return; // User cancelled
       }
 
+      setExporting(true);
       console.log('[Export] Starting export...');
       const response = await fetch('/api/frequently-bought/export-all');
       
@@ -429,6 +431,8 @@ export default function FrequentlyBoughtPage() {
       console.error('[Export] Error:', error);
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       alert(`Failed to export data: ${errorMsg}\n\nPlease check the console for details.`);
+    } finally {
+      setExporting(false);
     }
   }, []);
 
@@ -1148,6 +1152,7 @@ export default function FrequentlyBoughtPage() {
           activeSearch={activeSearch}
           loading={loading}
           loadingAnalysis={loadingAnalysis}
+          exporting={exporting}
           analysisDataLength={analysisData.length}
           onSubstoreChange={handleSubstoreChange}
           onSearchTermChange={setSearchTerm}
