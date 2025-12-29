@@ -8,154 +8,160 @@ export const maxDuration = 600; // 10 minutes for large export
  * GET /api/frequently-bought/export-all
  * 
  * Exports ALL SKUs with their top 6 paired products for Excel export.
- * This endpoint processes all SKUs in the mapping collection and finds
- * their frequently bought together products.
+ * OPTIMIZED: Removed large $in filter, processes all transactions and filters in-memory.
+ * 
+ * Performance optimizations:
+ * 1. No $in filter on 36k+ SKUs (MongoDB can't use indexes efficiently)
+ * 2. Process all transactions, filter in-memory using Set (O(1) lookups)
+ * 3. Simplified aggregation pipeline - fewer stages
+ * 4. MongoDB can use indexes on channel and substore
+ * 5. Uses allowDiskUse for large aggregations
  */
 export async function GET() {
   try {
-    console.log('[Export All] Starting export for all SKUs...');
+    console.log('[Export All] Starting optimized export for all SKUs...');
     const startTime = Date.now();
 
     const mappingCollection = await getCollection('skuProductMapping');
     const frequentlyBoughtCollection = await getCollection('frequentlyBought');
 
     // Step 1: Get ALL SKUs from mapping (excluding hubchange/test4)
+    const step1Start = Date.now();
     const allMappings = await mappingCollection.find(
       {
         substore: { $nin: ['hubchange', 'test4'] },
       },
       {
         projection: { sku: 1, name: 1, _id: 0 },
+        batchSize: 10000, // Optimize batch size
       }
     ).toArray();
 
     const allSkus = allMappings.map(m => m.sku as string);
+    // Create Set for O(1) lookups instead of array
+    const validSkusSet = new Set(allSkus);
     const skuToNameMap = new Map<string, string>();
     for (const m of allMappings) {
       skuToNameMap.set(m.sku as string, (m.name as string) || '');
     }
+    console.log(`[Export All] Step 1: Found ${allSkus.length} SKUs in ${Date.now() - step1Start}ms`);
 
-    console.log(`[Export All] Found ${allSkus.length} SKUs to process`);
-
-    // Step 2: Use aggregation to find pairings for ALL SKUs efficiently
-    // This is much faster than processing each SKU individually
-    const pairingsAggregation = await frequentlyBoughtCollection.aggregate([
+    // Step 2: OPTIMIZED - Process ALL transactions (no $in filter on 36k+ items)
+    // MongoDB can use indexes on channel and substore efficiently
+    // We'll filter for valid SKUs in JavaScript after getting transaction data
+    const step2Start = Date.now();
+    
+    // First, get all transactions with their items (filtered by channel/substore only)
+    const transactions = await frequentlyBoughtCollection.aggregate([
       {
         $match: {
           channel: { $ne: 'admin' },
-          'items.sku': { $in: allSkus },
           'items.1': { $exists: true }, // At least 2 items
           substore: { $nin: ['hubchange', 'test4'] },
-        }
-      },
-      { $unwind: '$items' },
-      { $match: { 'items.price': { $ne: 1 } } }, // Exclude price: 1
-      {
-        $group: {
-          _id: '$txn_id',
-          allItems: { $push: '$items.sku' },
-          mainSkus: {
-            $push: {
-              $cond: [
-                { $in: ['$items.sku', allSkus] },
-                '$items.sku',
-                null
-              ]
-            }
-          }
+          // NOTE: Removed 'items.sku': { $in: allSkus } - this was the bottleneck!
         }
       },
       {
         $project: {
-          allItems: 1,
-          mainSkus: {
+          items: {
             $filter: {
-              input: '$mainSkus',
-              as: 'sku',
-              cond: { $ne: ['$$sku', null] }
+              input: '$items',
+              as: 'item',
+              cond: { $ne: ['$$item.price', 1] } // Exclude price: 1
             }
           }
         }
       },
-      { $match: { mainSkus: { $ne: [] } } },
-      { $unwind: '$mainSkus' },
-      { $unwind: '$allItems' },
       {
         $match: {
-          $expr: { $ne: ['$mainSkus', '$allItems'] }
-        }
-      },
-      {
-        $group: {
-          _id: {
-            mainSku: '$mainSkus',
-            pairedSku: '$allItems'
-          },
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $group: {
-          _id: '$_id.mainSku',
-          pairs: {
-            $push: {
-              pairedSku: '$_id.pairedSku',
-              count: '$count'
-            }
-          }
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          mainSku: '$_id',
-          topPairs: {
-            $slice: [
-              {
-                $sortArray: {
-                  input: '$pairs',
-                  sortBy: { count: -1 }
-                }
-              },
-              6 // Top 6 only
-            ]
-          }
+          'items.1': { $exists: true } // Still need at least 2 items after filtering
         }
       }
-    ]).toArray();
+    ], {
+      allowDiskUse: true,
+      cursor: { batchSize: 5000 }
+    }).toArray();
 
-    // Step 3: Build map of SKU -> top 6 paired SKUs
-    const skuPairingsMap = new Map<string, Array<{ pairedSku: string; count: number }>>();
-    for (const result of pairingsAggregation) {
-      skuPairingsMap.set(result.mainSku, result.topPairs);
+    console.log(`[Export All] Step 2a: Fetched ${transactions.length} transactions in ${Date.now() - step2Start}ms`);
+
+    // Step 2b: Process pairs in-memory (much faster than MongoDB aggregation for this)
+    const step2bStart = Date.now();
+    const skuPairingsMap = new Map<string, Map<string, number>>(); // mainSku -> Map<pairedSku, count>
+
+    for (const txn of transactions) {
+      const items = (txn.items as { sku: string }[]).map(item => item.sku);
+      
+      // Filter items to only include valid SKUs (O(1) lookup with Set)
+      const validItems = items.filter(sku => validSkusSet.has(sku));
+      
+      // Skip if less than 2 valid items
+      if (validItems.length < 2) continue;
+
+      // Create all pairs within this transaction
+      for (let i = 0; i < validItems.length; i++) {
+        const mainSku = validItems[i];
+        
+        // Initialize if needed
+        if (!skuPairingsMap.has(mainSku)) {
+          skuPairingsMap.set(mainSku, new Map());
+        }
+        const pairMap = skuPairingsMap.get(mainSku)!;
+
+        for (let j = 0; j < validItems.length; j++) {
+          if (i === j) continue; // Skip self-pairs
+          
+          const pairedSku = validItems[j];
+          pairMap.set(pairedSku, (pairMap.get(pairedSku) || 0) + 1);
+        }
+      }
     }
 
-    // Step 4: Get names for all paired SKUs
+    // Convert to top 6 pairs per SKU
+    const skuTopPairsMap = new Map<string, Array<{ pairedSku: string; count: number }>>();
+    for (const [mainSku, pairMap] of skuPairingsMap.entries()) {
+      const topPairs = Array.from(pairMap.entries())
+        .map(([pairedSku, count]) => ({ pairedSku, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 6);
+      
+      skuTopPairsMap.set(mainSku, topPairs);
+    }
+
+    console.log(`[Export All] Step 2b: Processed pairs in-memory in ${Date.now() - step2bStart}ms, found ${skuTopPairsMap.size} SKUs with pairings`);
+
+    // Step 3: Get names for all paired SKUs (only fetch what we need)
+    const step3Start = Date.now();
     const allPairedSkus = new Set<string>();
-    for (const pairs of skuPairingsMap.values()) {
+    for (const pairs of skuTopPairsMap.values()) {
       for (const pair of pairs) {
         allPairedSkus.add(pair.pairedSku);
       }
     }
 
-    const pairedMappings = await mappingCollection.find(
-      {
-        sku: { $in: Array.from(allPairedSkus) },
-        substore: { $nin: ['hubchange', 'test4'] },
-      },
-      {
-        projection: { sku: 1, name: 1, _id: 0 },
-      }
-    ).toArray();
-
+    // Batch fetch paired SKU names if needed
     const pairedSkuToNameMap = new Map<string, string>();
-    for (const m of pairedMappings) {
-      pairedSkuToNameMap.set(m.sku as string, (m.name as string) || '');
-    }
+    if (allPairedSkus.size > 0) {
+      const pairedMappings = await mappingCollection.find(
+        {
+          sku: { $in: Array.from(allPairedSkus) },
+          substore: { $nin: ['hubchange', 'test4'] },
+        },
+        {
+          projection: { sku: 1, name: 1, _id: 0 },
+          batchSize: 10000,
+        }
+      ).toArray();
 
-    // Step 5: Build final export data
+      for (const m of pairedMappings) {
+        pairedSkuToNameMap.set(m.sku as string, (m.name as string) || '');
+      }
+    }
+    console.log(`[Export All] Step 3: Fetched ${allPairedSkus.size} paired SKU names in ${Date.now() - step3Start}ms`);
+
+    // Step 4: Build final export data
+    const step4Start = Date.now();
     const exportData = allSkus.map(sku => {
-      const pairs = skuPairingsMap.get(sku) || [];
+      const pairs = skuTopPairsMap.get(sku) || [];
       const topPaired = pairs.map(p => ({
         sku: p.pairedSku,
         name: pairedSkuToNameMap.get(p.pairedSku) || '',
@@ -168,9 +174,10 @@ export async function GET() {
         topPaired,
       };
     });
+    console.log(`[Export All] Step 4: Built export data in ${Date.now() - step4Start}ms`);
 
     const elapsedTime = Date.now() - startTime;
-    console.log(`[Export All] Completed export for ${exportData.length} SKUs in ${elapsedTime}ms`);
+    console.log(`[Export All] ✅ Completed export for ${exportData.length} SKUs in ${elapsedTime}ms (${(elapsedTime / 1000).toFixed(2)}s)`);
 
     return NextResponse.json({
       success: true,
