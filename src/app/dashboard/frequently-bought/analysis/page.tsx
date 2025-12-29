@@ -151,6 +151,7 @@ export default function FrequentlyBoughtPage() {
   const [pushAllConfirmOpen, setPushAllConfirmOpen] = useState(false);
   const [pushSingleConfirmOpen, setPushSingleConfirmOpen] = useState(false);
   const [pushSingleSku, setPushSingleSku] = useState<string | null>(null);
+  const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   
   // Manual SKU dialog state (hub -> SKUs)
   const [manualSkuDialogOpen, setManualSkuDialogOpen] = useState(false);
@@ -404,14 +405,12 @@ export default function FrequentlyBoughtPage() {
     setModalData(null);
   }, []);
 
-  const handleExportExcel = useCallback(async () => {
-    try {
-      // Show loading message
-      const loadingMsg = 'Preparing export for all SKUs... This may take a few minutes.';
-      if (!window.confirm(loadingMsg + '\n\nClick OK to continue.')) {
-        return; // User cancelled
-      }
+  const handleExportExcel = useCallback(() => {
+    setExportConfirmOpen(true);
+  }, []);
 
+  const handleExportConfirm = useCallback(async () => {
+    try {
       setExporting(true);
       console.log('[Export] Starting export...');
       const response = await fetch('/api/frequently-bought/export-all');
@@ -1277,6 +1276,16 @@ export default function FrequentlyBoughtPage() {
         confirmText="OK"
         cancelText="Cancel"
         onConfirm={handlePushSingleUpdateConfirm}
+      />
+
+      <ConfirmationModal
+        open={exportConfirmOpen}
+        onOpenChange={setExportConfirmOpen}
+        title="Export All SKUs"
+        message="Preparing export for all SKUs... This may take a few minutes. Continue?"
+        confirmText="OK"
+        cancelText="Cancel"
+        onConfirm={handleExportConfirm}
       />
 
     </div>
