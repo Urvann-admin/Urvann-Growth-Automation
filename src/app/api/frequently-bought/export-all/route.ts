@@ -25,26 +25,33 @@ export async function GET() {
     const mappingCollection = await getCollection('skuProductMapping');
     const frequentlyBoughtCollection = await getCollection('frequentlyBought');
 
-    // Step 1: Get ALL SKUs from mapping (excluding hubchange/test4)
+    // Step 1: Get ALL SKUs from mapping (excluding hubchange/test4) with publish/inventory
     const step1Start = Date.now();
     const allMappings = await mappingCollection.find(
       {
         substore: { $nin: ['hubchange', 'test4'] },
       },
       {
-        projection: { sku: 1, name: 1, _id: 0 },
+        projection: { sku: 1, name: 1, publish: 1, inventory: 1, _id: 0 },
         batchSize: 10000, // Optimize batch size
       }
     ).toArray();
 
-    const allSkus = allMappings.map(m => m.sku as string);
-    // Create Set for O(1) lookups instead of array
-    const validSkusSet = new Set(allSkus);
+    // Filter for available SKUs only (publish == "1" AND inventory > 0)
+    const availableMappings = allMappings.filter(m => {
+      const publish = String(m.publish || '0').trim();
+      const inventory = Number(m.inventory || 0);
+      return publish === '1' && inventory > 0;
+    });
+
+    const allSkus = availableMappings.map(m => m.sku as string);
+    // Create Set for O(1) lookups - only available SKUs
+    const availableSkusSet = new Set(allSkus);
     const skuToNameMap = new Map<string, string>();
-    for (const m of allMappings) {
+    for (const m of availableMappings) {
       skuToNameMap.set(m.sku as string, (m.name as string) || '');
     }
-    console.log(`[Export All] Step 1: Found ${allSkus.length} SKUs in ${Date.now() - step1Start}ms`);
+    console.log(`[Export All] Step 1: Found ${allMappings.length} total SKUs, ${allSkus.length} available SKUs in ${Date.now() - step1Start}ms`);
 
     // Step 2: OPTIMIZED - Process ALL transactions (no $in filter on 36k+ items)
     // MongoDB can use indexes on channel and substore efficiently
@@ -104,10 +111,10 @@ export async function GET() {
         return null;
       }).filter((sku): sku is string => sku !== null && typeof sku === 'string');
       
-      // Filter items to only include valid SKUs (O(1) lookup with Set)
-      const validItems = items.filter(sku => validSkusSet.has(sku));
+      // Filter items to only include available SKUs (O(1) lookup with Set)
+      const validItems = items.filter(sku => availableSkusSet.has(sku));
       
-      // Skip if less than 2 valid items
+      // Skip if less than 2 available items
       if (validItems.length < 2) continue;
 
       // Create all pairs within this transaction
@@ -129,15 +136,20 @@ export async function GET() {
       }
     }
 
-    // Convert to top 6 pairs per SKU
+    // Convert to top 6 pairs per SKU - only include available paired SKUs
     const skuTopPairsMap = new Map<string, Array<{ pairedSku: string; count: number }>>();
     for (const [mainSku, pairMap] of skuPairingsMap.entries()) {
+      // Filter to only include available paired SKUs
       const topPairs = Array.from(pairMap.entries())
+        .filter(([pairedSku]) => availableSkusSet.has(pairedSku)) // Only available paired SKUs
         .map(([pairedSku, count]) => ({ pairedSku, count }))
         .sort((a, b) => b.count - a.count)
         .slice(0, 6);
       
-      skuTopPairsMap.set(mainSku, topPairs);
+      // Only add if there are pairs (and main SKU is available)
+      if (topPairs.length > 0 && availableSkusSet.has(mainSku)) {
+        skuTopPairsMap.set(mainSku, topPairs);
+      }
     }
 
     console.log(`[Export All] Step 2b: Processed pairs in-memory in ${Date.now() - step2bStart}ms, found ${skuTopPairsMap.size} SKUs with pairings`);
@@ -151,13 +163,15 @@ export async function GET() {
       }
     }
 
-    // Batch fetch paired SKU names if needed
+    // Batch fetch paired SKU names - only for available SKUs
     const pairedSkuToNameMap = new Map<string, string>();
     if (allPairedSkus.size > 0) {
       const pairedMappings = await mappingCollection.find(
         {
           sku: { $in: Array.from(allPairedSkus) },
           substore: { $nin: ['hubchange', 'test4'] },
+          publish: '1',
+          inventory: { $gt: 0 },
         },
         {
           projection: { sku: 1, name: 1, _id: 0 },
@@ -166,20 +180,27 @@ export async function GET() {
       ).toArray();
 
       for (const m of pairedMappings) {
-        pairedSkuToNameMap.set(m.sku as string, (m.name as string) || '');
+        const sku = m.sku as string;
+        // Double-check it's in our available set
+        if (availableSkusSet.has(sku)) {
+          pairedSkuToNameMap.set(sku, (m.name as string) || '');
+        }
       }
     }
-    console.log(`[Export All] Step 3: Fetched ${allPairedSkus.size} paired SKU names in ${Date.now() - step3Start}ms`);
+    console.log(`[Export All] Step 3: Fetched ${pairedSkuToNameMap.size} available paired SKU names in ${Date.now() - step3Start}ms`);
 
-    // Step 4: Build final export data
+    // Step 4: Build final export data - only available SKUs with available paired products
     const step4Start = Date.now();
     const exportData = allSkus.map(sku => {
       const pairs = skuTopPairsMap.get(sku) || [];
-      const topPaired = pairs.map(p => ({
-        sku: p.pairedSku,
-        name: pairedSkuToNameMap.get(p.pairedSku) || '',
-        count: p.count,
-      }));
+      // Filter paired products to only include available ones (double-check)
+      const topPaired = pairs
+        .filter(p => availableSkusSet.has(p.pairedSku)) // Ensure paired SKU is available
+        .map(p => ({
+          sku: p.pairedSku,
+          name: pairedSkuToNameMap.get(p.pairedSku) || '',
+          count: p.count,
+        }));
 
       return {
         sku,
@@ -187,7 +208,7 @@ export async function GET() {
         topPaired,
       };
     });
-    console.log(`[Export All] Step 4: Built export data in ${Date.now() - step4Start}ms`);
+    console.log(`[Export All] Step 4: Built export data for ${exportData.length} available SKUs in ${Date.now() - step4Start}ms`);
 
     const elapsedTime = Date.now() - startTime;
     console.log(`[Export All] ✅ Completed export for ${exportData.length} SKUs in ${elapsedTime}ms (${(elapsedTime / 1000).toFixed(2)}s)`);
