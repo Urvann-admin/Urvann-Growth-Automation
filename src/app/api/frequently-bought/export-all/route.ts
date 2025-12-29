@@ -67,7 +67,12 @@ export async function GET() {
             $filter: {
               input: '$items',
               as: 'item',
-              cond: { $ne: ['$$item.price', 1] } // Exclude price: 1
+              cond: {
+                $and: [
+                  { $ne: ['$$item.price', null] },
+                  { $ne: ['$$item.price', 1] } // Exclude price: 1
+                ]
+              }
             }
           }
         }
@@ -78,8 +83,7 @@ export async function GET() {
         }
       }
     ], {
-      allowDiskUse: true,
-      cursor: { batchSize: 5000 }
+      allowDiskUse: true
     }).toArray();
 
     console.log(`[Export All] Step 2a: Fetched ${transactions.length} transactions in ${Date.now() - step2Start}ms`);
@@ -89,7 +93,16 @@ export async function GET() {
     const skuPairingsMap = new Map<string, Map<string, number>>(); // mainSku -> Map<pairedSku, count>
 
     for (const txn of transactions) {
-      const items = (txn.items as { sku: string }[]).map(item => item.sku);
+      // Handle both array of objects and array of strings
+      const itemsArray = txn.items as any[];
+      if (!itemsArray || !Array.isArray(itemsArray)) continue;
+      
+      // Extract SKUs from items (handle both {sku: "..."} and direct string)
+      const items = itemsArray.map(item => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object' && item.sku) return item.sku as string;
+        return null;
+      }).filter((sku): sku is string => sku !== null && typeof sku === 'string');
       
       // Filter items to only include valid SKUs (O(1) lookup with Set)
       const validItems = items.filter(sku => validSkusSet.has(sku));
@@ -187,8 +200,15 @@ export async function GET() {
   } catch (error: unknown) {
     console.error('[Export All] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error('[Export All] Error stack:', errorStack);
     return NextResponse.json(
-      { success: false, message: 'Failed to export data', error: errorMessage },
+      { 
+        success: false, 
+        message: 'Failed to export data', 
+        error: errorMessage,
+        ...(process.env.NODE_ENV === 'development' && { stack: errorStack })
+      },
       { status: 500 }
     );
   }
