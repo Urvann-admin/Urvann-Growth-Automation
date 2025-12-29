@@ -14,11 +14,10 @@ export function exportFrequentlyBoughtToExcel(data: FrequentlyBoughtItem[]): voi
       'Product Name': item.name,
     };
 
-    // Add top 6 paired product SKUs and names
+    // Add top 6 paired product SKUs only (no names)
     for (let i = 0; i < 6; i++) {
       const pairedProduct = item.topPaired[i];
       row[`Paired SKU ${i + 1}`] = pairedProduct ? pairedProduct.sku : '';
-      row[`Paired Product Name ${i + 1}`] = pairedProduct ? pairedProduct.name : '';
     }
 
     return row;
@@ -33,17 +32,11 @@ export function exportFrequentlyBoughtToExcel(data: FrequentlyBoughtItem[]): voi
     { wch: 15 },  // SKU
     { wch: 40 },  // Product Name
     { wch: 15 },  // Paired SKU 1
-    { wch: 40 },  // Paired Product Name 1
     { wch: 15 },  // Paired SKU 2
-    { wch: 40 },  // Paired Product Name 2
     { wch: 15 },  // Paired SKU 3
-    { wch: 40 },  // Paired Product Name 3
     { wch: 15 },  // Paired SKU 4
-    { wch: 40 },  // Paired Product Name 4
     { wch: 15 },  // Paired SKU 5
-    { wch: 40 },  // Paired Product Name 5
     { wch: 15 },  // Paired SKU 6
-    { wch: 40 },  // Paired Product Name 6
   ];
   ws['!cols'] = colWidths;
 
