@@ -1150,7 +1150,6 @@ export default function FrequentlyBoughtPage() {
         <PushUpdatesBar
           syncingMapping={syncingMapping}
           pushingUpdates={pushingUpdates}
-          onSyncMapping={handleSyncMapping}
           onPushAllUpdates={handlePushAllUpdates}
         />
 
