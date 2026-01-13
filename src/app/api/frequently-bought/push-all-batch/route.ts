@@ -219,11 +219,28 @@ export async function POST(request: Request) {
     const skuPairingsMap = new Map<string, Array<{ pairedSku: string; count: number }>>();
     const allPairedSkusSet = new Set<string>();
     
+    console.log(`[Push All Batch] Aggregation returned ${pairingsAggregation.length} SKUs with pairings`);
+    
     for (const result of pairingsAggregation) {
       skuPairingsMap.set(result.mainSku, result.topPairs);
       // Collect all unique paired SKUs for batch mapping lookup
       for (const pair of result.topPairs) {
         allPairedSkusSet.add(pair.pairedSku);
+      }
+    }
+    
+    // Log pairing statistics
+    const totalPairs = Array.from(skuPairingsMap.values()).reduce((sum, pairs) => sum + pairs.length, 0);
+    const avgPairsPerSku = skuPairingsMap.size > 0 ? (totalPairs / skuPairingsMap.size).toFixed(2) : '0';
+    console.log(`[Push All Batch] Pairing stats: ${totalPairs} total pairs across ${skuPairingsMap.size} SKUs (avg ${avgPairsPerSku} per SKU)`);
+    console.log(`[Push All Batch] Unique paired SKUs found: ${allPairedSkusSet.size}`);
+    
+    // Log sample of pairings for first few SKUs
+    let sampleCount = 0;
+    for (const [mainSku, pairs] of skuPairingsMap.entries()) {
+      if (sampleCount < 3 && pairs.length > 0) {
+        console.log(`[Push All Batch] Sample ${mainSku}: ${pairs.length} pairs - top 3: ${pairs.slice(0, 3).map(p => `${p.pairedSku}(${p.count}x)`).join(', ')}`);
+        sampleCount++;
       }
     }
 
@@ -274,6 +291,22 @@ export async function POST(request: Request) {
     // Check how many manual SKU mappings were found
     const manualMappingsFound = allManualSkusList.filter(msku => globalPairedMappingMap.has(msku)).length;
     console.log(`[Push All Batch] Loaded mappings for ${globalPairedMappingMap.size} SKUs (${allPairedSkusList.length} auto + ${allManualSkusList.length} manual, ${manualMappingsFound} manual mappings found)`);
+    
+    // Check availability of paired SKUs
+    let availablePairedCount = 0;
+    let unavailablePairedCount = 0;
+    let notInMappingCount = 0;
+    for (const pairedSku of allPairedSkusList) {
+      const mapping = globalPairedMappingMap.get(pairedSku);
+      if (!mapping) {
+        notInMappingCount++;
+      } else if (mapping.publish === "1" && mapping.inventory > 0) {
+        availablePairedCount++;
+      } else {
+        unavailablePairedCount++;
+      }
+    }
+    console.log(`[Push All Batch] Paired SKU availability: ${availablePairedCount} available, ${unavailablePairedCount} unavailable (unpublished/out of stock), ${notInMappingCount} not in mapping`);
 
     // OPTIMIZATION 2 & 3: Process SKUs in parallel with increased concurrency
     const CONCURRENCY = 120; // Increased concurrency for faster pushes (rate limiting handled in urvannApi)
@@ -325,16 +358,25 @@ export async function POST(request: Request) {
         // IMPORTANT: Search through ALL pairs to find up to 6 available ones
         const pairs = skuPairingsMap.get(sku) || [];
         const pairingCandidates: string[] = [];
+        const filteredOutReasons: string[] = [];
+        
+        console.log(`[Push All Batch] [${sku}] Checking ${pairs.length} pairs from aggregation...`);
         
         for (const pair of pairs) {
           // Don't break early - search through ALL pairs to find available ones
           const pairedMapping = globalPairedMappingMap.get(pair.pairedSku);
-          if (pairedMapping && 
-              pairedMapping.publish === "1" && 
-              pairedMapping.inventory > 0) {
-            // avoid duplicates
+          
+          if (!pairedMapping) {
+            filteredOutReasons.push(`${pair.pairedSku} (not in mapping)`);
+          } else if (pairedMapping.publish !== "1") {
+            filteredOutReasons.push(`${pair.pairedSku} (unpublished: ${pairedMapping.publish})`);
+          } else if (pairedMapping.inventory <= 0) {
+            filteredOutReasons.push(`${pair.pairedSku} (out of stock: ${pairedMapping.inventory})`);
+          } else {
+            // Available!
             if (!pairingCandidates.includes(pair.pairedSku)) {
               pairingCandidates.push(pair.pairedSku);
+              console.log(`[Push All Batch] [${sku}] ✓ Added pairing: ${pair.pairedSku} (count: ${pair.count})`);
             }
           }
           
@@ -344,13 +386,21 @@ export async function POST(request: Request) {
         
         autoPairedSkus = pairingCandidates;
         
+        if (pairs.length > 0 && pairingCandidates.length === 0) {
+          // Log why all pairs were filtered out (sample first 5)
+          const sampleReasons = filteredOutReasons.slice(0, 5);
+          console.log(`[Push All Batch] [${sku}] ❌ All ${pairs.length} pairs filtered out. Sample reasons: ${sampleReasons.join('; ')}`);
+        }
+        
         if (pairingCandidates.length >= limit) {
           console.log(`[Push All Batch] ✓ ${sku}: Found ${pairingCandidates.length} available pairings (NO top sellers needed)`);
         } else if (pairingCandidates.length > 0) {
           const needed = limit - pairingCandidates.length;
           console.log(`[Push All Batch] ⚠ ${sku}: Only ${pairingCandidates.length} valid pairings, need ${needed} more from top sellers`);
+        } else if (pairs.length === 0) {
+          console.log(`[Push All Batch] ⚠ ${sku}: No pairs found in aggregation, will use top sellers`);
         } else {
-          console.log(`[Push All Batch] ⚠ ${sku}: No valid pairings found, will use top sellers`);
+          console.log(`[Push All Batch] ⚠ ${sku}: ${pairs.length} pairs found but all filtered out (unavailable), will use top sellers`);
         }
         
         // 2) If we need more SKUs, get top sellers by substore
