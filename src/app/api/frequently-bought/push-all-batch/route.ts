@@ -587,8 +587,20 @@ export async function POST(request: Request) {
               logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${autoPairedSkus.length} auto: ${autoPairedSkus.join(', ')} + ${manualCount} manual from ${skuHub || 'unknown'} hub: ${manualSkusList.join(', ')})`;
             }
           } else {
-            // Case 3 or no manual: Only auto-found
-            logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} auto-found product${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
+            // Case 3 or no manual: Only auto-found (could be pairings or top sellers)
+            if (topSellersAdded.length === 0 && availablePairingCount > 0) {
+              // All are actual pairings
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} pairing${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
+            } else if (availablePairingCount === 0 && topSellersAdded.length > 0) {
+              // All are top sellers (no pairings found or all filtered out)
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} top seller${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
+            } else if (availablePairingCount > 0 && topSellersAdded.length > 0) {
+              // Mix of pairings and top sellers
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${availablePairingCount} pairing${availablePairingCount > 1 ? 's' : ''}: ${pairingCandidates.join(', ')} + ${topSellersAdded.length} top seller${topSellersAdded.length > 1 ? 's' : ''}: ${topSellersAdded.join(', ')})`;
+            } else {
+              // Fallback (shouldn't happen)
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} product${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
+            }
           }
           
           return {
