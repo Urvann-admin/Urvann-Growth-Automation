@@ -156,6 +156,9 @@ export default function FrequentlyBoughtPage() {
   // Manual SKU dialog state (hub -> SKUs)
   const [manualSkuDialogOpen, setManualSkuDialogOpen] = useState(false);
   const [manualSkusByHub, setManualSkusByHub] = useState<Record<string, string[]>>({});
+  
+  // Flag to auto-open manual dialog after sync completes
+  const [shouldOpenManualDialogAfterSync, setShouldOpenManualDialogAfterSync] = useState(false);
 
   // Abort controller for cancelling previous requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -685,9 +688,23 @@ export default function FrequentlyBoughtPage() {
 
   // Handle push all updates with batch processing
   const handlePushAllUpdates = useCallback(() => {
-    // First show manual SKU dialog
-    setManualSkuDialogOpen(true);
-  }, []);
+    // If sync is already completed, open dialog immediately
+    if (syncProgress?.completed && !syncProgress.cancelled) {
+      setManualSkuDialogOpen(true);
+      return;
+    }
+    
+    // If sync is already running, just set flag to open dialog after sync completes
+    if (syncProgress?.show && !syncProgress.completed && !syncProgress.cancelled) {
+      setShouldOpenManualDialogAfterSync(true);
+      return;
+    }
+    
+    // If sync is not running, start sync first, then open dialog after completion
+    setShouldOpenManualDialogAfterSync(true);
+    // Start sync by opening confirmation dialog
+    setSyncConfirmOpen(true);
+  }, [syncProgress]);
 
   const handleManualSkusConfirm = useCallback((hubSkus: Record<string, string[]>) => {
     // Store hub-wise manual SKUs
@@ -985,6 +1002,18 @@ export default function FrequentlyBoughtPage() {
       syncTimerIntervalRef.current = null;
     }
   }, []);
+
+  // Auto-open manual dialog after sync completes (if flag is set)
+  useEffect(() => {
+    if (shouldOpenManualDialogAfterSync && syncProgress?.completed && !syncProgress.cancelled) {
+      // Sync completed successfully, open manual dialog
+      setShouldOpenManualDialogAfterSync(false);
+      setManualSkuDialogOpen(true);
+    } else if (shouldOpenManualDialogAfterSync && syncProgress?.cancelled) {
+      // Sync was cancelled, clear flag
+      setShouldOpenManualDialogAfterSync(false);
+    }
+  }, [shouldOpenManualDialogAfterSync, syncProgress]);
 
   // Handle push single SKU update
   const handlePushSingleUpdate = useCallback((sku: string) => {

@@ -21,7 +21,7 @@ export default function PushUpdatesBar({
             Push Updates to Urvann API
           </h3>
           <p className="text-xs text-indigo-600">
-            Sync SKU mappings first, then push frequently bought together data to products
+            "Push All Updates" will automatically sync mappings first, then push frequently bought together data
           </p>
         </div>
         <div className="flex items-center gap-3">
