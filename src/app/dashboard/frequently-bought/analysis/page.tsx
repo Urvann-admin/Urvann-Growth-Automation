@@ -771,7 +771,7 @@ export default function FrequentlyBoughtPage() {
           ? [`📝 Manual SKUs configured (hub-wise): ${totalManualSkus} SKU${totalManualSkus > 1 ? 's' : ''} (${hubSummary})`]
           : []
         ),
-        'Fetching mappings cache...'
+        'Mappings will be fetched fresh from database for each batch...'
       ];
       
       setPushProgress({
@@ -794,42 +794,7 @@ export default function FrequentlyBoughtPage() {
         return;
       }
 
-      // OPTIMIZATION 4: Pre-fetch all mappings once and reuse (with abort signal)
-      let allMappingsCache = null;
-      try {
-        const mappingsResponse = await fetch('/api/frequently-bought/all-mappings', {
-          signal: pushAbortControllerRef.current.signal,
-        });
-        
-        // Check if cancelled
-        if (pushAbortControllerRef.current.signal.aborted) {
-          setPushProgress(prev => prev ? { ...prev, cancelled: true, logs: [...prev.logs, 'Process cancelled by user'] } : null);
-          return;
-        }
-        
-        const mappingsData = await mappingsResponse.json();
-        
-        if (mappingsData.success && mappingsData.data) {
-          allMappingsCache = mappingsData.data;
-          setPushProgress(prev => prev ? { ...prev, logs: [...prev.logs, `✓ Loaded ${Object.keys(mappingsData.data).length.toLocaleString()} mappings cache`] } : null);
-        } else {
-          setPushProgress(prev => prev ? { ...prev, logs: [...prev.logs, '⚠ Failed to fetch mappings cache, will fetch per batch'] } : null);
-        }
-      } catch (error) {
-        // Don't show error if request was aborted
-        if (error instanceof Error && error.name === 'AbortError') {
-          setPushProgress(prev => prev ? { ...prev, cancelled: true, logs: [...prev.logs, 'Process cancelled by user'] } : null);
-          return;
-        }
-        console.error('Error fetching mappings cache:', error);
-        setPushProgress(prev => prev ? { ...prev, logs: [...prev.logs, '⚠ Failed to fetch mappings cache, will fetch per batch'] } : null);
-      }
-
-      // Check if cancelled after fetching mappings
-      if (pushAbortControllerRef.current.signal.aborted) {
-        setPushProgress(prev => prev ? { ...prev, cancelled: true, logs: [...prev.logs, 'Process cancelled by user'] } : null);
-        return;
-      }
+      // Mappings will be fetched fresh from database for each batch (no cache)
 
       // Update progress with actual data
       const batchLogMessage = totalManualSkus > 0
@@ -868,7 +833,7 @@ export default function FrequentlyBoughtPage() {
               allSkus,
               limit: 6,
               manualSkusByHub, // Pass hub-wise manual SKUs
-              allMappingsCache, // Pass mappings cache to avoid re-fetching
+              // Mappings will be fetched fresh from database (no cache)
             }),
             signal: pushAbortControllerRef.current.signal,
           });

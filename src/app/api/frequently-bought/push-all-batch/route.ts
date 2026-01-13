@@ -27,12 +27,13 @@ interface BatchProgress {
  * - allSkus: Array<{sku: string, name: string, substore?: string}>
  * - limit: number (default 6)
  * - manualSkusByHub: Record<string, string[]> (optional, hub -> SKUs mapping)
- * - allMappingsCache: Map<string, {product_id: string, publish: string, inventory: number, substore?: string}> (optional)
+ * 
+ * Note: Mappings are always fetched fresh from database (no cache) to ensure data accuracy
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { startIndex = 0, batchSize = 50, allSkus = [], limit = 6, manualSkusByHub = {} as Record<string, string[]>, allMappingsCache } = body;
+    const { startIndex = 0, batchSize = 50, allSkus = [], limit = 6, manualSkusByHub = {} as Record<string, string[]> } = body;
     
     // Log hub-wise manual SKUs received
     const totalManualSkus = (Object.values(manualSkusByHub) as string[][]).reduce((sum: number, skus: string[]) => sum + skus.length, 0);
@@ -60,36 +61,25 @@ export async function POST(request: Request) {
     const batchSkus = allSkus.slice(startIndex, endIndex);
     const batchSkuList = batchSkus.map((s: any) => s.sku);
     
-    // Build mappings map (use cache if provided, otherwise fetch)
+    // Build mappings map - ALWAYS fetch fresh from database (no cache)
     const skuToProductId = new Map<string, string>();
     const skuToMapping = new Map<string, { publish: string; inventory: number; substore?: string }>();
     
-    if (allMappingsCache && typeof allMappingsCache === 'object') {
-      // Use provided cache (convert from object to Map)
-      for (const [sku, mapping] of Object.entries(allMappingsCache)) {
-        skuToProductId.set(sku, (mapping as any).product_id);
-        skuToMapping.set(sku, {
-          publish: (mapping as any).publish || "0",
-          inventory: (mapping as any).inventory || 0,
-          substore: (mapping as any).substore || '',
-        });
-      }
-    } else {
-      // Fetch mappings only for batch SKUs (fallback if cache not provided)
-      const batchMappings = await mappingCollection.find(
-        { sku: { $in: batchSkuList } },
-        { projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
-      ).toArray();
+    // Always fetch fresh mappings from database for this batch
+    const batchMappings = await mappingCollection.find(
+      { sku: { $in: batchSkuList } },
+      { projection: { sku: 1, product_id: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
+    ).toArray();
 
-      for (const m of batchMappings) {
-        const sku = m.sku as string;
-        skuToProductId.set(sku, m.product_id as string);
-        skuToMapping.set(sku, {
-          publish: String(m.publish || "0").trim(),
-          inventory: Number(m.inventory || 0),
-          substore: (m.substore as string) || '',
-        });
-      }
+    for (const m of batchMappings) {
+      const sku = m.sku as string;
+      skuToProductId.set(sku, m.product_id as string);
+      const substores = Array.isArray(m.substore) ? m.substore : (m.substore ? [m.substore as string] : []);
+      skuToMapping.set(sku, {
+        publish: String(m.publish || "0").trim(),
+        inventory: Number(m.inventory || 0),
+        substore: substores.length > 0 ? substores[0] : '',
+      });
     }
 
     // Filter valid SKUs (published, in stock, and not in excluded substores)
