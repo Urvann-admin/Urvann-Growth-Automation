@@ -1,6 +1,13 @@
 /**
  * Orchestrator service for running the complete frequently bought together update process
- * Handles: Sync mappings → Fetch all SKUs → Push updates → Send email
+ * 
+ * Process order (CRITICAL - must follow this sequence):
+ * 1. Sync Mappings - Updates SKU to product_id mappings from Urvann API FIRST
+ * 2. Fetch All SKUs - Gets all SKUs from the updated mapping collection
+ * 3. Push Updates - Pushes frequently bought together data using the fresh mappings
+ * 4. Send Email - Sends notification with stats
+ * 
+ * IMPORTANT: Mappings MUST be synced before pushing updates to ensure accurate product IDs
  */
 
 import { syncMappings, SyncResult } from './frequentlyBoughtSyncService';
@@ -68,8 +75,11 @@ export async function runCompleteProcess(
 
     if (onProgress) onProgress('sync', `✓ Sync completed: ${syncResult.totalSynced.toLocaleString()} products`);
 
-    // Stage 2: Fetch All SKUs
-    if (onProgress) onProgress('fetch', 'Fetching all SKUs...');
+    // IMPORTANT: Wait a moment to ensure mappings are fully persisted
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Stage 2: Fetch All SKUs (using the freshly synced mappings)
+    if (onProgress) onProgress('fetch', 'Fetching all SKUs from updated mappings...');
     
     const allSkus = await fetchAllSkus();
     
@@ -79,10 +89,10 @@ export async function runCompleteProcess(
       return result;
     }
 
-    if (onProgress) onProgress('fetch', `✓ Found ${allSkus.length.toLocaleString()} SKUs`);
+    if (onProgress) onProgress('fetch', `✓ Found ${allSkus.length.toLocaleString()} SKUs from synced mappings`);
 
-    // Stage 3: Push Updates
-    if (onProgress) onProgress('push', 'Starting push updates...');
+    // Stage 3: Push Updates (using the freshly synced mappings)
+    if (onProgress) onProgress('push', 'Starting push updates (mappings already synced)...');
     
     const pushResult = await pushAllUpdates({
       allSkus,

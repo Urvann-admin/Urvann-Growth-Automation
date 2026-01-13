@@ -46,6 +46,7 @@ export function initializeCronJobs() {
       const now = new Date();
       console.log(`[Cron] ⏰ Scheduled job triggered at ${now.toISOString()}`);
       console.log(`[Cron] Starting frequently bought together update process...`);
+      console.log(`[Cron] Process order: 1) Sync Mappings → 2) Push Updates → 3) Send Email`);
 
       try {
         const result = await runCompleteProcess({
