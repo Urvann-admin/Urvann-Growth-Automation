@@ -493,7 +493,8 @@ export default function FrequentlyBoughtPage() {
       syncAbortControllerRef.current = new AbortController();
 
       // Process in batches using since_id pagination
-      const batchSize = 500;
+      // OPTIMIZATION: Increased batch size from 500 to 1000 for faster syncing
+      const batchSize = 1000;
       let sinceId = '0';
       let totalSynced = 0;
       let hasMore = true;
@@ -501,7 +502,7 @@ export default function FrequentlyBoughtPage() {
       let consecutiveEmpty = 0;
       let lastSinceId: string | null = null;
       const MAX_CONSECUTIVE_EMPTY = 5; // Increased to handle gaps in data
-      const MAX_BATCHES = 500; // 500 batches * 500 products = 250k products max (enough for 145k)
+      const MAX_BATCHES = 300; // 300 batches * 1000 products = 300k products max (enough for 145k)
       let batchCount = 0;
 
       while (hasMore && consecutiveEmpty < MAX_CONSECUTIVE_EMPTY && batchCount < MAX_BATCHES) {

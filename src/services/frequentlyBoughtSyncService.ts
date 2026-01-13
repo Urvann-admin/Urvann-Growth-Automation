@@ -40,7 +40,8 @@ export async function syncMappings(options: SyncOptions = {}): Promise<SyncResul
   };
 
   try {
-    const batchSize = 500;
+    // OPTIMIZATION: Increased batch size from 500 to 1000 for faster syncing
+    const batchSize = 1000;
     let sinceId = '0';
     let hasMore = true;
     let isFirstBatch = true;

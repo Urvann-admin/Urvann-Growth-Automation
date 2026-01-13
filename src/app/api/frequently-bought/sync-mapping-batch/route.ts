@@ -28,7 +28,8 @@ interface BatchProgress {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { sinceId = '0', batchSize = 500, isFirstBatch = false } = body;
+    // Increased batch size from 500 to 1000 for faster syncing
+    const { sinceId = '0', batchSize = 1000, isFirstBatch = false } = body;
 
     const progress: BatchProgress = {
       processed: 0,
@@ -84,7 +85,11 @@ export async function POST(request: Request) {
 
       if (docs.length > 0) {
         try {
-          await mappingCollection.insertMany(docs, { ordered: false });
+          // OPTIMIZATION: Use insertMany with ordered: false and writeConcern for better performance
+          await mappingCollection.insertMany(docs, { 
+            ordered: false, // Continue on errors
+            writeConcern: { w: 1 }, // Acknowledge after primary write (faster)
+          });
           progress.successes = products.length;
           progress.processed = products.length;
           progress.logs.push(`✓ Inserted ${products.length} products successfully`);

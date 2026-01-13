@@ -132,7 +132,7 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
  * Fetch products with since_id pagination to build SKU to product_id mapping
  * Fetches ALL products with publish and inventory fields
  */
-export async function fetchProductsForMapping(sinceId: string = '0', limit: number = 500): Promise<{
+export async function fetchProductsForMapping(sinceId: string = '0', limit: number = 1000): Promise<{
   products: { sku: string; product_id: string; price: number; publish: string; inventory: number; name: string; substore?: string[] }[];
   hasMore: boolean;
   lastId: string;
