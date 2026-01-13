@@ -657,13 +657,15 @@ export async function POST(request: Request) {
           
           if (result.success && result.finalValidSkus && result.productId) {
             // Add API call to queue
+            console.log(`[Push All Batch] 🚀 PUSHING SKU: ${result.sku} (product_id: ${result.productId}) with ${result.finalValidSkus.length} paired SKUs: [${result.finalValidSkus.join(', ')}]`);
+            
             apiCalls.push(
               updateProductFrequentlyBought(result.productId, result.finalValidSkus, { skipVerification: true })
                 .then((pushResult) => {
                   if (pushResult.success) {
                     progress.successes.push(result.sku);
                     progress.logs.push(result.log);
-                    console.log(`[Push All Batch] ✅ Pushed ${result.finalValidSkus!.length} SKUs for ${result.sku}`);
+                    console.log(`[Push All Batch] ✅ SUCCESS: ${result.sku} - Pushed ${result.finalValidSkus!.length} SKUs: [${result.finalValidSkus!.join(', ')}]`);
                   } else {
                     const errorMsg = pushResult.error || 'Unknown error';
                     progress.failures.push({
@@ -672,7 +674,7 @@ export async function POST(request: Request) {
                       error: errorMsg,
                     });
                     progress.logs.push(`✗ ${result.sku}: API error - ${errorMsg}`);
-                    console.error(`[Push All Batch] ❌ API error for ${result.sku}:`, errorMsg);
+                    console.error(`[Push All Batch] ❌ FAILED: ${result.sku} - API error: ${errorMsg}`);
                   }
                 })
                 .catch((error) => {
@@ -683,7 +685,7 @@ export async function POST(request: Request) {
                     error: errorMsg,
                   });
                   progress.logs.push(`✗ ${result.sku}: API error - ${errorMsg}`);
-                  console.error(`[Push All Batch] ❌ API error for ${result.sku}:`, errorMsg);
+                  console.error(`[Push All Batch] ❌ FAILED: ${result.sku} (product_id: ${result.productId}) - Error: ${errorMsg}`);
                 })
             );
           } else {
