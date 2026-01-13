@@ -3,21 +3,31 @@
  * Runs every Friday at 10 AM
  * 
  * Can be triggered by:
- * - Vercel Cron (if deployed on Vercel)
+ * - Linux cron (crontab) on EC2
  * - External cron service (cron-job.org, EasyCron, etc.)
  * - Manual trigger via GET request
+ * - node-cron (initialized automatically on server start)
  */
 
 import { NextResponse } from 'next/server';
 import { runCompleteProcess } from '@/services/frequentlyBoughtOrchestrator';
+import { initializeCronJobs } from '@/lib/cronService';
+
+// Initialize cron jobs on first API call (for EC2/node-cron setup)
+let cronInitialized = false;
+if (!cronInitialized && typeof window === 'undefined') {
+  initializeCronJobs();
+  cronInitialized = true;
+}
 
 /**
  * GET /api/cron/frequently-bought-update
  * 
  * This endpoint can be called by:
- * 1. Vercel Cron (configure in vercel.json)
+ * 1. Linux cron (crontab) on EC2
  * 2. External cron services
  * 3. Manual trigger for testing
+ * 4. node-cron (automatically scheduled on server start)
  * 
  * Security: Add authentication if needed
  */
