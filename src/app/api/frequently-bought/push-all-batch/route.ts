@@ -360,7 +360,7 @@ export async function POST(request: Request) {
         const pairingCandidates: string[] = [];
         const filteredOutReasons: string[] = [];
         
-        console.log(`[Push All Batch] [${sku}] Checking ${pairs.length} pairs from aggregation...`);
+        console.log(`[Push All Batch] SKU: ${sku} - Checking ${pairs.length} pairs from aggregation...`);
         
         for (const pair of pairs) {
           // Don't break early - search through ALL pairs to find available ones
@@ -376,7 +376,7 @@ export async function POST(request: Request) {
             // Available!
             if (!pairingCandidates.includes(pair.pairedSku)) {
               pairingCandidates.push(pair.pairedSku);
-              console.log(`[Push All Batch] [${sku}] ✓ Added pairing: ${pair.pairedSku} (count: ${pair.count})`);
+              console.log(`[Push All Batch] ✓ SKU: ${sku} - Added pairing: ${pair.pairedSku} (count: ${pair.count})`);
             }
           }
           
@@ -389,18 +389,18 @@ export async function POST(request: Request) {
         if (pairs.length > 0 && pairingCandidates.length === 0) {
           // Log why all pairs were filtered out (sample first 5)
           const sampleReasons = filteredOutReasons.slice(0, 5);
-          console.log(`[Push All Batch] [${sku}] ❌ All ${pairs.length} pairs filtered out. Sample reasons: ${sampleReasons.join('; ')}`);
+          console.log(`[Push All Batch] ❌ SKU: ${sku} - All ${pairs.length} pairs filtered out. Sample reasons: ${sampleReasons.join('; ')}`);
         }
         
         if (pairingCandidates.length >= limit) {
-          console.log(`[Push All Batch] ✓ ${sku}: Found ${pairingCandidates.length} available pairings (NO top sellers needed)`);
+          console.log(`[Push All Batch] ✓ SKU: ${sku} - Found ${pairingCandidates.length} available pairings (NO top sellers needed)`);
         } else if (pairingCandidates.length > 0) {
           const needed = limit - pairingCandidates.length;
-          console.log(`[Push All Batch] ⚠ ${sku}: Only ${pairingCandidates.length} valid pairings, need ${needed} more from top sellers`);
+          console.log(`[Push All Batch] ⚠ SKU: ${sku} - Only ${pairingCandidates.length} valid pairings, need ${needed} more from top sellers`);
         } else if (pairs.length === 0) {
-          console.log(`[Push All Batch] ⚠ ${sku}: No pairs found in aggregation, will use top sellers`);
+          console.log(`[Push All Batch] ⚠ SKU: ${sku} - No pairs found in aggregation, will use top sellers`);
         } else {
-          console.log(`[Push All Batch] ⚠ ${sku}: ${pairs.length} pairs found but all filtered out (unavailable), will use top sellers`);
+          console.log(`[Push All Batch] ⚠ SKU: ${sku} - ${pairs.length} pairs found but all filtered out (unavailable), will use top sellers`);
         }
         
         // 2) If we need more SKUs, get top sellers by substore
@@ -469,9 +469,9 @@ export async function POST(request: Request) {
               
               if (topSellerSkus.length > 0) {
                 autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
-                console.log(`[Push All Batch] ✓ ${sku}: Added ${topSellerSkus.length} top sellers to fill remaining slots`);
+                console.log(`[Push All Batch] ✓ SKU: ${sku} - Added ${topSellerSkus.length} top sellers to fill remaining slots: [${topSellerSkus.join(', ')}]`);
               } else {
-                console.log(`[Push All Batch] ⚠ ${sku}: No valid top sellers found to fill remaining slots`);
+                console.log(`[Push All Batch] ⚠ SKU: ${sku} - No valid top sellers found to fill remaining slots`);
               }
             }
           }
@@ -489,9 +489,9 @@ export async function POST(request: Request) {
           : [];
         
         if (skuHub && hubManualSkus.length > 0) {
-          console.log(`[Push All Batch] ${sku} (substore: ${skuSubstore}, hub: ${skuHub}): Using ${hubManualSkus.length} manual SKU(s) from ${skuHub} hub: ${hubManualSkus.join(', ')}`);
+          console.log(`[Push All Batch] SKU: ${sku} (substore: ${skuSubstore}, hub: ${skuHub}) - Using ${hubManualSkus.length} manual SKU(s) from ${skuHub} hub: [${hubManualSkus.join(', ')}]`);
         } else if (skuHub && Object.keys(manualSkusByHub).length > 0) {
-          console.log(`[Push All Batch] ${sku} (substore: ${skuSubstore}, hub: ${skuHub}): No manual SKUs configured for ${skuHub} hub`);
+          console.log(`[Push All Batch] SKU: ${sku} (substore: ${skuSubstore}, hub: ${skuHub}) - No manual SKUs configured for ${skuHub} hub`);
         }
 
         // Merge logic for manual SKUs + auto-found SKUs
@@ -519,7 +519,7 @@ export async function POST(request: Request) {
             }
             
             if (invalidManualSkus.length > 0) {
-              console.log(`[Push All Batch] ${sku}: Manual SKUs rejected - ${invalidManualSkus.join(', ')}`);
+              console.log(`[Push All Batch] SKU: ${sku} - Manual SKUs rejected: ${invalidManualSkus.join(', ')}`);
             }
           } else if (autoPairedSkus.length >= limit) {
             // Case 3: Found 6+ auto SKUs, use only auto-found ones
@@ -657,7 +657,7 @@ export async function POST(request: Request) {
           
           if (result.success && result.finalValidSkus && result.productId) {
             // Add API call to queue
-            console.log(`[Push All Batch] 🚀 PUSHING SKU: ${result.sku} (product_id: ${result.productId}) with ${result.finalValidSkus.length} paired SKUs: [${result.finalValidSkus.join(', ')}]`);
+            console.log(`[Push All Batch] 🚀 PUSHING SKU: ${result.sku} | product_id: ${result.productId} | paired SKUs (${result.finalValidSkus.length}): [${result.finalValidSkus.join(', ')}]`);
             
             apiCalls.push(
               updateProductFrequentlyBought(result.productId, result.finalValidSkus, { skipVerification: true })
@@ -665,7 +665,7 @@ export async function POST(request: Request) {
                   if (pushResult.success) {
                     progress.successes.push(result.sku);
                     progress.logs.push(result.log);
-                    console.log(`[Push All Batch] ✅ SUCCESS: ${result.sku} - Pushed ${result.finalValidSkus!.length} SKUs: [${result.finalValidSkus!.join(', ')}]`);
+                    console.log(`[Push All Batch] ✅ SUCCESS - SKU: ${result.sku} | Pushed ${result.finalValidSkus!.length} paired SKUs: [${result.finalValidSkus!.join(', ')}]`);
                   } else {
                     const errorMsg = pushResult.error || 'Unknown error';
                     progress.failures.push({
@@ -674,7 +674,7 @@ export async function POST(request: Request) {
                       error: errorMsg,
                     });
                     progress.logs.push(`✗ ${result.sku}: API error - ${errorMsg}`);
-                    console.error(`[Push All Batch] ❌ FAILED: ${result.sku} - API error: ${errorMsg}`);
+                    console.error(`[Push All Batch] ❌ FAILED - SKU: ${result.sku} | product_id: ${result.productId} | Error: ${errorMsg}`);
                   }
                 })
                 .catch((error) => {
@@ -685,7 +685,7 @@ export async function POST(request: Request) {
                     error: errorMsg,
                   });
                   progress.logs.push(`✗ ${result.sku}: API error - ${errorMsg}`);
-                  console.error(`[Push All Batch] ❌ FAILED: ${result.sku} (product_id: ${result.productId}) - Error: ${errorMsg}`);
+                  console.error(`[Push All Batch] ❌ FAILED - SKU: ${result.sku} | product_id: ${result.productId} | Error: ${errorMsg}`);
                 })
             );
           } else {
