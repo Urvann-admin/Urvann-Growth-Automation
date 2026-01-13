@@ -559,11 +559,11 @@ export async function POST(request: Request) {
               logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} manual SKU${finalValidSkus.length > 1 ? 's' : ''} from ${skuHub || 'unknown'} hub (${manualSkusList.join(', ')})`;
             } else {
               // Case 2: Mixed auto + manual
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${autoPairedSkus.length} auto + ${manualCount} manual from ${skuHub || 'unknown'} hub: ${manualSkusList.join(', ')})`;
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${autoPairedSkus.length} auto: ${autoPairedSkus.join(', ')} + ${manualCount} manual from ${skuHub || 'unknown'} hub: ${manualSkusList.join(', ')})`;
             }
           } else {
             // Case 3 or no manual: Only auto-found
-            logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} auto-found product${finalValidSkus.length > 1 ? 's' : ''}`;
+            logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} auto-found product${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
           }
           
           return {
