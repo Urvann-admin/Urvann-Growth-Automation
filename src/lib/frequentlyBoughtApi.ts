@@ -44,6 +44,20 @@ export async function fetchUniqueSkus(): Promise<SkusApiResponse> {
 }
 
 /**
+ * Fetch ALL unique SKUs from mapping collection (published & in stock)
+ * This returns ALL SKUs, not just those with transaction history
+ */
+export async function fetchAllUniqueSkus(): Promise<SkusApiResponse> {
+  try {
+    const response = await fetch(`${API_BASE}/all-unique-skus`);
+    return await response.json();
+  } catch (err) {
+    console.error('Error fetching all unique SKUs:', err);
+    return { success: false, message: 'Failed to fetch all unique SKUs' };
+  }
+}
+
+/**
  * Fetch top SKUs by transaction count with substore filter and pagination
  */
 export async function fetchTopSkus(options?: {

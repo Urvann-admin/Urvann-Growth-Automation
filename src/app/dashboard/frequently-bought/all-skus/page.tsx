@@ -8,6 +8,7 @@ import { MultiValue } from 'react-select';
 import {
   fetchSubstores as fetchSubstoresApi,
   fetchUniqueSkus as fetchUniqueSkusApi,
+  fetchAllUniqueSkus as fetchAllUniqueSkusApi,
   fetchTopSkus as fetchTopSkusApi,
   fetchAllSkusForExport,
 } from '@/lib/frequentlyBoughtApi';
@@ -29,7 +30,8 @@ export default function AllSkusPage() {
   const [loading, setLoading] = useState(true);
   const [loadingAllSkus, setLoadingAllSkus] = useState(false);
   const [uniqueSkusCount, setUniqueSkusCount] = useState(0);
-  const [topSkus, setTopSkus] = useState<UniqueSku[]>([]);
+  const [allSkusData, setAllSkusData] = useState<UniqueSku[]>([]); // Store ALL SKUs
+  const [topSkus, setTopSkus] = useState<UniqueSku[]>([]); // Display filtered/paginated SKUs
   const [substores, setSubstores] = useState<SubstoreOption[]>([]);
   const [selectedSubstores, setSelectedSubstores] = useState<SubstoreOption[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -71,60 +73,72 @@ export default function AllSkusPage() {
     return substoreValues;
   }, [selectedSubstores]);
 
-  // Fetch top SKUs for display with pagination and filters
-  const loadTopSkus = useCallback(async (page = 1, substoreFilter: string[] = [], search = '') => {
+  // Load ALL SKUs once, then filter/paginate on client side
+  const loadAllSkusData = useCallback(async () => {
     setLoadingAllSkus(true);
     try {
-      // Use provided substores (already converted from hubs) or convert selected hubs to substores
-      const substores = substoreFilter.length > 0 
-        ? substoreFilter 
-        : (() => {
-            const selectedHubs = selectedSubstores.map(s => s.value);
-            const substoreValues: string[] = [];
-            selectedHubs.forEach(hub => {
-              const hubSubstores = getSubstoresByHub(hub);
-              substoreValues.push(...hubSubstores);
-            });
-            return substoreValues;
-          })();
-      
-      const result = await fetchTopSkusApi({
-        substores: substores.length > 0 ? substores : undefined,
-        page,
-        pageSize: 10,
-      });
-      
-      // Apply client-side search filter if search term is provided
+      const result = await fetchAllUniqueSkusApi();
       if (result.success && result.data) {
-        let filteredData = result.data;
-        
-        if (search && search.trim() !== '') {
-          const searchLower = search.toLowerCase().trim();
-          filteredData = result.data.filter(sku => 
-            sku.sku.toLowerCase().includes(searchLower) ||
-            (sku.name && sku.name.toLowerCase().includes(searchLower))
-          );
-        }
-        
-        setTopSkus(filteredData);
-        
-        // Update pagination - if searching, use filtered count, otherwise use API total
-        if (result.total !== undefined && result.totalPages !== undefined) {
-          const total = search ? filteredData.length : result.total;
-          setAllSkusPagination({
-            page: result.page || page,
-            pageSize: result.pageSize || 10,
-            total,
-            totalPages: search ? Math.ceil(filteredData.length / 10) : result.totalPages,
-          });
-        }
+        setAllSkusData(result.data);
+        // Initial display: first page
+        filterAndPaginateSkus(result.data, 1, [], '');
       }
     } catch (error) {
-      console.error('Error loading top SKUs:', error);
+      console.error('Error loading all SKUs:', error);
     } finally {
       setLoadingAllSkus(false);
     }
-  }, [selectedSubstores]);
+  }, []);
+
+  // Client-side filtering and pagination
+  const filterAndPaginateSkus = useCallback((
+    data: UniqueSku[], 
+    page: number, 
+    substoreFilter: string[], 
+    search: string
+  ) => {
+    let filteredData = [...data];
+
+    // 1. Filter by substores (hubs)
+    if (substoreFilter.length > 0) {
+      filteredData = filteredData.filter(sku => {
+        const skuSubstores = Array.isArray(sku.substore) 
+          ? sku.substore 
+          : (sku.substore ? [sku.substore] : []);
+        return skuSubstores.some(sub => substoreFilter.includes(sub));
+      });
+    }
+
+    // 2. Filter by search term
+    if (search && search.trim() !== '') {
+      const searchLower = search.toLowerCase().trim();
+      filteredData = filteredData.filter(sku => 
+        sku.sku.toLowerCase().includes(searchLower) ||
+        (sku.name && sku.name.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // 3. Paginate
+    const pageSize = 10;
+    const total = filteredData.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedData = filteredData.slice(startIndex, endIndex);
+
+    setTopSkus(paginatedData);
+    setAllSkusPagination({
+      page,
+      pageSize,
+      total,
+      totalPages,
+    });
+  }, []);
+
+  // Wrapper for filtering/pagination with current state
+  const loadTopSkus = useCallback((page = 1, substoreFilter: string[] = [], search = '') => {
+    filterAndPaginateSkus(allSkusData, page, substoreFilter, search);
+  }, [allSkusData, filterAndPaginateSkus]);
 
   // Auth check and initial data fetch
   useEffect(() => {
@@ -140,9 +154,9 @@ export default function AllSkusPage() {
     }
     loadSubstores();
     loadUniqueSkus();
-    loadTopSkus(1, [], ''); // Load first page
+    loadAllSkusData(); // Load ALL SKUs at once
     setLoading(false);
-  }, [user, authLoading, router, loadSubstores, loadUniqueSkus, loadTopSkus]);
+  }, [user, authLoading, router, loadSubstores, loadUniqueSkus, loadAllSkusData]);
 
   // Handlers
   const handleSearch = useCallback(() => {
