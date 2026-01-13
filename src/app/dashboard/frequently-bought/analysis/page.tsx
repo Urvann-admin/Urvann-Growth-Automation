@@ -813,8 +813,8 @@ export default function FrequentlyBoughtPage() {
         setPushProgress(prev => prev ? { ...prev, elapsedTime: Math.floor((Date.now() - startTime) / 1000) } : null);
       }, 1000);
 
-      // OPTIMIZATION 3: Process in larger batches
-      const batchSize = 50; // Increased from 10 to 50
+      // OPTIMIZATION 3: Process in larger batches for faster processing
+      const batchSize = 200; // Increased from 50 to 200 for 4x speed improvement
       let currentIndex = 0;
 
       while (currentIndex < totalSkus) {

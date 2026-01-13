@@ -33,7 +33,8 @@ interface BatchProgress {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { startIndex = 0, batchSize = 50, allSkus = [], limit = 6, manualSkusByHub = {} as Record<string, string[]> } = body;
+    // OPTIMIZATION: Increased default batch size from 50 to 200 for faster processing
+    const { startIndex = 0, batchSize = 200, allSkus = [], limit = 6, manualSkusByHub = {} as Record<string, string[]> } = body;
     
     // Log hub-wise manual SKUs received
     const totalManualSkus = (Object.values(manualSkusByHub) as string[][]).reduce((sum: number, skus: string[]) => sum + skus.length, 0);
