@@ -4,20 +4,27 @@ const BASE_URL = 'https://www.urvann.com';
 const SYNC_BASE_URL = 'https://urvann.storehippo.com'; // Use storehippo.com for sync mapping
 const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
 
-// Rate limiting configuration - OPTIMIZED for maximum speed
-// OPTIMIZATION 1 & 2: Removed artificial delay, increased concurrency to 100
-const MAX_CONCURRENT_REQUESTS = 100; // Increased from 50 to 100 for maximum speed
-const MAX_RETRIES = 5; // allow a few more retries to ride out 429s
-const RETRY_DELAY = 800; // base delay for backoff (will jitter)
+// Rate limiting configuration - Adaptive to handle 429 errors
+const INITIAL_MAX_CONCURRENT_REQUESTS = 50; // Start with 50, reduce if we hit rate limits
+const MIN_CONCURRENT_REQUESTS = 10; // Minimum concurrency when heavily rate limited
+const MAX_RETRIES = 8; // More retries to handle persistent 429s
+const RETRY_DELAY = 1000; // Base delay for backoff (increased from 800ms)
+const MAX_RETRY_DELAY = 30000; // Maximum 30 seconds delay
 
-// Semaphore-based rate limiting for concurrent requests (NO artificial delay)
+// Adaptive rate limiting - reduces concurrency when we hit 429 errors
+let currentMaxConcurrency = INITIAL_MAX_CONCURRENT_REQUESTS;
+let rateLimitHits = 0;
+let lastRateLimitTime = 0;
+const RATE_LIMIT_WINDOW = 60000; // 1 minute window to track rate limits
+
+// Semaphore-based rate limiting for concurrent requests
 let activeRequests = 0;
 const requestQueue: Array<() => void> = [];
 
-// OPTIMIZATION 1: Removed 10ms delay - concurrency limit alone is sufficient for maximum speed
+// Adaptive rate limiting - adjusts concurrency based on rate limit hits
 async function rateLimitDelay(): Promise<() => void> {
   // Wait for available slot if at max concurrency
-  if (activeRequests >= MAX_CONCURRENT_REQUESTS) {
+  if (activeRequests >= currentMaxConcurrency) {
     await new Promise<void>(resolve => {
       requestQueue.push(resolve);
     });
@@ -25,8 +32,16 @@ async function rateLimitDelay(): Promise<() => void> {
   
   activeRequests++;
   
-  // NO DELAY - Concurrency limit alone prevents overwhelming the API
-  // This allows maximum throughput while respecting concurrency limits
+  // Gradually increase concurrency if we haven't hit rate limits recently
+  const timeSinceLastRateLimit = Date.now() - lastRateLimitTime;
+  if (timeSinceLastRateLimit > RATE_LIMIT_WINDOW && currentMaxConcurrency < INITIAL_MAX_CONCURRENT_REQUESTS) {
+    // Gradually increase back to initial concurrency
+    currentMaxConcurrency = Math.min(
+      INITIAL_MAX_CONCURRENT_REQUESTS,
+      currentMaxConcurrency + 5
+    );
+    rateLimitHits = 0; // Reset counter
+  }
   
   // Return release function
   return () => {
@@ -36,7 +51,22 @@ async function rateLimitDelay(): Promise<() => void> {
   };
 }
 
-// Utility function to make API request with retry logic
+// Reduce concurrency when we hit rate limits
+function handleRateLimit() {
+  rateLimitHits++;
+  lastRateLimitTime = Date.now();
+  
+  // Reduce concurrency more aggressively with more rate limit hits
+  const reductionFactor = Math.min(rateLimitHits, 5); // Cap at 5x reduction
+  currentMaxConcurrency = Math.max(
+    MIN_CONCURRENT_REQUESTS,
+    Math.floor(INITIAL_MAX_CONCURRENT_REQUESTS / (1 + reductionFactor * 0.5))
+  );
+  
+  console.log(`[Rate Limit] Reducing concurrency to ${currentMaxConcurrency} (rate limit hits: ${rateLimitHits})`);
+}
+
+// Utility function to make API request with retry logic and adaptive rate limiting
 async function makeApiRequest(url: string, options: RequestInit, retryCount = 0): Promise<Response> {
   const release = await rateLimitDelay();
   
@@ -48,19 +78,35 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
         'Content-Type': 'application/json',
         ...options.headers,
       },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(20000), // Increased timeout to 20s
     });
     
     release(); // Release slot immediately after request completes
     
-    // Exponential backoff for rate limiting and transient failures (429/503)
+    // Handle rate limiting with adaptive backoff
     if ((response.status === 429 || response.status === 503) && retryCount < MAX_RETRIES) {
-      // Respect Retry-After header if present
+      // Reduce concurrency when we hit rate limits
+      if (response.status === 429) {
+        handleRateLimit();
+      }
+      
+      // Respect Retry-After header if present, otherwise use exponential backoff
       const retryAfterHeader = response.headers.get('retry-after');
-      const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : null;
-      const jitter = Math.floor(Math.random() * 200); // small jitter to avoid thundering herd
-      const backoffDelay = retryAfterMs ?? (RETRY_DELAY * Math.pow(2, retryCount) + jitter);
-      console.log(`Rate limited (${response.status}). Retrying in ${backoffDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      let backoffDelay: number;
+      
+      if (retryAfterHeader) {
+        // Use Retry-After header value (in seconds), convert to ms, add jitter
+        const retryAfterSeconds = Number(retryAfterHeader);
+        const jitter = Math.floor(Math.random() * 1000); // 0-1s jitter
+        backoffDelay = Math.min(retryAfterSeconds * 1000 + jitter, MAX_RETRY_DELAY);
+      } else {
+        // Exponential backoff with jitter, capped at MAX_RETRY_DELAY
+        const exponentialDelay = RETRY_DELAY * Math.pow(2, retryCount);
+        const jitter = Math.floor(Math.random() * 1000); // 0-1s jitter
+        backoffDelay = Math.min(exponentialDelay + jitter, MAX_RETRY_DELAY);
+      }
+      
+      console.log(`[Rate Limit] HTTP ${response.status} - Retrying in ${Math.round(backoffDelay)}ms... (attempt ${retryCount + 1}/${MAX_RETRIES}, concurrency: ${currentMaxConcurrency})`);
       await new Promise(resolve => setTimeout(resolve, backoffDelay));
       return makeApiRequest(url, options, retryCount + 1);
     }
@@ -69,8 +115,12 @@ async function makeApiRequest(url: string, options: RequestInit, retryCount = 0)
   } catch (error) {
     release(); // Release slot on error
     if (retryCount < MAX_RETRIES) {
-      const backoffDelay = RETRY_DELAY * Math.pow(2, retryCount);
-      console.log(`Request failed. Retrying in ${backoffDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      // Network errors - use exponential backoff
+      const backoffDelay = Math.min(
+        RETRY_DELAY * Math.pow(2, retryCount),
+        MAX_RETRY_DELAY
+      );
+      console.log(`[Network Error] Retrying in ${backoffDelay}ms... (attempt ${retryCount + 1}/${MAX_RETRIES})`);
       await new Promise(resolve => setTimeout(resolve, backoffDelay));
       return makeApiRequest(url, options, retryCount + 1);
     }
