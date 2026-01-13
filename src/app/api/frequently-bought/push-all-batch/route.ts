@@ -347,6 +347,7 @@ export async function POST(request: Request) {
       try {
         // Priority: first use pairings; if none, fall back to top sellers by substore
         let autoPairedSkus: string[] = [];
+        let topSellersAdded: string[] = []; // Track top sellers separately
         
         // Get SKU substores for hub mapping (needed later)
         const skuMappingForSubstores = skuToMapping.get(sku);
@@ -360,7 +361,10 @@ export async function POST(request: Request) {
         const pairingCandidates: string[] = [];
         const filteredOutReasons: string[] = [];
         
-        console.log(`[Push All Batch] SKU: ${sku} - Checking ${pairs.length} pairs from aggregation...`);
+        console.log(`[Push All Batch] SKU: ${sku} - Checking ${pairs.length} pairs from aggregation (substores: ${skuSubstores.join(', ') || 'none'})...`);
+        if (pairs.length > 0) {
+          console.log(`[Push All Batch] SKU: ${sku} - Top 5 pairs found: ${pairs.slice(0, 5).map(p => `${p.pairedSku}(${p.count}x)`).join(', ')}`);
+        }
         
         for (const pair of pairs) {
           // Don't break early - search through ALL pairs to find available ones
@@ -405,6 +409,8 @@ export async function POST(request: Request) {
         
         // 2) If we need more SKUs, get top sellers by substore
         if (autoPairedSkus.length < limit) {
+          const needed = limit - autoPairedSkus.length;
+          console.log(`[Push All Batch] SKU: ${sku} - Need ${needed} more SKUs, fetching top sellers from substore(s): ${skuSubstores.join(', ') || 'none'}`);
           
           if (skuSubstores.length > 0) {
             const matchConditions: any = { 
@@ -469,6 +475,7 @@ export async function POST(request: Request) {
               
               if (topSellerSkus.length > 0) {
                 autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
+                topSellersAdded = [...topSellersAdded, ...topSellerSkus];
                 console.log(`[Push All Batch] ✓ SKU: ${sku} - Added ${topSellerSkus.length} top sellers to fill remaining slots: [${topSellerSkus.join(', ')}]`);
               } else {
                 console.log(`[Push All Batch] ⚠ SKU: ${sku} - No valid top sellers found to fill remaining slots`);
@@ -549,6 +556,24 @@ export async function POST(request: Request) {
 
         if (finalValidSkus.length > 0) {
           const manualCount = hubManualSkus.length > 0 ? finalValidSkus.length - autoPairedSkus.length : 0;
+          
+          // Determine source breakdown: how many from pairings vs top sellers
+          const pairsFromAggregation = skuPairingsMap.get(sku) || [];
+          const pairingCount = pairsFromAggregation.length;
+          const availablePairingCount = pairingCandidates.length;
+          const topSellerCount = topSellersAdded.length;
+          
+          // Log summary of what was used
+          if (pairingCount === 0) {
+            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: No pairings found in aggregation → Using ${topSellerCount} top sellers from substore(s): ${skuSubstores.join(', ')}`);
+          } else if (availablePairingCount === 0) {
+            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: Found ${pairingCount} pairings but all filtered out (unavailable) → Using ${topSellerCount} top sellers from substore(s): ${skuSubstores.join(', ')}`);
+          } else if (topSellerCount > 0) {
+            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: Using ${availablePairingCount} pairings [${pairingCandidates.join(', ')}] + ${topSellerCount} top sellers [${topSellersAdded.join(', ')}] from substore(s): ${skuSubstores.join(', ')}`);
+          } else {
+            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: Using ${availablePairingCount} pairings [${pairingCandidates.join(', ')}] (NO top sellers needed)`);
+          }
+          
           let logMsg: string;
           
           if (manualCount > 0) {
