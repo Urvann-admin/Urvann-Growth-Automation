@@ -407,15 +407,19 @@ export async function POST(request: Request) {
           console.log(`[Push All Batch] ⚠ SKU: ${sku} - ${pairs.length} pairs found but all filtered out (unavailable), will use top sellers`);
         }
         
-        // 2) If we need more SKUs, get top sellers by substore
+        // 2) If we need more SKUs, get top sellers by substore (EXCLUDING current SKU and already paired SKUs)
         if (autoPairedSkus.length < limit) {
           const needed = limit - autoPairedSkus.length;
           console.log(`[Push All Batch] SKU: ${sku} - Need ${needed} more SKUs, fetching top sellers from substore(s): ${skuSubstores.join(', ') || 'none'}`);
           
           if (skuSubstores.length > 0) {
+            // Get top sellers EXCLUDING current SKU and all batch SKUs to avoid duplication
+            const skusToExclude = [sku, ...validSkuList];
+            
             const matchConditions: any = { 
               channel: { $ne: 'admin' },
               'items.price': { $ne: 1 },
+              'items.sku': { $nin: skusToExclude }, // IMPORTANT: Exclude current SKU and all batch SKUs
               substore: { $nin: ['hubchange', 'test4'] },
             };
             
@@ -423,10 +427,15 @@ export async function POST(request: Request) {
               ? skuSubstores[0]
               : { $in: skuSubstores };
             
+            console.log(`[Push All Batch] SKU: ${sku} - Excluding ${skusToExclude.length} SKUs from top sellers: [${skusToExclude.slice(0, 5).join(', ')}${skusToExclude.length > 5 ? '...' : ''}]`);
+            
             const topSkusByCount = await frequentlyBoughtCollection.aggregate([
               { $match: matchConditions },
               { $unwind: '$items' },
-              { $match: { 'items.price': { $ne: 1 } } },
+              { $match: { 
+                'items.price': { $ne: 1 },
+                'items.sku': { $nin: skusToExclude } // Double check at item level
+              } },
               {
                 $group: {
                   _id: '$items.sku',
@@ -441,10 +450,12 @@ export async function POST(request: Request) {
                 },
               },
               { $sort: { orderCount: -1 } },
-              { $limit: limit * 2 },
+              { $limit: limit * 3 }, // Get more candidates to ensure diversity
             ]).toArray();
             
-            const candidateSkus = topSkusByCount.map((item: any) => item.sku).filter((s: string) => s !== sku);
+            console.log(`[Push All Batch] SKU: ${sku} - Top sellers aggregation returned ${topSkusByCount.length} candidates`);
+            
+            const candidateSkus = topSkusByCount.map((item: any) => item.sku).filter((s: string) => s !== sku && !validSkuList.includes(s));
             if (candidateSkus.length > 0) {
               const topSkuMappings = await mappingCollection.find(
                 { sku: { $in: candidateSkus }, substore: { $nin: ['hubchange', 'test4'] } },
