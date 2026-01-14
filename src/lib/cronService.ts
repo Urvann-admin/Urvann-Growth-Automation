@@ -3,19 +3,36 @@
  * This initializes cron jobs when the server starts
  */
 
-import cron from 'node-cron';
-import { runCompleteProcess } from '@/services/frequentlyBoughtOrchestrator';
+// Lazy import to avoid client-side bundling issues
+let cron: typeof import('node-cron') | null = null;
+let cronJob: any = null;
 
-let cronJob: cron.ScheduledTask | null = null;
+async function getCron() {
+  if (typeof window !== 'undefined') {
+    return null; // Don't import on client side
+  }
+  if (!cron) {
+    cron = await import('node-cron');
+  }
+  return cron;
+}
+
+import { runCompleteProcess } from '@/services/frequentlyBoughtOrchestrator';
 
 /**
  * Initialize cron jobs
  * Call this when the server starts
  */
-export function initializeCronJobs() {
+export async function initializeCronJobs() {
   // Only run on server side
   if (typeof window !== 'undefined') {
     return;
+  }
+
+  // Lazy load node-cron only on server
+  const cronModule = await getCron();
+  if (!cronModule) {
+    return; // Client side or import failed
   }
 
   // Check if cron is enabled
@@ -40,7 +57,7 @@ export function initializeCronJobs() {
   }
 
   // Create new cron job
-  cronJob = cron.schedule(
+  cronJob = cronModule.default.schedule(
     schedule,
     async () => {
       const now = new Date();

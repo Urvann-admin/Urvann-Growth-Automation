@@ -14,10 +14,20 @@ import { runCompleteProcess } from '@/services/frequentlyBoughtOrchestrator';
 import { initializeCronJobs } from '@/lib/cronService';
 
 // Initialize cron jobs on first API call (for EC2/node-cron setup)
+// Use lazy initialization to avoid client-side bundling issues
 let cronInitialized = false;
-if (!cronInitialized && typeof window === 'undefined') {
-  initializeCronJobs();
-  cronInitialized = true;
+let cronInitPromise: Promise<void> | null = null;
+
+async function ensureCronInitialized() {
+  if (cronInitialized || typeof window !== 'undefined') {
+    return;
+  }
+  if (!cronInitPromise) {
+    cronInitPromise = initializeCronJobs().then(() => {
+      cronInitialized = true;
+    });
+  }
+  return cronInitPromise;
 }
 
 /**
@@ -33,6 +43,9 @@ if (!cronInitialized && typeof window === 'undefined') {
  */
 export async function GET(request: Request) {
   try {
+    // Initialize cron jobs on first call (lazy initialization)
+    await ensureCronInitialized();
+    
     // Optional: Add authentication/authorization
     const authHeader = request.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
