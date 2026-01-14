@@ -57,7 +57,7 @@ export async function initializeCronJobs() {
   }
 
   // Create new cron job
-  cronJob = cronModule.default.schedule(
+  cronJob = cronModule.schedule(
     schedule,
     async () => {
       const now = new Date();
