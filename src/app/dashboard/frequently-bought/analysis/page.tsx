@@ -880,9 +880,15 @@ export default function FrequentlyBoughtPage() {
             console.log('Push cancelled');
             break;
           } else {
-            // Other errors
+            // Other errors - provide more details
+            const errorMessage = fetchError instanceof Error 
+              ? `${fetchError.name}: ${fetchError.message}` 
+              : String(fetchError);
             console.error('Push error:', fetchError);
-            setPushProgress(prev => prev ? { ...prev, logs: [...prev.logs, `Error: ${fetchError}`] } : null);
+            setPushProgress(prev => prev ? { 
+              ...prev, 
+              logs: [...prev.logs, `Error: ${errorMessage}. Check server logs and ensure API route is available.`] 
+            } : null);
             break;
           }
         }

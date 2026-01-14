@@ -66,7 +66,16 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
 async function sendEmailViaSMTP(options: EmailOptions): Promise<EmailResult> {
   try {
     // Dynamic import to avoid requiring nodemailer if not needed
-    const nodemailer = await import('nodemailer');
+    let nodemailer: any;
+    try {
+      nodemailer = await import('nodemailer');
+    } catch (importError) {
+      console.error('[Email] nodemailer package not installed. Run: npm install nodemailer');
+      return {
+        success: false,
+        error: 'nodemailer package not installed. Please install it: npm install nodemailer',
+      };
+    }
 
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',

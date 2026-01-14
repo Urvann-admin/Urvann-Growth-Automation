@@ -1,7 +1,14 @@
 /**
  * Cron service for EC2 - runs scheduled tasks
  * This initializes cron jobs when the server starts
+ * 
+ * SERVER-ONLY: This module should never be imported on the client side
  */
+
+// Mark as server-only to prevent client bundling
+if (typeof window !== 'undefined') {
+  throw new Error('cronService can only be used on the server side');
+}
 
 // Lazy import to avoid client-side bundling issues
 let cron: typeof import('node-cron') | null = null;
@@ -12,7 +19,12 @@ async function getCron() {
     return null; // Don't import on client side
   }
   if (!cron) {
-    cron = await import('node-cron');
+    try {
+      cron = await import('node-cron');
+    } catch (error) {
+      console.error('[Cron] Failed to import node-cron:', error);
+      return null;
+    }
   }
   return cron;
 }
@@ -32,6 +44,7 @@ export async function initializeCronJobs() {
   // Lazy load node-cron only on server
   const cronModule = await getCron();
   if (!cronModule) {
+    console.warn('[Cron] node-cron not available. Install with: npm install node-cron');
     return; // Client side or import failed
   }
 
