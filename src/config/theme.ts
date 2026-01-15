@@ -4,7 +4,7 @@
  * Theme will be applied to login page and dashboard pages only
  */
 export const THEME_CONFIG = {
-  ENABLE_CHRISTMAS_THEME: true, // Set to false to disable Christmas theme
+  ENABLE_CHRISTMAS_THEME: false, // Set to false to disable Christmas theme
 } as const;
 
 export const CHRISTMAS_COLORS = {
