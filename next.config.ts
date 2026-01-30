@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Standalone output: creates .next/standalone/ with minimal files.
+  // Run with: node .next/standalone/server.js (copy public + .next/static in first).
+  // Helps avoid issues if something on the server removes .next — you can run from standalone.
+  output: "standalone",
   // Compiler optimizations
   compiler: {
     removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
