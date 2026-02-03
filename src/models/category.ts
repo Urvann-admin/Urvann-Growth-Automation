@@ -25,11 +25,11 @@ export class CategoryModel {
   static async findById(id: string | ObjectId) {
     const collection = await getCollection('categoryList');
     // Try to convert string to ObjectId if it's a valid ObjectId string
-    let queryId: string | ObjectId = id;
+    let queryId: ObjectId | string = id;
     if (typeof id === 'string' && ObjectId.isValid(id)) {
       queryId = new ObjectId(id);
     }
-    return collection.findOne({ _id: queryId });
+    return collection.findOne({ _id: queryId as any });
   }
 
   static async create(categoryData: Omit<Category, 'createdAt' | 'updatedAt'>) {
@@ -69,11 +69,11 @@ export class CategoryModel {
 
   static async delete(id: string | ObjectId) {
     const collection = await getCollection('categoryList');
-    let queryId: string | ObjectId = id;
+    let queryId: ObjectId | string = id;
     if (typeof id === 'string' && ObjectId.isValid(id)) {
       queryId = new ObjectId(id);
     }
-    return collection.deleteOne({ _id: queryId });
+    return collection.deleteOne({ _id: queryId as any });
   }
 
   static async findByCategory(category: string) {
@@ -114,12 +114,12 @@ export class CategoryModel {
 
   static async updatePriorityOrder(id: string | ObjectId, priorityOrder: number) {
     const collection = await getCollection('categoryList');
-    let queryId: string | ObjectId = id;
+    let queryId: ObjectId | string = id;
     if (typeof id === 'string' && ObjectId.isValid(id)) {
       queryId = new ObjectId(id);
     }
     return collection.updateOne(
-      { _id: queryId },
+      { _id: queryId as any },
       { $set: { priorityOrder, updatedAt: new Date() } }
     );
   }
