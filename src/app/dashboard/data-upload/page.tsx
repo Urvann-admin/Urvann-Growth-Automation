@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { Upload, Download, FileText, X, CheckCircle, AlertCircle, Loader2, ArrowLeft, TreeDeciduous } from 'lucide-react';
+import { Upload, Download, FileText, X, CheckCircle, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 
 export default function DataUploadPage() {
   const router = useRouter();
@@ -13,25 +13,24 @@ export default function DataUploadPage() {
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string; details?: any } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const validTypes = [
+    'text/csv',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ];
+  const validExtensions = ['.csv', '.xlsx', '.xls'];
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      const validTypes = [
-        'text/csv',
-        'application/vnd.ms-excel',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-      ];
-      const validExtensions = ['.csv', '.xlsx', '.xls'];
       const fileExtension = selectedFile.name.substring(selectedFile.name.lastIndexOf('.')).toLowerCase();
-      
       if (validTypes.includes(selectedFile.type) || validExtensions.includes(fileExtension)) {
         setFile(selectedFile);
         setUploadResult(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
       } else {
         alert('Please select a valid CSV or XLSX file');
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     }
   };
@@ -59,9 +58,7 @@ export default function DataUploadPage() {
 
       if (result.success) {
         setFile(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        if (fileInputRef.current) fileInputRef.current.value = '';
       }
     } catch (error: any) {
       setUploadResult({
@@ -93,9 +90,7 @@ export default function DataUploadPage() {
   const handleRemoveFile = () => {
     setFile(null);
     setUploadResult(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // Wait for auth to finish loading before checking user
@@ -153,121 +148,63 @@ export default function DataUploadPage() {
       </div>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto py-6 px-6">
-        {/* Instructions Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <h2 className="text-base font-semibold text-slate-900 mb-3">Upload Instructions</h2>
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-medium text-slate-900 mb-2">For New Categories:</h3>
-              <ul className="space-y-2 text-sm text-slate-600">
-                <li className="flex items-start">
-                  <span className="mr-2">1.</span>
-                  <span>Download the template file to see the required format</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">2.</span>
-                  <span>Fill in your category data following the template structure</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">3.</span>
-                  <span>Upload the file (CSV or XLSX format)</span>
-                </li>
-              </ul>
-            </div>
-            <div className="border-t border-slate-200 pt-4">
-              <h3 className="text-sm font-medium text-slate-900 mb-2">For Updating Existing Categories:</h3>
-              <ul className="space-y-2 text-sm text-slate-600">
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Include the <span className="bg-slate-100 px-1 rounded font-mono text-xs">_id</span> column with the category ID you want to update</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Only include the columns you want to update (you don't need to include all columns)</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span>Leave columns empty if you don't want to update them</span>
-                </li>
-                <li className="flex items-start">
-                  <span className="mr-2">•</span>
-                  <span className="text-amber-600 font-medium">Note: Template is only for new data. For updates, create your own file with _id and the fields to update.</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        {/* Upload Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-slate-900">Upload File</h2>
+      <div className="max-w-2xl mx-auto py-6 px-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-slate-900">Upload Categories</h2>
             <button
               onClick={handleDownloadTemplate}
               className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium"
-              title="Download template for new category uploads"
+              title="Download template"
             >
               <Download className="w-4 h-4" />
-              <span>Download Template (New Data)</span>
+              <span>Download Template</span>
             </button>
           </div>
-
-          <div className="border-2 border-dashed border-slate-300 rounded-lg p-8 text-center hover:border-indigo-400 transition-colors">
+          <p className="text-sm text-slate-600 mb-4">
+            Upload a CSV or XLSX with category data. Rows with a new or missing <span className="font-mono text-xs bg-slate-100 px-1 rounded">_id</span> are added as new categories. Rows with an existing <span className="font-mono text-xs bg-slate-100 px-1 rounded">_id</span> overwrite that category with the data from the file. Required columns: category, alias, typeOfCategory.
+          </p>
+          <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-indigo-400 transition-colors">
             {file ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-center">
-                  <FileText className="w-12 h-12 text-indigo-600" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{file.name}</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {(file.size / 1024).toFixed(2)} KB
-                  </p>
-                </div>
+                <FileText className="w-10 h-10 text-indigo-600 mx-auto" />
+                <p className="text-sm font-medium text-slate-900">{file.name}</p>
+                <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(2)} KB</p>
                 <button
                   onClick={handleRemoveFile}
-                  className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors text-sm"
+                  className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm"
                 >
                   <X className="w-4 h-4" />
-                  <span>Remove File</span>
+                  <span>Remove</span>
                 </button>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-center">
-                  <Upload className="w-12 h-12 text-slate-400" />
-                </div>
-                <div>
-                  <label
-                    htmlFor="file-upload"
-                    className="cursor-pointer inline-flex items-center space-x-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span>Select File</span>
-                  </label>
-                  <input
-                    id="file-upload"
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv,.xlsx,.xls"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                  <p className="text-xs text-slate-500 mt-3">
-                    Supported formats: CSV, XLSX, XLS
-                  </p>
-                </div>
+              <div className="space-y-3">
+                <Upload className="w-10 h-10 text-slate-400 mx-auto" />
+                <label
+                  htmlFor="file-upload"
+                  className="cursor-pointer inline-flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Select File</span>
+                </label>
+                <input
+                  id="file-upload"
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
               </div>
             )}
           </div>
-
           {file && (
-            <div className="mt-6 flex justify-end">
+            <div className="mt-4 flex justify-end">
               <button
                 onClick={handleUpload}
                 disabled={uploading}
-                className="flex items-center space-x-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm font-medium"
+                className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
               >
                 {uploading ? (
                   <>
@@ -288,7 +225,7 @@ export default function DataUploadPage() {
         {/* Upload Result */}
         {uploadResult && (
           <div
-            className={`rounded-xl shadow-sm border p-6 ${
+            className={`mt-6 rounded-xl shadow-sm border p-6 ${
               uploadResult.success
                 ? 'bg-emerald-50 border-emerald-200'
                 : 'bg-rose-50 border-rose-200'
@@ -317,7 +254,7 @@ export default function DataUploadPage() {
                 </p>
                 {uploadResult.details && (
                   <div className="mt-3 text-xs text-slate-600">
-                    <pre className="bg-white p-3 rounded border border-slate-200 overflow-auto">
+                    <pre className="bg-white p-3 rounded border border-slate-200 overflow-auto max-h-48">
                       {JSON.stringify(uploadResult.details, null, 2)}
                     </pre>
                   </div>

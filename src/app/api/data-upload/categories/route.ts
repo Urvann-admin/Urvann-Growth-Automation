@@ -121,181 +121,98 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate and process rows
+    // Upsert: if _id exists in DB then update (overwrite), else insert
     const errors: string[] = [];
-    const categoriesToInsert: any[] = [];
-    const categoriesToUpdate: any[] = [];
+    const rowsToProcess: { categoryData: any; updateData: any; rowNum: number }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const rowNum = i + 2; // +2 because row 1 is header, and arrays are 0-indexed
+      const rowNum = i + 2;
 
-      // Check if this is an update (has _id) or new category (no _id)
-      const hasId = row._id && String(row._id).trim() !== '';
-
-      if (hasId) {
-        // This is an update - only include fields that are present and not empty
-        const updateData: any = {};
-        const categoryId = String(row._id).trim();
-        
-        // Only include fields that are present in the row (excluding _id itself)
-        if (row.category !== undefined && row.category !== null && String(row.category).trim() !== '') {
-          updateData.category = String(row.category).trim();
-        }
-        if (row.alias !== undefined && row.alias !== null && String(row.alias).trim() !== '') {
-          updateData.alias = String(row.alias).trim();
-        }
-        if (row.typeOfCategory !== undefined && row.typeOfCategory !== null && String(row.typeOfCategory).trim() !== '') {
-          updateData.typeOfCategory = String(row.typeOfCategory).trim();
-        }
-        if (row.l1Parent !== undefined && row.l1Parent !== null && String(row.l1Parent).trim() !== '') {
-          updateData.l1Parent = String(row.l1Parent).trim();
-        }
-        if (row.l2Parent !== undefined && row.l2Parent !== null && String(row.l2Parent).trim() !== '') {
-          updateData.l2Parent = String(row.l2Parent).trim();
-        }
-        if (row.l3Parent !== undefined && row.l3Parent !== null && String(row.l3Parent).trim() !== '') {
-          updateData.l3Parent = String(row.l3Parent).trim();
-        }
-        if (row.publish !== undefined && row.publish !== null && String(row.publish).trim() !== '') {
-          const publishValue = String(row.publish).trim();
-          updateData.publish = publishValue === '1' || publishValue.toLowerCase() === 'true';
-        }
-        if (row.priorityOrder !== undefined && row.priorityOrder !== null && String(row.priorityOrder).trim() !== '') {
-          updateData.priorityOrder = parseInt(String(row.priorityOrder)) || 0;
-        }
-        if (row.substores !== undefined && row.substores !== null && String(row.substores).trim() !== '') {
-          updateData.substores = String(row.substores).split(',').map((s: string) => s.trim()).filter((s: string) => s);
-        }
-
-        if (Object.keys(updateData).length === 0) {
-          errors.push(`Row ${rowNum}: No fields to update (all fields are empty)`);
-          continue;
-        }
-
-        categoriesToUpdate.push({
-          _id: categoryId,
-          updateData: updateData
-        });
-      } else {
-        // This is a new category - validate required fields
-        if (!row.category || !row.alias || !row.typeOfCategory) {
-          errors.push(`Row ${rowNum}: Missing required fields (category, alias, or typeOfCategory)`);
-          continue;
-        }
-
-        // Parse substores
-        let substores: string[] = [];
-        if (row.substores) {
-          substores = String(row.substores).split(',').map((s: string) => s.trim()).filter((s: string) => s);
-        }
-
-        // Parse publish (accepts 0 or 1)
-        let publish = false;
-        if (row.publish !== undefined && row.publish !== null && String(row.publish).trim() !== '') {
-          const publishValue = String(row.publish).trim();
-          publish = publishValue === '1' || publishValue.toLowerCase() === 'true';
-        }
-
-        // Parse priorityOrder
-        const priorityOrder = parseInt(String(row.priorityOrder)) || 0;
-
-        const categoryData: any = {
-          category: String(row.category).trim(),
-          alias: String(row.alias).trim(),
-          typeOfCategory: String(row.typeOfCategory).trim(),
-          l1Parent: row.l1Parent ? String(row.l1Parent).trim() : '',
-          l2Parent: row.l2Parent ? String(row.l2Parent).trim() : '',
-          l3Parent: row.l3Parent ? String(row.l3Parent).trim() : '',
-          publish: publish,
-          priorityOrder: priorityOrder,
-          substores: substores,
-        };
-
-        // Include _id if provided (even for new categories)
-        if (row._id && String(row._id).trim() !== '') {
-          categoryData._id = String(row._id).trim();
-        }
-
-        categoriesToInsert.push(categoryData);
+      if (!row.category || !row.alias || !row.typeOfCategory) {
+        errors.push(`Row ${rowNum}: Missing required fields (category, alias, or typeOfCategory)`);
+        continue;
       }
+
+      const substores = row.substores
+        ? String(row.substores).split(',').map((s: string) => s.trim()).filter((s: string) => s)
+        : [];
+      const publishVal = row.publish !== undefined && row.publish !== null && String(row.publish).trim() !== ''
+        ? String(row.publish).trim()
+        : '';
+      const publish = publishVal === '1' || publishVal.toLowerCase() === 'true';
+      const priorityOrder = parseInt(String(row.priorityOrder)) || 0;
+
+      const categoryData: any = {
+        category: String(row.category).trim(),
+        alias: String(row.alias).trim(),
+        typeOfCategory: String(row.typeOfCategory).trim(),
+        l1Parent: row.l1Parent ? String(row.l1Parent).trim() : '',
+        l2Parent: row.l2Parent ? String(row.l2Parent).trim() : '',
+        l3Parent: row.l3Parent ? String(row.l3Parent).trim() : '',
+        publish,
+        priorityOrder,
+        substores,
+      };
+      if (row._id && String(row._id).trim() !== '') {
+        categoryData._id = String(row._id).trim();
+      }
+
+      const updateData: any = {
+        category: categoryData.category,
+        alias: categoryData.alias,
+        typeOfCategory: categoryData.typeOfCategory,
+        l1Parent: categoryData.l1Parent,
+        l2Parent: categoryData.l2Parent,
+        l3Parent: categoryData.l3Parent,
+        publish: categoryData.publish,
+        priorityOrder: categoryData.priorityOrder,
+        substores: categoryData.substores,
+        updatedAt: new Date(),
+      };
+
+      rowsToProcess.push({ categoryData, updateData, rowNum });
     }
 
-    // Insert new categories into database
     let insertedCount = 0;
-    const errorsDuringInsert: string[] = [];
-
-    for (const categoryData of categoriesToInsert) {
-      try {
-        // Check if category with same _id exists (if _id is provided)
-        if (categoryData._id) {
-          const existingById = await CategoryModel.findById(categoryData._id);
-          if (existingById) {
-            errorsDuringInsert.push(`Category with _id "${categoryData._id}" already exists. Use _id field to update existing categories.`);
-            continue;
-          }
-        }
-        
-        // Check if category with same alias exists (alias is unique identifier)
-        const existing = await CategoryModel.findByAlias(categoryData.alias);
-        
-        if (existing) {
-          errorsDuringInsert.push(`Category with alias "${categoryData.alias}" already exists. Use _id field to update existing categories.`);
-          continue;
-        }
-        
-        // Create new category
-        await CategoryModel.create(categoryData);
-        insertedCount++;
-      } catch (error: any) {
-        console.error(`Error processing category ${categoryData.alias}:`, error);
-        errorsDuringInsert.push(`Failed to process ${categoryData.category}: ${error.message}`);
-      }
-    }
-
-    // Update existing categories
     let updatedCount = 0;
-    const errorsDuringUpdate: string[] = [];
+    const processErrors: string[] = [];
+    const { getCollection } = await import('@/lib/mongodb');
+    const { ObjectId } = await import('mongodb');
+    const collection = await getCollection('categoryList');
 
-    for (const { _id, updateData } of categoriesToUpdate) {
+    for (const { categoryData, updateData, rowNum } of rowsToProcess) {
       try {
-        // Verify the category exists using the custom string _id field
-        const existing = await CategoryModel.findById(_id);
-        
-        if (!existing) {
-          errorsDuringUpdate.push(`Category with _id "${_id}" not found`);
-          continue;
+        const hasId = !!categoryData._id;
+        if (hasId) {
+          const existing = await CategoryModel.findById(categoryData._id);
+          if (existing) {
+            // Convert _id to ObjectId for the update query if it's a valid ObjectId string
+            let queryId: string | any = categoryData._id;
+            if (typeof categoryData._id === 'string' && ObjectId.isValid(categoryData._id)) {
+              queryId = new ObjectId(categoryData._id);
+            }
+            await collection.updateOne(
+              { _id: queryId },
+              { $set: updateData }
+            );
+            updatedCount++;
+          } else {
+            await CategoryModel.create(categoryData);
+            insertedCount++;
+          }
+        } else {
+          await CategoryModel.create(categoryData);
+          insertedCount++;
         }
-        
-        // Perform partial update using the collection directly (since _id is a string, not MongoDB ObjectId)
-        const { getCollection } = await import('@/lib/mongodb');
-        const collection = await getCollection('categoryList');
-        const updateResult = await collection.updateOne(
-          { _id: _id },
-          { $set: { ...updateData, updatedAt: new Date() } }
-        );
-        
-        // Check if the update actually matched and modified a document
-        if (updateResult.matchedCount === 0) {
-          errorsDuringUpdate.push(`Failed to update category with _id "${_id}": Document not found`);
-          continue;
-        }
-        
-        if (updateResult.modifiedCount === 0) {
-          // Document was matched but not modified (data might be the same)
-          // This is not necessarily an error, but we'll still count it as updated
-          console.log(`Category ${_id} was matched but not modified (data unchanged)`);
-        }
-        
-        updatedCount++;
       } catch (error: any) {
-        console.error(`Error updating category ${_id}:`, error);
-        errorsDuringUpdate.push(`Failed to update category with _id "${_id}": ${error.message}`);
+        console.error(`Error processing row ${rowNum} (${categoryData.alias}):`, error);
+        processErrors.push(`Row ${rowNum}: ${error.message}`);
       }
     }
 
     const totalProcessed = insertedCount + updatedCount;
-    const totalErrors = errors.length + errorsDuringInsert.length + errorsDuringUpdate.length;
+    const totalErrors = errors.length + processErrors.length;
 
     return NextResponse.json({
       success: totalErrors === 0,
@@ -306,7 +223,7 @@ export async function POST(request: Request) {
         total: rows.length,
         inserted: insertedCount,
         updated: updatedCount,
-        errors: totalErrors > 0 ? [...errors, ...errorsDuringInsert, ...errorsDuringUpdate] : undefined,
+        errors: totalErrors > 0 ? [...errors, ...processErrors] : undefined,
       },
     });
   } catch (error: any) {
