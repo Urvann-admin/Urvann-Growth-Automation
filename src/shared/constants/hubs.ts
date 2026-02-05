@@ -8,11 +8,11 @@ export const HUB_MAPPINGS: HubMapping[] = [
   { hub: 'Whitefield', substores: ['bgl-e', 'bgl-e2'] },
   { hub: 'Thanissandra', substores: ['bgl-n', 'bgl-n2'] },
   { hub: 'HSR', substores: ['bgl-s1', 'bgl-s2', 'bgl-w1', 'bgl-w2'] },
-  { hub: 'Noida', substores: ['noi', 'greaternoida', 'kalkaji'] },
+  { hub: 'Noida', substores: ['noi', 'greaternoida', 'kalkaji', 'greaternoida-west'] },
   { hub: 'Rohini', substores: ['roh'] },
   { hub: 'Dwarka', substores: ['dwarka', 'uttam', 'vasantkunj'] },
   { hub: 'Faridabad', substores: ['dncr'] },
-  { hub: 'Ghaziabad', substores: ['ghaziabad'] },
+  { hub: 'Ghaziabad', substores: ['ghaziabad', 'gzb', 'east-delhi'] },
   { hub: 'Gurugram', substores: ['gurugram'] },
   { hub: 'India', substores: ['india', 'rest-of-india', 'ahmedabad', 'pune', 'hyderabad', 'mumbai', 'kolkata', 'chandigarh', 'all-over-india'] },
 ];
@@ -37,7 +37,6 @@ export const formatSubstoreForDisplay = (substore: string): string => {
   const displayMap: Record<string, string> = {
     'greaternoida': 'GREATERN',
     'vasantkunj': 'VASANTK',
-    'ghaziabad': 'GZB',
     'rest-of-india': 'ROI',
     'all-over-india': 'AOI',
   };
