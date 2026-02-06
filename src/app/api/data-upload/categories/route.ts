@@ -121,7 +121,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Upsert: if _id exists in DB then update (overwrite), else insert
+    // Upsert: match by alias (unique); if found then update, else insert. File _id is stored as categoryId (string).
     const errors: string[] = [];
     const rowsToProcess: { categoryData: any; updateData: any; rowNum: number }[] = [];
 
@@ -154,8 +154,8 @@ export async function POST(request: Request) {
         priorityOrder,
         substores,
       };
-      if (row._id && String(row._id).trim() !== '') {
-        categoryData._id = String(row._id).trim();
+      if (row._id !== undefined && row._id !== null && String(row._id).trim() !== '') {
+        categoryData.categoryId = String(row._id).trim();
       }
 
       const updateData: any = {
@@ -170,6 +170,9 @@ export async function POST(request: Request) {
         substores: categoryData.substores,
         updatedAt: new Date(),
       };
+      if (categoryData.categoryId !== undefined) {
+        updateData.categoryId = categoryData.categoryId;
+      }
 
       rowsToProcess.push({ categoryData, updateData, rowNum });
     }
@@ -178,29 +181,17 @@ export async function POST(request: Request) {
     let updatedCount = 0;
     const processErrors: string[] = [];
     const { getCollection } = await import('@/lib/mongodb');
-    const { ObjectId } = await import('mongodb');
     const collection = await getCollection('categoryList');
 
     for (const { categoryData, updateData, rowNum } of rowsToProcess) {
       try {
-        const hasId = !!categoryData._id;
-        if (hasId) {
-          const existing = await CategoryModel.findById(categoryData._id);
-          if (existing) {
-            // Convert _id to ObjectId for the update query if it's a valid ObjectId string
-            let queryId: string | any = categoryData._id;
-            if (typeof categoryData._id === 'string' && ObjectId.isValid(categoryData._id)) {
-              queryId = new ObjectId(categoryData._id);
-            }
-            await collection.updateOne(
-              { _id: queryId },
-              { $set: updateData }
-            );
-            updatedCount++;
-          } else {
-            await CategoryModel.create(categoryData);
-            insertedCount++;
-          }
+        const existing = await CategoryModel.findByAlias(categoryData.alias);
+        if (existing) {
+          await collection.updateOne(
+            { _id: existing._id },
+            { $set: updateData }
+          );
+          updatedCount++;
         } else {
           await CategoryModel.create(categoryData);
           insertedCount++;

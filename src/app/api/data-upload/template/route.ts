@@ -5,8 +5,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     // Create CSV template with headers only
-    // Note: _id is a string field. For new categories, provide your custom _id value (string).
-    // For updates, include _id and only the fields you want to update.
+    // Matching is by alias (unique). _id column is stored as string only (your custom id).
     const headers = [
       '_id',
       'category',

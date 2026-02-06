@@ -3,6 +3,8 @@ import { getCollection } from '@/lib/mongodb';
 
 export interface Category {
   _id?: string | ObjectId;
+  /** Custom id from uploads (file _id column), stored as string only */
+  categoryId?: string;
   category: string;
   alias: string;
   typeOfCategory: string;
@@ -34,18 +36,16 @@ export class CategoryModel {
 
   static async create(categoryData: Omit<Category, 'createdAt' | 'updatedAt'>) {
     const collection = await getCollection('categoryList');
-    
+    const { _id: _ignoredId, ...rest } = categoryData as any;
     const category: any = {
-      ...categoryData,
+      ...rest,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    
-    // If _id is provided as string and looks like ObjectId, convert it
-    if (category._id && typeof category._id === 'string' && ObjectId.isValid(category._id)) {
-      category._id = new ObjectId(category._id);
+    // categoryId from uploads is stored as string only; never use it as MongoDB _id
+    if (category.categoryId != null) {
+      category.categoryId = String(category.categoryId);
     }
-    
     const result = await collection.insertOne(category);
     return { ...category, _id: result.insertedId };
   }

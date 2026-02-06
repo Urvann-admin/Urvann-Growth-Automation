@@ -162,7 +162,7 @@ export default function DataUploadPage() {
             </button>
           </div>
           <p className="text-sm text-slate-600 mb-4">
-            Upload a CSV or XLSX with category data. Rows with a new or missing <span className="font-mono text-xs bg-slate-100 px-1 rounded">_id</span> are added as new categories. Rows with an existing <span className="font-mono text-xs bg-slate-100 px-1 rounded">_id</span> overwrite that category with the data from the file. Required columns: category, alias, typeOfCategory.
+            Upload a CSV or XLSX with category data. Records are matched by <span className="font-mono text-xs bg-slate-100 px-1 rounded">alias</span> (unique). If a category with the same alias exists, it is updated; otherwise a new category is created. The <span className="font-mono text-xs bg-slate-100 px-1 rounded">_id</span> column is stored as a string only (your custom id). Required columns: category, alias, typeOfCategory.
           </p>
           <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-indigo-400 transition-colors">
             {file ? (
