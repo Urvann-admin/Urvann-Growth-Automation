@@ -1,6 +1,28 @@
 import { ObjectId } from 'mongodb';
 import { getCollection } from '@/lib/mongodb';
 
+/** Allowed fields for rule conditions */
+export type RuleConditionField =
+  | 'Plant'
+  | 'variety'
+  | 'Colour'
+  | 'Height'
+  | 'Size'
+  | 'Type'
+  | 'Category';
+
+/** Rule condition: single field + value to evaluate */
+export interface RuleCondition {
+  field: RuleConditionField;
+  value: string | number;
+}
+
+/** Rule: operator (AND/OR) and list of conditions */
+export interface Rule {
+  rule_operator: 'AND' | 'OR';
+  conditions: RuleCondition[];
+}
+
 export interface Category {
   _id?: string | ObjectId;
   /** Custom id from uploads (file _id column), stored as string only */
@@ -8,9 +30,19 @@ export interface Category {
   category: string;
   alias: string;
   typeOfCategory: string;
-  l1Parent: string;
-  l2Parent: string;
-  l3Parent: string;
+  /** L1 parent category name/id */
+  l1Parent?: string;
+  /** L2 parent category name/id */
+  l2Parent?: string;
+  /** L3 parent category name/id */
+  l3Parent?: string;
+  /** Optional rule for filtering/eligibility (e.g. status + order_count) */
+  rule?: Rule;
+  /** Type (string) */
+  type?: string;
+  /** Description (string) */
+  description?: string;
+  /** Whether the category is published */
   publish: boolean;
   priorityOrder: number;
   substores?: string[];

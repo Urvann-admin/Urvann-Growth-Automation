@@ -35,8 +35,6 @@ export const getHubBySubstore = (substore: string): string | null => {
 // Format substore names for UI display
 export const formatSubstoreForDisplay = (substore: string): string => {
   const displayMap: Record<string, string> = {
-    'greaternoida': 'GREATERN',
-    'vasantkunj': 'VASANTK',
     'rest-of-india': 'ROI',
     'all-over-india': 'AOI',
   };

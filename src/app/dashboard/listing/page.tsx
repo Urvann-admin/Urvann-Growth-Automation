@@ -6,6 +6,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { ArrowLeft, LayoutList, FolderTree, Package, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ChristmasTheme } from '@/components/theme/ChristmasTheme';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
+import { CategoryMasterForm } from './components/CategoryMasterForm';
 
 type ListingTab = 'category-master' | 'product-master' | 'listing';
 
@@ -30,6 +31,14 @@ export default function ListingPage() {
     }
     setLoading(false);
   }, [user, isLoading, router]);
+
+  // Sync active tab with hash (e.g. /dashboard/listing#category-master)
+  useEffect(() => {
+    const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+    if (hash === 'category-master' || hash === 'product-master' || hash === 'listing') {
+      setActiveTab(hash);
+    }
+  }, []);
 
   const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
 
@@ -195,22 +204,7 @@ export default function ListingPage() {
           <main
             className={`flex-1 min-w-0 p-6 overflow-auto ${isChristmasTheme ? '' : ''}`}
           >
-            <div
-              className={`rounded-xl shadow-sm p-6 h-full min-h-0 ${isChristmasTheme ? '' : 'bg-white border border-slate-200'}`}
-              style={isChristmasTheme ? {
-                background: CHRISTMAS_COLORS.white,
-                border: `2px solid ${CHRISTMAS_COLORS.light}`,
-                boxShadow: `0 4px 6px -1px ${CHRISTMAS_COLORS.primary}/10`,
-              } : {}}
-            >
-            {activeTab === 'category-master' && (
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900 mb-2">Category Master</h2>
-                <p className="text-sm text-slate-600">
-                  Manage categories here. This section can host category listing, hierarchy, and settings.
-                </p>
-              </div>
-            )}
+            {activeTab === 'category-master' && <CategoryMasterForm />}
             {activeTab === 'product-master' && (
               <div>
                 <h2 className="text-xl font-semibold text-slate-900 mb-2">Product Master</h2>
@@ -227,7 +221,6 @@ export default function ListingPage() {
                 </p>
               </div>
             )}
-            </div>
           </main>
         </div>
       </div>
