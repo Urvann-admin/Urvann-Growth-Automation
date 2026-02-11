@@ -75,9 +75,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (!Array.isArray(substores) || substores.length === 0 || !substores.some((s: unknown) => String(s).trim())) {
+    if (!Array.isArray(substores)) {
       return NextResponse.json(
-        { success: false, message: 'at least one substore is required' },
+        { success: false, message: 'substores must be an array' },
         { status: 400 }
       );
     }
@@ -106,8 +106,10 @@ export async function POST(request: NextRequest) {
       priorityOrder: order,
     };
 
-    // Use provided categoryId or fall back to alias for internal ID
-    categoryData.categoryId = (categoryId != null && String(categoryId).trim()) ? String(categoryId).trim() : String(alias).trim();
+    // Only set categoryId if explicitly provided; will be set to StoreHippo _id after sync
+    if (categoryId != null && String(categoryId).trim()) {
+      categoryData.categoryId = String(categoryId).trim();
+    }
     categoryData.type = String(type).trim();
     categoryData.description = String(description).trim();
     if (rule != null && validateRule(rule)) categoryData.rule = rule as Rule;
@@ -133,9 +135,16 @@ export async function POST(request: NextRequest) {
 
     // Save StoreHippo _id to our database (fetched via GET with alias filter)
     if (storeHippoResult.storeHippoId && created._id) {
+      console.log(`[API] Updating category ${created._id} with StoreHippo _id: ${storeHippoResult.storeHippoId}`);
       await CategoryModel.update(created._id, { categoryId: storeHippoResult.storeHippoId });
       created = { ...created, categoryId: storeHippoResult.storeHippoId } as typeof created;
-      console.log('Category updated with StoreHippo id:', storeHippoResult.storeHippoId);
+      console.log(`[API] ✅ Category updated with StoreHippo id: ${storeHippoResult.storeHippoId}`);
+    } else {
+      // Fallback: use alias as categoryId if we couldn't get StoreHippo _id
+      const fallbackId = String(alias).trim();
+      console.warn(`[API] ⚠️ Could not get StoreHippo _id, using alias as fallback categoryId: ${fallbackId}`);
+      await CategoryModel.update(created._id, { categoryId: fallbackId });
+      created = { ...created, categoryId: fallbackId } as typeof created;
     }
 
     console.log('Category successfully synced to StoreHippo:', storeHippoResult.storeHippoId ?? categoryData.categoryId);
