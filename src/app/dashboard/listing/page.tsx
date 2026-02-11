@@ -3,15 +3,22 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { ArrowLeft, LayoutList, FolderTree, Package, List, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, LayoutList, FolderTree, Package, List, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon } from 'lucide-react';
 import { ChristmasTheme } from '@/components/theme/ChristmasTheme';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
 import { CategoryMasterForm } from './components/CategoryMasterForm';
+import { ViewCategories } from '@/app/dashboard/listing/components/ViewCategories';
 
-type ListingTab = 'category-master' | 'product-master' | 'listing';
+type ListingTab = 'category-add' | 'category-view' | 'product-master' | 'listing';
+
+const CATEGORY_SUB_TABS: { id: ListingTab; label: string }[] = [
+  { id: 'category-add', label: 'Add Category' },
+  { id: 'category-view', label: 'View Category' },
+];
 
 const TAB_CONFIG: { id: ListingTab; label: string; subtitle: string; icon: typeof FolderTree }[] = [
-  { id: 'category-master', label: 'Category Master', subtitle: 'Create and manage categories', icon: FolderTree },
+  { id: 'category-add', label: 'Add Category', subtitle: 'Create a new category', icon: Plus },
+  { id: 'category-view', label: 'View Category', subtitle: 'View and edit categories', icon: ListIcon },
   { id: 'product-master', label: 'Product Master', subtitle: 'Manage products and catalog', icon: Package },
   { id: 'listing', label: 'Listing', subtitle: 'Listing rules and status', icon: List },
 ];
@@ -19,7 +26,8 @@ const TAB_CONFIG: { id: ListingTab; label: string; subtitle: string; icon: typeo
 export default function ListingPage() {
   const router = useRouter();
   const { user, isLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<ListingTab>('category-master');
+  const [activeTab, setActiveTab] = useState<ListingTab>('category-add');
+  const [categorySectionOpen, setCategorySectionOpen] = useState(true);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -32,10 +40,10 @@ export default function ListingPage() {
     setLoading(false);
   }, [user, isLoading, router]);
 
-  // Sync active tab with hash (e.g. /dashboard/listing#category-master)
+  // Sync active tab with hash (e.g. /dashboard/listing#category-add)
   useEffect(() => {
     const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
-    if (hash === 'category-master' || hash === 'product-master' || hash === 'listing') {
+    if (hash === 'category-add' || hash === 'category-view' || hash === 'product-master' || hash === 'listing') {
       setActiveTab(hash);
     }
   }, []);
@@ -120,37 +128,105 @@ export default function ListingPage() {
               </button>
             </div>
 
-            {/* Nav items - magenta highlight for active */}
-            <nav className="p-2">
-              {TAB_CONFIG.map(({ id, label, icon: Icon }) => (
+            {/* Nav items - Category collapsible with Add / View */}
+            <nav className="p-2 space-y-0.5">
+              {/* Category (collapsible) */}
+              <div>
                 <button
-                  key={id}
-                  onClick={() => setActiveTab(id)}
-                  title={sidebarCollapsed ? label : undefined}
+                  type="button"
+                  onClick={() => !sidebarCollapsed && setCategorySectionOpen((o) => !o)}
+                  title={sidebarCollapsed ? 'Category' : undefined}
                   className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
                     sidebarCollapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
                   } ${
-                    activeTab === id
-                      ? isChristmasTheme
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'bg-[#E6007A] text-white'
-                      : isChristmasTheme
-                        ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                        : 'text-white hover:bg-white/10'
+                    isChristmasTheme
+                      ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      : 'text-white hover:bg-white/10'
                   }`}
-                  style={
-                    activeTab === id && isChristmasTheme
-                      ? {
-                          background: `${CHRISTMAS_COLORS.light}/60`,
-                          color: CHRISTMAS_COLORS.primary,
-                        }
-                      : {}
-                  }
                 >
-                  <Icon className="w-5 h-5 shrink-0" strokeWidth={2} />
-                  {!sidebarCollapsed && <span className="truncate">{label}</span>}
+                  <FolderTree className="w-5 h-5 shrink-0" strokeWidth={2} />
+                  {!sidebarCollapsed && (
+                    <>
+                      <span className="truncate flex-1">Category</span>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 transition-transform ${categorySectionOpen ? 'rotate-180' : ''}`}
+                      />
+                    </>
+                  )}
                 </button>
-              ))}
+                {!sidebarCollapsed && categorySectionOpen && (
+                  <div className="ml-4 mt-0.5 space-y-0.5 pl-2">
+                    {CATEGORY_SUB_TABS.map(({ id, label }) => (
+                      <button
+                        key={id}
+                        onClick={() => {
+                          setActiveTab(id);
+                          if (typeof window !== 'undefined') window.location.hash = id;
+                        }}
+                        className={`w-full flex items-center gap-2 rounded-md py-2 px-2 text-left text-sm transition-all focus:outline-none focus-visible:ring-0 ${
+                          activeTab === id
+                            ? isChristmasTheme
+                              ? 'bg-slate-100 text-slate-900 font-medium'
+                              : 'bg-[#E6007A] text-white font-medium'
+                            : isChristmasTheme
+                              ? 'text-slate-600 hover:bg-slate-50'
+                              : 'text-white/90 hover:bg-white/10'
+                        }`}
+                        style={
+                          activeTab === id && isChristmasTheme
+                            ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
+                            : {}
+                        }
+                      >
+                        {id === 'category-add' ? (
+                          <Plus className="w-4 h-4 shrink-0" />
+                        ) : (
+                          <ListIcon className="w-4 h-4 shrink-0" />
+                        )}
+                        <span className="truncate">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* Product Master, Listing */}
+              {(['product-master', 'listing'] as const).map((id) => {
+                const tab = TAB_CONFIG.find((t) => t.id === id);
+                if (!tab) return null;
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => {
+                      setActiveTab(id);
+                      if (typeof window !== 'undefined') window.location.hash = id;
+                    }}
+                    title={sidebarCollapsed ? tab.label : undefined}
+                    className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
+                      sidebarCollapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
+                    } ${
+                      activeTab === id
+                        ? isChristmasTheme
+                          ? 'bg-slate-100 text-slate-900'
+                          : 'bg-[#E6007A] text-white'
+                        : isChristmasTheme
+                          ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                          : 'text-white hover:bg-white/10'
+                    }`}
+                    style={
+                      activeTab === id && isChristmasTheme
+                        ? {
+                            background: `${CHRISTMAS_COLORS.light}/60`,
+                            color: CHRISTMAS_COLORS.primary,
+                          }
+                        : {}
+                    }
+                  >
+                    <Icon className="w-5 h-5 shrink-0" strokeWidth={2} />
+                    {!sidebarCollapsed && <span className="truncate">{tab.label}</span>}
+                  </button>
+                );
+              })}
             </nav>
           </aside>
 
@@ -182,7 +258,9 @@ export default function ListingPage() {
                   >
                     {(() => {
                       const tab = TAB_CONFIG.find((t) => t.id === activeTab);
-                      const Icon = tab?.icon ?? LayoutList;
+                      const iconId = activeTab === 'category-view' ? 'category-view' : activeTab;
+                      const t = TAB_CONFIG.find((x) => x.id === iconId) ?? TAB_CONFIG[0];
+                      const Icon = t?.icon ?? LayoutList;
                       return <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />;
                     })()}
                   </div>
@@ -203,7 +281,8 @@ export default function ListingPage() {
           <main
             className={`flex-1 min-w-0 p-6 overflow-auto ${isChristmasTheme ? '' : 'bg-[#F4F6F8]'}`}
           >
-            {activeTab === 'category-master' && <CategoryMasterForm />}
+            {activeTab === 'category-add' && <CategoryMasterForm />}
+            {activeTab === 'category-view' && <ViewCategories />}
             {activeTab === 'product-master' && (
               <div>
                 <h2 className="text-xl font-semibold text-slate-900 mb-2">Product Master</h2>

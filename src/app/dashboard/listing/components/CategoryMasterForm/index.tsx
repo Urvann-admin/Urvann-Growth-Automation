@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Rule, Category } from '@/models/category';
-import { getAllSubstores, formatSubstoreForDisplay } from '@/shared/constants/hubs';
+import { HUB_MAPPINGS, getSubstoresByHub, getSelectedHubsFromSubstores } from '@/shared/constants/hubs';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import {
   STEPS,
@@ -11,6 +11,7 @@ import {
   type StepId,
   type CategoryFormData,
 } from './types';
+import { Notification } from '@/components/ui/Notification';
 import {
   StepBasics,
   StepHierarchy,
@@ -24,6 +25,16 @@ function isDescriptionEmpty(html: string): boolean {
   if (!html || !html.trim()) return true;
   const text = html.replace(/<[^>]*>/g, '').trim();
   return !text;
+}
+
+function slugify(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^\w\-]+/g, '')
+    .replace(/\-\-+/g, '-')
+    .replace(/^-|-$/g, '');
 }
 
 function validateStep(stepId: StepId, data: CategoryFormData): Record<string, string> {
@@ -44,10 +55,10 @@ function validateStep(stepId: StepId, data: CategoryFormData): Record<string, st
       }
       break;
     case 'publish-substores': {
-      const order = parseInt(data.priorityOrder, 10);
+      const order = parseFloat(data.priorityOrder);
       if (Number.isNaN(order) || order < 0)
-        err.priorityOrder = 'Enter a valid priority (0 or more)';
-      if (data.substores.length === 0) err.substores = 'Select at least one substore';
+        err.priorityOrder = 'Enter a valid priority (0 or more, up to one decimal place)';
+      if (data.substores.length === 0) err.substores = 'Select at least one hub';
       break;
     }
     case 'review':
@@ -66,28 +77,36 @@ export function CategoryMasterForm() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const createButtonClickedRef = useRef(false);
 
   const currentStep = STEPS[stepIndex];
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === STEPS.length - 1;
 
-  useEffect(() => {
-    let cancelled = false;
+  const fetchCategories = useCallback(() => {
     fetch('/api/categories')
       .then((res) => res.json())
       .then((json) => {
-        if (!cancelled && json?.success && Array.isArray(json.data)) {
+        if (json?.success && Array.isArray(json.data)) {
           setCategories(json.data);
         }
       })
       .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  const substoreOptions = useMemo(
-    () => getAllSubstores().map((s) => ({ value: s, label: formatSubstoreForDisplay(s) })),
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
+  // Refetch when user opens Hierarchy step so L1/L2/L3 dropdowns show latest categories
+  useEffect(() => {
+    if (currentStep.id === 'hierarchy') {
+      fetchCategories();
+    }
+  }, [currentStep.id, fetchCategories]);
+
+  const hubOptions = useMemo(
+    () => HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub })),
     []
   );
 
@@ -161,10 +180,10 @@ export function CategoryMasterForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Only create when user is on Review step and manually clicks "Create category"
-    if (currentStep.id !== 'review') {
-      return;
-    }
+    // Only create when user is on Review step and has clicked "Create category" (not e.g. Enter key)
+    if (currentStep.id !== 'review') return;
+    if (!createButtonClickedRef.current) return;
+    createButtonClickedRef.current = false;
     setMessage(null);
     const allErrors: Record<string, string> = {};
     STEPS.forEach((s) => {
@@ -206,7 +225,7 @@ export function CategoryMasterForm() {
       publish: data.publish,
       type: data.type,
       rule,
-      priorityOrder: Math.max(0, parseInt(data.priorityOrder, 10) || 0),
+      priorityOrder: Math.max(0, Math.round((parseFloat(data.priorityOrder) || 0) * 10) / 10),
       substores: data.substores,
     };
 
@@ -228,6 +247,7 @@ export function CategoryMasterForm() {
       setData(initialFormData);
       setErrors({});
       setStepIndex(0);
+      fetchCategories();
     } catch {
       setMessage({ type: 'error', text: 'Network error. Please try again.' });
     } finally {
@@ -335,7 +355,7 @@ export function CategoryMasterForm() {
               setData((prev) => ({
                 ...prev,
                 category: v,
-                alias: v.trim().toLowerCase(),
+                alias: slugify(v),
               }))
             }
             onAliasChange={(v) => setField('alias', v)}
@@ -383,10 +403,18 @@ export function CategoryMasterForm() {
             />
             <StepSubstores
               substores={data.substores}
-              options={substoreOptions}
+              hubOptions={hubOptions}
+              getSubstoresByHub={getSubstoresByHub}
+              getSelectedHubsFromSubstores={getSelectedHubsFromSubstores}
               error={errors.substores}
               onChange={(v) => setField('substores', v)}
-              onRemove={(v) => setField('substores', data.substores.filter((s) => s !== v))}
+              onRemoveHub={(hub) => {
+                const toRemove = getSubstoresByHub(hub);
+                setData((prev) => ({
+                  ...prev,
+                  substores: prev.substores.filter((s) => !toRemove.includes(s.toLowerCase())),
+                }));
+              }}
               onClearError={() => clearError('substores')}
             />
           </div>
@@ -394,24 +422,16 @@ export function CategoryMasterForm() {
         {currentStep.id === 'review' && <StepReview data={data} />}
       </div>
 
+      {message && (
+        <Notification
+          type={message.type}
+          text={message.text}
+          onDismiss={() => setMessage(null)}
+        />
+      )}
+
       {/* Navigation & actions */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-4 border-t border-slate-200">
-        {message && (
-          <div
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg ${
-              message.type === 'success'
-                ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-                : 'bg-red-50 border border-red-200 text-red-700'
-            }`}
-          >
-            <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                message.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'
-              }`}
-            />
-            <p className="text-sm font-medium">{message.text}</p>
-          </div>
-        )}
         <div className="flex items-center gap-3 ml-auto">
           <button
             type="button"
@@ -433,6 +453,7 @@ export function CategoryMasterForm() {
             <button
               type="submit"
               disabled={submitting}
+              onClick={() => { createButtonClickedRef.current = true; }}
               className="min-w-[160px] rounded-lg bg-[#E6007A] hover:bg-pink-600 px-5 py-2.5 text-sm font-medium text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:pointer-events-none"
             >
               {submitting ? 'Creating...' : 'Create category'}

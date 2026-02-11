@@ -314,6 +314,60 @@ export async function createStoreHippoCategory(categoryData: StoreHippoCategoryP
 }
 
 /**
+ * Update an existing category in StoreHippo by its _id
+ */
+export async function updateStoreHippoCategory(storeHippoId: string, categoryData: StoreHippoCategoryPayload): Promise<StoreHippoCategoryResponse> {
+  const url = `${BASE_URL}/api/1.1/entity/ms.categories/${encodeURIComponent(storeHippoId)}`;
+  console.log(`[StoreHippo Categories] PUT ${url}`, {
+    name: categoryData.name,
+    alias: categoryData.alias,
+    sort_order: categoryData.sort_order,
+    publish: categoryData.publish,
+  });
+
+  try {
+    const response = await makeApiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(categoryData),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      console.error(`[StoreHippo Categories] PUT failed (${response.status}):`, errorText);
+      throw new Error(`StoreHippo API error (${response.status}): ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log(`[StoreHippo Categories] ✅ Category updated successfully: _id=${storeHippoId}`);
+    return { ...categoryData, _id: storeHippoId, ...result } as StoreHippoCategoryResponse;
+  } catch (error) {
+    console.error(`[StoreHippo Categories] ❌ updateStoreHippoCategory failed:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Sync category update to StoreHippo (for existing category with categoryId = StoreHippo _id)
+ */
+export async function updateCategoryInStoreHippo(categoryData: any): Promise<{ success: boolean; error?: string }> {
+  const storeHippoId = categoryData?.categoryId;
+  if (!storeHippoId || !String(storeHippoId).trim()) {
+    console.warn(`[StoreHippo Categories] updateCategoryInStoreHippo: no categoryId (StoreHippo _id)`);
+    return { success: false, error: 'No StoreHippo category ID' };
+  }
+
+  try {
+    const storeHippoPayload = await mapCategoryToStoreHippo(categoryData);
+    await updateStoreHippoCategory(String(storeHippoId).trim(), storeHippoPayload);
+    return { success: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[StoreHippo Categories] updateCategoryInStoreHippo failed:`, error);
+    return { success: false, error: msg };
+  }
+}
+
+/**
  * Main function to sync category to StoreHippo.
  * After create, fetches the category by alias to get StoreHippo _id and returns it for saving in our DB.
  */

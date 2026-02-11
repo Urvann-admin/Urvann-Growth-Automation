@@ -1,6 +1,6 @@
 'use client';
 
-import { formatSubstoreForDisplay } from '@/shared/constants/hubs';
+import { getSelectedHubsFromSubstores } from '@/shared/constants/hubs';
 import type { CategoryFormData } from '../types';
 
 export interface StepReviewProps {
@@ -17,6 +17,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export function StepReview({ data }: StepReviewProps) {
+  const selectedHubs = getSelectedHubsFromSubstores(data.substores);
   const conditionsSummary =
     data.type === 'Automatic' && data.conditions.length > 0
       ? data.conditions
@@ -45,16 +46,16 @@ export function StepReview({ data }: StepReviewProps) {
         <Row label="Publish" value={data.publish ? 'Yes' : 'No'} />
         <Row label="Priority order" value={data.priorityOrder} />
         <Row
-          label="Substores"
+          label="Hubs"
           value={
-            data.substores.length > 0 ? (
+            selectedHubs.length > 0 ? (
               <span className="flex flex-wrap gap-1.5">
-                {data.substores.map((s) => (
+                {selectedHubs.map((hub) => (
                   <span
-                    key={s}
+                    key={hub}
                     className="inline-flex rounded-lg border border-slate-200 bg-[#F4F6F8] px-2 py-0.5 text-xs text-slate-800"
                   >
-                    {formatSubstoreForDisplay(s)}
+                    {hub}
                   </span>
                 ))}
               </span>

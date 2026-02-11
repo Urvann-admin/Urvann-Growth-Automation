@@ -42,8 +42,8 @@ export function StepPublishAndOrder({
             <button
               type="button"
               onClick={() => {
-                const n = Math.max(0, parseInt(priorityOrder, 10) - 1);
-                onPriorityOrderChange(String(n));
+                const n = Math.max(0, (parseFloat(priorityOrder) || 0) - 0.1);
+                onPriorityOrderChange(String(Math.round(n * 10) / 10));
                 onClearError('priorityOrder');
               }}
               className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#F4F6F8] text-slate-700 transition-colors hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:ring-offset-1"
@@ -56,19 +56,29 @@ export function StepPublishAndOrder({
               id="priorityOrder"
               type="number"
               min={0}
+              step={0.1}
               value={priorityOrder}
               onChange={(e) => {
                 onPriorityOrderChange(e.target.value);
                 onClearError('priorityOrder');
               }}
-              className={`h-8 w-10 shrink-0 border-0 bg-white text-center text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:ring-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${errorPriorityOrder ? 'ring-2 ring-red-400 ring-inset' : ''}`}
+              onBlur={(e) => {
+                const v = e.target.value.trim();
+                if (v === '') return;
+                const num = parseFloat(v);
+                if (!Number.isNaN(num) && num >= 0) {
+                  const rounded = Math.round(num * 10) / 10;
+                  onPriorityOrderChange(String(rounded));
+                }
+              }}
+              className={`h-8 w-12 shrink-0 border-0 bg-white text-center text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:ring-inset [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ${errorPriorityOrder ? 'ring-2 ring-red-400 ring-inset' : ''}`}
             />
             <div className="w-px self-stretch bg-slate-200 shrink-0" aria-hidden />
             <button
               type="button"
               onClick={() => {
-                const n = (parseInt(priorityOrder, 10) || 0) + 1;
-                onPriorityOrderChange(String(n));
+                const n = (parseFloat(priorityOrder) || 0) + 0.1;
+                onPriorityOrderChange(String(Math.round(n * 10) / 10));
                 onClearError('priorityOrder');
               }}
               className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#F4F6F8] text-slate-700 transition-colors hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:ring-offset-1"
