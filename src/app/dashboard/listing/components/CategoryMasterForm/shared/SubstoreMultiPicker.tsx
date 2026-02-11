@@ -1,29 +1,55 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 
+/** If provided, options are hubs and value is substores[]; toggling a hub adds/removes that hub's substores. */
 export function SubstoreMultiPicker({
   value,
   options,
   onChange,
   hasError,
+  optionToSubstores,
 }: {
   value: string[];
   options: { value: string; label: string }[];
   onChange: (value: string[]) => void;
   hasError?: boolean;
+  optionToSubstores?: (optionValue: string) => string[];
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const isHubMode = Boolean(optionToSubstores);
+
+  const valueNorm = useMemo(() => new Set(value.map((s) => s.toLowerCase().trim()).filter(Boolean)), [value]);
+
+  const selectedHubCount = useMemo(() => {
+    if (!isHubMode || !optionToSubstores) return value.length;
+    return options.filter(
+      (opt) =>
+        optionToSubstores(opt.value).length > 0 &&
+        optionToSubstores(opt.value).every((s) => valueNorm.has(s.toLowerCase()))
+    ).length;
+  }, [isHubMode, optionToSubstores, options, valueNorm, value.length]);
+
+  const displayCount = isHubMode ? selectedHubCount : value.length;
 
   useEffect(() => {
     if (open) {
-      setSelected(new Set(value.filter(Boolean)));
+      if (isHubMode && optionToSubstores) {
+        const selectedHubs = new Set<string>();
+        options.forEach((opt) => {
+          const subs = optionToSubstores(opt.value);
+          if (subs.length > 0 && subs.every((s) => valueNorm.has(s.toLowerCase()))) selectedHubs.add(opt.value);
+        });
+        setSelected(selectedHubs);
+      } else {
+        setSelected(new Set(value.filter(Boolean)));
+      }
       setSearch('');
     }
-  }, [open, value]);
+  }, [open, value, valueNorm, options, isHubMode, optionToSubstores]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -62,7 +88,12 @@ export function SubstoreMultiPicker({
   };
 
   const handleDone = () => {
-    onChange(Array.from(selected));
+    if (isHubMode && optionToSubstores) {
+      const substores = Array.from(selected).flatMap((hub) => optionToSubstores(hub));
+      onChange(substores);
+    } else {
+      onChange(Array.from(selected));
+    }
     setOpen(false);
   };
 
@@ -73,10 +104,10 @@ export function SubstoreMultiPicker({
         onClick={() => setOpen(true)}
         className={`h-10 w-full rounded-lg border bg-white px-3 py-2 text-left text-sm text-slate-900 shadow-sm transition-all focus:outline-none focus:ring-2 focus:border ${triggerBorder} flex items-center justify-between gap-2`}
       >
-        <span className={value.length > 0 ? '' : 'text-slate-400'}>
-          {value.length > 0
-            ? `${value.length} substore${value.length === 1 ? '' : 's'} selected`
-            : 'Select substores'}
+        <span className={displayCount > 0 ? '' : 'text-slate-400'}>
+          {displayCount > 0
+            ? `${displayCount} hub${displayCount === 1 ? '' : 's'} selected`
+            : 'Select hubs'}
         </span>
         <ChevronDown className="w-4 h-4 shrink-0 text-slate-400" />
       </button>
@@ -96,7 +127,7 @@ export function SubstoreMultiPicker({
           <div className="relative w-full max-w-md max-h-[85vh] flex flex-col rounded-xl border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between shrink-0 border-b border-slate-200 px-5 py-4 bg-[#F4F6F8]">
               <h2 id="substore-picker-title" className="text-base font-semibold text-slate-900">
-                Select substores
+                Select hubs
               </h2>
               <button
                 type="button"
@@ -107,19 +138,28 @@ export function SubstoreMultiPicker({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="shrink-0 border-b border-slate-100 px-4 py-3 bg-slate-50/50">
-              <input
-                type="text"
-                placeholder="Search substores..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 shadow-sm"
-              />
+            <div className="shrink-0 border-b border-slate-100 px-4 py-3 bg-slate-50/50 space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search hubs..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-9 flex-1 min-w-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 shadow-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setSelected(new Set(filtered.map((o) => o.value)))}
+                  className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition-colors whitespace-nowrap"
+                >
+                  Select all
+                </button>
+              </div>
             </div>
             <div className="overflow-auto py-2 max-h-[50vh]">
               {filtered.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-slate-500">
-                  No substores match your search.
+                  No hubs match your search.
                 </p>
               ) : (
                 filtered.map((opt) => (
