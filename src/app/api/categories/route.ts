@@ -117,6 +117,15 @@ export async function POST(request: NextRequest) {
       categoryData.substores = substores.map((s: unknown) => String(s).trim()).filter(Boolean);
     }
 
+    // Alias must be unique in our database
+    const existingByAlias = await CategoryModel.findByAlias(categoryData.alias);
+    if (existingByAlias) {
+      return NextResponse.json(
+        { success: false, message: 'A category with this alias already exists.' },
+        { status: 400 }
+      );
+    }
+
     let created = await CategoryModel.create(categoryData);
     
     // Sync to StoreHippo after successful MongoDB save
