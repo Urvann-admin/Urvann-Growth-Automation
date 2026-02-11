@@ -324,6 +324,14 @@ export async function syncCategoryToStoreHippo(categoryData: any): Promise<{ suc
 
   try {
     const storeHippoPayload = await mapCategoryToStoreHippo(categoryData);
+
+    // If category with this alias already exists on StoreHippo, do not create again — use existing _id
+    const existingOnStoreHippo = await fetchStoreHippoCategoryByAlias(storeHippoPayload.alias);
+    if (existingOnStoreHippo?._id) {
+      console.log(`[StoreHippo Categories] Category with alias "${storeHippoPayload.alias}" already exists on StoreHippo, skipping create. _id=${existingOnStoreHippo._id}`);
+      return { success: true, data: existingOnStoreHippo, storeHippoId: existingOnStoreHippo._id };
+    }
+
     const result = await createStoreHippoCategory(storeHippoPayload);
     
     // Check if POST response already has _id
@@ -332,7 +340,6 @@ export async function syncCategoryToStoreHippo(categoryData: any): Promise<{ suc
     
     if (!storeHippoId) {
       console.log(`[StoreHippo Categories] POST didn't return _id, fetching by alias after 2s delay...`);
-      // Add small delay to ensure category is available for GET
       await new Promise(resolve => setTimeout(resolve, 2000));
       const fetched = await fetchStoreHippoCategoryByAlias(storeHippoPayload.alias);
       storeHippoId = fetched?._id ?? undefined;

@@ -26,16 +26,6 @@ function isDescriptionEmpty(html: string): boolean {
   return !text;
 }
 
-function slugify(text: string): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w\-]+/g, '')
-    .replace(/\-\-+/g, '-')
-    .replace(/^-|-$/g, '');
-}
-
 function validateStep(stepId: StepId, data: CategoryFormData): Record<string, string> {
   const err: Record<string, string> = {};
   switch (stepId) {
@@ -140,11 +130,25 @@ export function CategoryMasterForm() {
     });
   };
 
-  const goNext = () => {
+  const goNext = async () => {
     const stepErrors = validateStep(currentStep.id, data);
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors);
       return;
+    }
+    // On Basics step, ensure alias is unique in our database before proceeding
+    if (currentStep.id === 'basics' && data.alias.trim()) {
+      try {
+        const res = await fetch(`/api/categories/check-alias?alias=${encodeURIComponent(data.alias.trim())}`);
+        const json = await res.json();
+        if (json?.success && json.exists) {
+          setErrors((prev) => ({ ...prev, alias: 'A category with this alias already exists.' }));
+          return;
+        }
+      } catch {
+        setErrors((prev) => ({ ...prev, alias: 'Could not verify alias. Please try again.' }));
+        return;
+      }
     }
     setErrors({});
     setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
@@ -157,6 +161,10 @@ export function CategoryMasterForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Only create when user is on Review step and manually clicks "Create category"
+    if (currentStep.id !== 'review') {
+      return;
+    }
     setMessage(null);
     const allErrors: Record<string, string> = {};
     STEPS.forEach((s) => {
@@ -327,7 +335,7 @@ export function CategoryMasterForm() {
               setData((prev) => ({
                 ...prev,
                 category: v,
-                alias: slugify(v),
+                alias: v.trim().toLowerCase(),
               }))
             }
             onAliasChange={(v) => setField('alias', v)}
