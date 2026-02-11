@@ -1,8 +1,8 @@
 // Urvann API utilities with rate limiting
 
-const BASE_URL = 'https://www.urvann.com';
-const SYNC_BASE_URL = 'https://urvann.storehippo.com'; // Use storehippo.com for sync mapping
-const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
+const BASE_URL = process.env.STOREHIPPO_BASE_URL || 'https://www.urvann.com';
+const SYNC_BASE_URL = process.env.STOREHIPPO_SYNC_BASE_URL || 'https://urvann.storehippo.com'; // Use storehippo.com for sync mapping
+const ACCESS_KEY = process.env.URVANN_API_ACCESS_KEY || '13945648c9da5fdbfc71e3a397218e75';
 
 // Rate limiting configuration - Adaptive to handle 429 errors
 const INITIAL_MAX_CONCURRENT_REQUESTS = 50; // Start with 50, reduce if we hit rate limits

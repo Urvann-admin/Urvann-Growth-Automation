@@ -28,15 +28,20 @@ export const getSubstoresByHub = (hub: string): string[] => {
 };
 
 export const getHubBySubstore = (substore: string): string | null => {
-  const mapping = HUB_MAPPINGS.find(m => m.substores.includes(substore));
+  const lower = substore.toLowerCase();
+  const mapping = HUB_MAPPINGS.find(m => m.substores.includes(lower));
   return mapping ? mapping.hub : null;
+};
+
+/** Returns hub names for which every substore is in the given substores list. */
+export const getSelectedHubsFromSubstores = (substores: string[]): string[] => {
+  const set = new Set(substores.map(s => s.toLowerCase().trim()));
+  return HUB_MAPPINGS.filter(m => m.substores.length > 0 && m.substores.every(s => set.has(s))).map(m => m.hub);
 };
 
 // Format substore names for UI display
 export const formatSubstoreForDisplay = (substore: string): string => {
   const displayMap: Record<string, string> = {
-    'greaternoida': 'GREATERN',
-    'vasantkunj': 'VASANTK',
     'rest-of-india': 'ROI',
     'all-over-india': 'AOI',
   };

@@ -4,8 +4,8 @@ import { NextResponse } from 'next/server';
 export const maxDuration = 60; // 60 seconds max
 export const dynamic = 'force-dynamic';
 
-const BASE_URL = 'https://www.urvann.com';
-const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
+const BASE_URL = process.env.STOREHIPPO_BASE_URL || 'https://www.urvann.com';
+const ACCESS_KEY = process.env.URVANN_API_ACCESS_KEY || '13945648c9da5fdbfc71e3a397218e75';
 
 // ============================================================================
 // OPTIMIZED CONFIGURATION WITH RATE LIMIT HANDLING
