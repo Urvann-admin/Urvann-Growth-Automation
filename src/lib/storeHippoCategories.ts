@@ -227,28 +227,48 @@ export async function mapCategoryToStoreHippo(categoryData: any): Promise<StoreH
  * URL format: .../ms.categories/?filters=[{"field":"alias","operator":"eq","value":"<alias>"}]
  */
 export async function fetchStoreHippoCategoryByAlias(alias: string): Promise<StoreHippoCategoryResponse | null> {
-  if (!alias || !alias.trim()) return null;
-  const filters = [{ field: 'alias', operator: 'eq', value: alias.trim() }];
+  if (!alias || !alias.trim()) {
+    console.warn(`[StoreHippo Categories] fetchStoreHippoCategoryByAlias: empty alias provided`);
+    return null;
+  }
+  
+  const trimmedAlias = alias.trim();
+  const filters = [{ field: 'alias', operator: 'eq', value: trimmedAlias }];
   const filtersParam = encodeURIComponent(JSON.stringify(filters));
   const url = `${BASE_URL}/api/1.1/entity/ms.categories/?filters=${filtersParam}`;
-  console.log(`[StoreHippo Categories] GET by alias: ${alias.trim()}`);
+  
+  console.log(`[StoreHippo Categories] GET by alias: "${trimmedAlias}"`);
+  console.log(`[StoreHippo Categories] Full URL: ${url}`);
+  
   try {
     const response = await makeApiRequest(url, { method: 'GET' });
     if (!response.ok) {
-      console.warn(`[StoreHippo Categories] GET by alias failed: ${response.status}`);
+      const errorText = await response.text().catch(() => response.statusText);
+      console.warn(`[StoreHippo Categories] GET by alias failed (${response.status}): ${errorText}`);
       return null;
     }
+    
     const json = await response.json();
+    console.log(`[StoreHippo Categories] GET response:`, JSON.stringify(json, null, 2));
+    
     const data = Array.isArray(json?.data) ? json.data : (json?.data != null ? [json.data] : []);
+    console.log(`[StoreHippo Categories] Parsed data array length: ${data.length}`);
+    
     const first = data[0];
-    if (!first || !first._id) {
-      console.warn(`[StoreHippo Categories] No category found in GET response for alias=${alias}`);
+    if (!first) {
+      console.warn(`[StoreHippo Categories] No categories found for alias="${trimmedAlias}"`);
       return null;
     }
-    console.log(`[StoreHippo Categories] Fetched category _id=${first._id} for alias=${alias}`);
+    
+    if (!first._id) {
+      console.warn(`[StoreHippo Categories] Found category but no _id field:`, first);
+      return null;
+    }
+    
+    console.log(`[StoreHippo Categories] ✅ Found category _id="${first._id}" name="${first.name}" for alias="${trimmedAlias}"`);
     return first as StoreHippoCategoryResponse;
   } catch (error) {
-    console.error(`[StoreHippo Categories] fetchStoreHippoCategoryByAlias failed:`, error);
+    console.error(`[StoreHippo Categories] fetchStoreHippoCategoryByAlias failed for alias="${trimmedAlias}":`, error);
     return null;
   }
 }
@@ -305,12 +325,24 @@ export async function syncCategoryToStoreHippo(categoryData: any): Promise<{ suc
   try {
     const storeHippoPayload = await mapCategoryToStoreHippo(categoryData);
     const result = await createStoreHippoCategory(storeHippoPayload);
-    // If POST response already has _id, use it; otherwise fetch by alias
+    
+    // Check if POST response already has _id
     let storeHippoId: string | undefined = result?._id;
+    console.log(`[StoreHippo Categories] POST response _id: ${storeHippoId || '(not provided)'}`);
+    
     if (!storeHippoId) {
+      console.log(`[StoreHippo Categories] POST didn't return _id, fetching by alias after 2s delay...`);
+      // Add small delay to ensure category is available for GET
+      await new Promise(resolve => setTimeout(resolve, 2000));
       const fetched = await fetchStoreHippoCategoryByAlias(storeHippoPayload.alias);
       storeHippoId = fetched?._id ?? undefined;
+      console.log(`[StoreHippo Categories] GET by alias result: ${storeHippoId || '(not found)'}`);
     }
+    
+    if (!storeHippoId) {
+      console.warn(`[StoreHippo Categories] Could not get StoreHippo _id for alias: ${storeHippoPayload.alias}`);
+    }
+    
     console.log(`[StoreHippo Categories] syncCategoryToStoreHippo completed: storeHippoId=${storeHippoId}`);
     return { success: true, data: result, storeHippoId };
   } catch (error) {

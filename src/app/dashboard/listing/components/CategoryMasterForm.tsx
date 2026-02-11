@@ -219,6 +219,22 @@ function SubstoreMultiPicker({
     });
   };
 
+  const handleSelectAllFiltered = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((opt) => next.add(opt.value));
+      return next;
+    });
+  };
+
+  const handleDeselectAllFiltered = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      filtered.forEach((opt) => next.delete(opt.value));
+      return next;
+    });
+  };
+
   const handleDone = () => {
     onChange(Array.from(selected));
     setOpen(false);
@@ -272,6 +288,22 @@ function SubstoreMultiPicker({
                 className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
               />
             </div>
+            <div className="shrink-0 flex gap-2 px-4 py-2 border-b border-slate-200">
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                className="text-sm font-medium text-violet-600 hover:text-violet-700"
+              >
+                Select all {search.trim() ? '(filtered)' : ''}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeselectAllFiltered}
+                className="text-sm font-medium text-slate-600 hover:text-slate-700"
+              >
+                Deselect all (filtered)
+              </button>
+            </div>
             <div className="overflow-auto py-2 max-h-[50vh]">
               {filtered.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-slate-500">No substores match your search.</p>
@@ -320,6 +352,12 @@ const RULE_FIELDS: RuleConditionField[] = ['Plant', 'variety', 'Colour', 'Height
 const TYPE_OPTIONS = [
   { value: 'Manual', label: 'Manual' },
   { value: 'Automatic', label: 'Automatic' },
+];
+
+const TYPE_OF_CATEGORY_OPTIONS = [
+  { value: 'L1', label: 'L1' },
+  { value: 'L2', label: 'L2' },
+  { value: 'L3', label: 'L3' },
 ];
 
 const inputBase =
@@ -442,7 +480,6 @@ export function CategoryMasterForm() {
     }
     const order = parseInt(priorityOrder, 10);
     if (Number.isNaN(order) || order < 0) next.priorityOrder = 'Enter a valid priority (0 or more)';
-    if (substores.length === 0) next.substores = 'Select at least one substore';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -549,13 +586,12 @@ export function CategoryMasterForm() {
             />
           </Field>
           <Field label="Type of category" required error={errors.typeOfCategory}>
-            <input
-              id="typeOfCategory"
-              type="text"
-              placeholder="L1, L2, L3"
+            <CustomSelect
               value={typeOfCategory}
-              onChange={(e) => { setTypeOfCategory(e.target.value); setErrors((e) => ({ ...e, typeOfCategory: '' })); }}
-              className={`${inputBase} ${errors.typeOfCategory ? inputError : inputNormal}`}
+              options={TYPE_OF_CATEGORY_OPTIONS}
+              onChange={(v) => { setTypeOfCategory(v); setErrors((prev) => ({ ...prev, typeOfCategory: '' })); }}
+              placeholder="L1, L2 or L3"
+              hasError={!!errors.typeOfCategory}
             />
           </Field>
           <Field label="Description" required error={errors.description} className="sm:col-span-2 lg:col-span-4">
@@ -729,8 +765,7 @@ export function CategoryMasterForm() {
 
       {/* Substores */}
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Substores <span className="text-red-500">*</span></h3>
-        {errors.substores && <p className="text-xs text-red-600 mb-2">{errors.substores}</p>}
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Substores <span className="font-normal text-slate-400">(optional)</span></h3>
         <div className="space-y-3 max-w-md">
           <SubstoreMultiPicker
             value={substores}
