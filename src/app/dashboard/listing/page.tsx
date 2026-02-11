@@ -165,7 +165,7 @@ export default function ListingPage() {
         <div className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <div
-            className={`bg-white shadow-sm shrink-0 ${isChristmasTheme ? '' : 'border-b border-emerald-100/50'}`}
+            className={`bg-white shadow-sm shrink-0 sticky top-0 z-10 ${isChristmasTheme ? '' : 'border-b border-emerald-100/50'}`}
             style={isChristmasTheme ? {
               borderBottom: `2px solid ${CHRISTMAS_COLORS.light}`,
               boxShadow: `0 4px 6px -1px ${CHRISTMAS_COLORS.primary}/10`,
