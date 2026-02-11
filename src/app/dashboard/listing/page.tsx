@@ -10,10 +10,10 @@ import { CategoryMasterForm } from './components/CategoryMasterForm';
 
 type ListingTab = 'category-master' | 'product-master' | 'listing';
 
-const TAB_CONFIG: { id: ListingTab; label: string; icon: typeof FolderTree }[] = [
-  { id: 'category-master', label: 'Category Master', icon: FolderTree },
-  { id: 'product-master', label: 'Product Master', icon: Package },
-  { id: 'listing', label: 'Listing', icon: List },
+const TAB_CONFIG: { id: ListingTab; label: string; subtitle: string; icon: typeof FolderTree }[] = [
+  { id: 'category-master', label: 'Category Master', subtitle: 'Create and manage categories', icon: FolderTree },
+  { id: 'product-master', label: 'Product Master', subtitle: 'Manage products and catalog', icon: Package },
+  { id: 'listing', label: 'Listing', subtitle: 'Listing rules and status', icon: List },
 ];
 
 export default function ListingPage() {
@@ -72,16 +72,16 @@ export default function ListingPage() {
   return (
     <ChristmasTheme variant="dashboard">
       <div
-        className={`min-h-screen flex ${isChristmasTheme ? '' : 'bg-gradient-to-br from-slate-50 via-emerald-50/20 to-slate-50'}`}
+        className={`min-h-screen flex ${isChristmasTheme ? '' : 'bg-[#F4F6F8]'}`}
         style={isChristmasTheme ? {
           background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.background} 0%, ${CHRISTMAS_COLORS.white} 50%, ${CHRISTMAS_COLORS.light} 100%)`,
         } : {}}
       >
-        {/* Collapsible Sidebar - attached left, full height */}
+        {/* Collapsible Sidebar - dark purple, magenta active (College Finder theme) */}
         <aside
-          className={`flex-shrink-0 h-screen sticky top-0 rounded-r-xl shadow-md overflow-hidden transition-[width] duration-300 ease-in-out ${
+          className={`flex-shrink-0 h-screen sticky top-0 rounded-r-xl shadow-lg overflow-hidden transition-[width] duration-300 ease-in-out ${
             sidebarCollapsed ? 'w-[72px]' : 'w-60'
-          } ${isChristmasTheme ? '' : 'bg-white border-y border-r border-slate-200'}`}
+          } ${isChristmasTheme ? '' : 'bg-[#330033] border-r border-[#330033]'}`}
           style={isChristmasTheme ? {
             background: CHRISTMAS_COLORS.white,
             borderRight: `2px solid ${CHRISTMAS_COLORS.light}`,
@@ -91,25 +91,25 @@ export default function ListingPage() {
           } : {}}
         >
             {/* Sidebar header: logo + title + collapse toggle */}
-            <div className="flex items-center justify-between gap-2 px-3 py-4 border-b border-slate-100">
+            <div className={`flex items-center justify-between gap-2 px-3 py-4 ${isChristmasTheme ? 'border-b border-slate-100' : 'border-b border-white/15'}`}>
               <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isChristmasTheme ? '' : 'bg-slate-100'}`}
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isChristmasTheme ? '' : 'bg-white/10'}`}
                   style={isChristmasTheme ? { background: `${CHRISTMAS_COLORS.light}/60` } : {}}
                 >
-                  <LayoutList className="w-5 h-5 text-slate-600" strokeWidth={2} style={isChristmasTheme ? { color: CHRISTMAS_COLORS.primary } : {}} />
+                  <LayoutList className={`w-5 h-5 ${isChristmasTheme ? 'text-slate-600' : 'text-white'}`} strokeWidth={2} style={isChristmasTheme ? { color: CHRISTMAS_COLORS.primary } : {}} />
                 </div>
                 {!sidebarCollapsed && (
                   <div className="min-w-0 overflow-hidden">
-                    <p className="text-sm font-semibold text-slate-900 truncate">Listing</p>
-                    <p className="text-[10px] text-slate-500 truncate">Master</p>
+                    <p className={`text-sm font-semibold truncate ${isChristmasTheme ? 'text-slate-900' : 'text-white'}`}>Listing</p>
+                    <p className={`text-[10px] truncate ${isChristmasTheme ? 'text-slate-500' : 'text-white/70'}`}>Master</p>
                   </div>
                 )}
               </div>
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed((c) => !c)}
-                className={`p-1.5 rounded-lg transition-colors shrink-0 ${isChristmasTheme ? 'hover:bg-slate-100' : 'hover:bg-slate-100 text-slate-500 hover:text-slate-700'}`}
+                className={`p-1.5 rounded-lg transition-colors shrink-0 ${isChristmasTheme ? 'hover:bg-slate-100 text-slate-500 hover:text-slate-700' : 'text-white/80 hover:bg-white/15 hover:text-white'}`}
                 aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               >
                 {sidebarCollapsed ? (
@@ -120,30 +120,23 @@ export default function ListingPage() {
               </button>
             </div>
 
-            {/* Section label */}
-            {!sidebarCollapsed && (
-              <div className="px-3 pt-3 pb-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                  Overview
-                </p>
-              </div>
-            )}
-
-            {/* Nav items */}
+            {/* Nav items - magenta highlight for active */}
             <nav className="p-2">
               {TAB_CONFIG.map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   onClick={() => setActiveTab(id)}
                   title={sidebarCollapsed ? label : undefined}
-                  className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
                     sidebarCollapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
                   } ${
                     activeTab === id
                       ? isChristmasTheme
-                        ? ''
-                        : 'bg-slate-100 text-slate-900'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        ? 'bg-slate-100 text-slate-900'
+                        : 'bg-[#E6007A] text-white'
+                      : isChristmasTheme
+                        ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        : 'text-white hover:bg-white/10'
                   }`}
                   style={
                     activeTab === id && isChristmasTheme
@@ -163,9 +156,9 @@ export default function ListingPage() {
 
         {/* Right side: header + main content */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
+          {/* Top bar - white/light gray, magenta accent */}
           <div
-            className={`bg-white shadow-sm shrink-0 sticky top-0 z-10 ${isChristmasTheme ? '' : 'border-b border-emerald-100/50'}`}
+            className={`bg-white shadow-sm shrink-0 sticky top-0 z-10 ${isChristmasTheme ? '' : 'border-b border-slate-200'}`}
             style={isChristmasTheme ? {
               borderBottom: `2px solid ${CHRISTMAS_COLORS.light}`,
               boxShadow: `0 4px 6px -1px ${CHRISTMAS_COLORS.primary}/10`,
@@ -175,24 +168,30 @@ export default function ListingPage() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => router.push('/dashboard')}
-                  className={`p-2 rounded-lg transition-colors ${isChristmasTheme ? 'hover:bg-slate-100' : 'hover:bg-emerald-50 text-slate-600 hover:text-emerald-700'}`}
+                  className={`p-2 rounded-lg transition-colors ${isChristmasTheme ? 'hover:bg-slate-100' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-800'}`}
                   aria-label="Back to dashboard"
                 >
                   <ArrowLeft className="w-5 h-5" />
                 </button>
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-md ${isChristmasTheme ? '' : 'bg-gradient-to-br from-slate-600 to-slate-700'}`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md ${isChristmasTheme ? '' : 'bg-[#E6007A]'}`}
                     style={isChristmasTheme ? {
                       background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.primary} 0%, ${CHRISTMAS_COLORS.secondary} 100%)`,
                     } : {}}
                   >
-                    <LayoutList className="w-6 h-6 text-white" strokeWidth={1.5} />
+                    {(() => {
+                      const tab = TAB_CONFIG.find((t) => t.id === activeTab);
+                      const Icon = tab?.icon ?? LayoutList;
+                      return <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />;
+                    })()}
                   </div>
                   <div>
-                    <h1 className="text-lg font-semibold text-slate-900">Listing</h1>
+                    <h1 className="text-lg font-semibold text-slate-900">
+                      {TAB_CONFIG.find((t) => t.id === activeTab)?.label ?? 'Listing'}
+                    </h1>
                     <p className={`text-xs ${isChristmasTheme ? 'text-slate-600' : 'text-slate-500'}`}>
-                      Category Master, Product Master & Listing
+                      {TAB_CONFIG.find((t) => t.id === activeTab)?.subtitle ?? 'Category Master, Product Master & Listing'}
                     </p>
                   </div>
                 </div>
@@ -202,7 +201,7 @@ export default function ListingPage() {
 
           {/* Main content area */}
           <main
-            className={`flex-1 min-w-0 p-6 overflow-auto ${isChristmasTheme ? '' : ''}`}
+            className={`flex-1 min-w-0 p-6 overflow-auto ${isChristmasTheme ? '' : 'bg-[#F4F6F8]'}`}
           >
             {activeTab === 'category-master' && <CategoryMasterForm />}
             {activeTab === 'product-master' && (
