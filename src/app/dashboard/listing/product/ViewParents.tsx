@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Check, X, Pencil } from 'lucide-react';
+import { Search, Check, X, Pencil, ChevronDown } from 'lucide-react';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
 import type { SellerMaster } from '@/models/sellerMaster';
@@ -89,6 +89,22 @@ export function ViewParents() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!editing) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setEditing(null);
+        setEditForm(null);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = '';
+    };
+  }, [editing]);
 
   const fetchParents = useCallback(
     (pageNum: number) => {
@@ -352,253 +368,299 @@ export function ViewParents() {
       {/* Edit modal */}
       {editing && editForm && (
         <div
-          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+          className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-parent-title"
         >
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-auto rounded-xl border border-slate-200 bg-white shadow-2xl">
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+          <div className="relative flex flex-col w-full max-w-3xl max-h-[88vh] rounded-xl border border-slate-200 bg-white shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between shrink-0 border-b border-slate-200 bg-slate-50/80 px-6 py-4 rounded-t-xl">
               <h2 id="edit-parent-title" className="text-lg font-semibold text-slate-900">
                 Edit product
               </h2>
               <button
                 type="button"
                 onClick={() => { setEditing(null); setEditForm(null); }}
-                className="p-2 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="p-2 rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors"
                 aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Plant name</span>
-                  <input
-                    type="text"
-                    value={editForm.plant}
-                    onChange={(e) => setEditForm((f) => f ? { ...f, plant: e.target.value } : null)}
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Other names</span>
-                  <input
-                    type="text"
-                    value={editForm.otherNames}
-                    onChange={(e) => setEditForm((f) => f ? { ...f, otherNames: e.target.value } : null)}
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Variety</span>
-                  <input
-                    type="text"
-                    value={editForm.variety}
-                    onChange={(e) => setEditForm((f) => f ? { ...f, variety: e.target.value } : null)}
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Colour</span>
-                  <input
-                    type="text"
-                    value={editForm.colour}
-                    onChange={(e) => setEditForm((f) => f ? { ...f, colour: e.target.value } : null)}
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Height (feet)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={editForm.height}
-                    onChange={(e) =>
-                      setEditForm((f) =>
-                        f ? { ...f, height: e.target.value ? parseFloat(e.target.value) : '' } : null
-                      )
-                    }
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Size (inches)</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.1}
-                    value={editForm.size}
-                    onChange={(e) =>
-                      setEditForm((f) =>
-                        f ? { ...f, size: e.target.value ? parseFloat(e.target.value) : '' } : null
-                      )
-                    }
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <CustomSelect
-                  label="Moss Stick"
-                  value={editForm.mossStick}
-                  onChange={(v) => setEditForm((f) => f ? { ...f, mossStick: v } : null)}
-                  options={MOSS_STICK_OPTIONS}
-                  placeholder="Select Moss Stick"
-                />
-                <CustomSelect
-                  label="Type"
-                  value={editForm.type}
-                  onChange={(v) => setEditForm((f) => f ? { ...f, type: v } : null)}
-                  options={PLANT_TYPES}
-                  placeholder="Select Type"
-                />
-                <CustomSelect
-                  label="Seller"
-                  value={editForm.seller}
-                  onChange={(v) => setEditForm((f) => f ? { ...f, seller: v } : null)}
-                  options={sellerOptions}
-                  placeholder="Select Seller"
-                />
-                <CustomSelect
-                  label="Hub"
-                  value={editForm.hub}
-                  onChange={(v) => setEditForm((f) => f ? { ...f, hub: v } : null)}
-                  options={hubOptions}
-                  placeholder="Select Hub"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Price</span>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={editForm.price}
-                    onChange={(e) =>
-                      setEditForm((f) =>
-                        f ? { ...f, price: e.target.value ? parseFloat(e.target.value) : '' } : null
-                      )
-                    }
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-                <label className="block">
-                  <span className="block text-sm font-medium text-slate-700 mb-1">Inventory quantity</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={editForm.inventoryQuantity}
-                    onChange={(e) =>
-                      setEditForm((f) =>
-                        f
-                          ? { ...f, inventoryQuantity: e.target.value ? parseInt(e.target.value, 10) : '' }
-                          : null
-                      )
-                    }
-                    className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                </label>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editForm.publish === 'published'}
-                  onChange={(e) =>
-                    setEditForm((f) => (f ? { ...f, publish: e.target.checked ? 'published' : 'draft' } : null))
-                  }
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-sm font-medium text-slate-700">Published</span>
-              </label>
-              <div>
-                <span className="block text-sm font-medium text-slate-700 mb-1">Categories</span>
-                {editForm.categories.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {editForm.categories.map((categoryId) => (
-                      <span
-                        key={categoryId}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 text-sm rounded-full"
-                      >
-                        {getCategoryName(categories, categoryId)}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setEditForm((f) =>
-                              f
-                                ? { ...f, categories: f.categories.filter((id) => id !== categoryId) }
-                                : null
-                            )
-                          }
-                          className="hover:bg-emerald-200 rounded-full p-0.5"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="p-6 space-y-6">
+                {/* Basics */}
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                    Basics
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Plant name</span>
+                      <input
+                        type="text"
+                        value={editForm.plant}
+                        onChange={(e) => setEditForm((f) => f ? { ...f, plant: e.target.value } : null)}
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Other names</span>
+                      <input
+                        type="text"
+                        value={editForm.otherNames}
+                        onChange={(e) => setEditForm((f) => f ? { ...f, otherNames: e.target.value } : null)}
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Variety</span>
+                      <input
+                        type="text"
+                        value={editForm.variety}
+                        onChange={(e) => setEditForm((f) => f ? { ...f, variety: e.target.value } : null)}
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Colour</span>
+                      <input
+                        type="text"
+                        value={editForm.colour}
+                        onChange={(e) => setEditForm((f) => f ? { ...f, colour: e.target.value } : null)}
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Height (feet)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={editForm.height}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, height: e.target.value ? parseFloat(e.target.value) : '' } : null
+                          )
+                        }
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Size (inches)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.1}
+                        value={editForm.size}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, size: e.target.value ? parseFloat(e.target.value) : '' } : null
+                          )
+                        }
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
                   </div>
-                )}
-                <div className="relative" ref={categoryDropdownRef}>
-                  <button
-                    type="button"
-                    onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 border border-slate-200 rounded-lg bg-white text-left text-sm focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <span className="text-slate-500">Select categories...</span>
-                    <span className="text-slate-400">▼</span>
-                  </button>
-                  {categoryDropdownOpen && (
-                    <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
-                      <div className="p-2 border-b border-slate-200">
-                        <Search className="inline w-4 h-4 text-slate-400 mr-2" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                    <CustomSelect
+                      label="Moss Stick"
+                      value={editForm.mossStick}
+                      onChange={(v) => setEditForm((f) => f ? { ...f, mossStick: v } : null)}
+                      options={MOSS_STICK_OPTIONS}
+                      placeholder="Select Moss Stick"
+                    />
+                    <CustomSelect
+                      label="Type"
+                      value={editForm.type}
+                      onChange={(v) => setEditForm((f) => f ? { ...f, type: v } : null)}
+                      options={PLANT_TYPES}
+                      placeholder="Select Type"
+                    />
+                    <CustomSelect
+                      label="Seller"
+                      value={editForm.seller}
+                      onChange={(v) => setEditForm((f) => f ? { ...f, seller: v } : null)}
+                      options={sellerOptions}
+                      placeholder="Select Seller"
+                    />
+                    <CustomSelect
+                      label="Hub"
+                      value={editForm.hub}
+                      onChange={(v) => setEditForm((f) => f ? { ...f, hub: v } : null)}
+                      options={hubOptions}
+                      placeholder="Select Hub"
+                    />
+                  </div>
+                </section>
+
+                {/* Pricing & status */}
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                    Pricing & status
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Price</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={editForm.price}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, price: e.target.value ? parseFloat(e.target.value) : '' } : null
+                          )
+                        }
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Inventory quantity</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editForm.inventoryQuantity}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f
+                              ? { ...f, inventoryQuantity: e.target.value ? parseInt(e.target.value, 10) : '' }
+                              : null
+                          )
+                        }
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <div className="flex items-end pb-2.5">
+                      <label className="flex items-center gap-2 cursor-pointer">
                         <input
-                          type="text"
-                          value={categorySearch}
-                          onChange={(e) => setCategorySearch(e.target.value)}
-                          placeholder="Search categories..."
-                          className="w-[calc(100%-1.5rem)] py-1.5 text-sm border-0 focus:ring-0"
+                          type="checkbox"
+                          checked={editForm.publish === 'published'}
+                          onChange={(e) =>
+                            setEditForm((f) => (f ? { ...f, publish: e.target.checked ? 'published' : 'draft' } : null))
+                          }
+                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                         />
-                      </div>
-                      <div className="max-h-40 overflow-y-auto">
-                        {filteredCategoriesForDropdown.map((cat) => {
-                          const id = String(cat._id);
-                          const selected = editForm.categories.includes(id);
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              onClick={() => {
-                                setEditForm((f) =>
-                                  f
-                                    ? {
-                                        ...f,
-                                        categories: selected
-                                          ? f.categories.filter((c) => c !== id)
-                                          : [...f.categories, id],
-                                      }
-                                    : null
-                                );
-                              }}
-                              className={`w-full text-left px-3 py-2 text-sm ${selected ? 'bg-emerald-50 text-emerald-800' : 'hover:bg-slate-50'}`}
-                            >
-                              {cat.category}
-                            </button>
-                          );
-                        })}
-                      </div>
+                        <span className="text-sm font-medium text-slate-700">Published</span>
+                      </label>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Categories */}
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                    Categories
+                  </h3>
+                  {editForm.categories.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {editForm.categories.map((categoryId) => (
+                        <span
+                          key={categoryId}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 text-sm rounded-lg"
+                        >
+                          {getCategoryName(categories, categoryId)}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setEditForm((f) =>
+                                f
+                                  ? { ...f, categories: f.categories.filter((id) => id !== categoryId) }
+                                  : null
+                              )
+                            }
+                            className="hover:bg-emerald-200 rounded p-0.5 transition-colors"
+                            aria-label="Remove category"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
-                </div>
+                  <div className="relative" ref={categoryDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 h-10 border rounded-lg bg-white text-left text-sm transition-colors ${
+                        categoryDropdownOpen
+                          ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500'
+                      }`}
+                    >
+                      <span className={editForm.categories.length > 0 ? 'text-slate-900' : 'text-slate-500'}>
+                        {editForm.categories.length === 0
+                          ? 'Select categories...'
+                          : `${editForm.categories.length} ${editForm.categories.length === 1 ? 'category' : 'categories'} selected`}
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+                    {categoryDropdownOpen && (
+                      <div className="absolute z-20 w-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                        <div className="p-2 border-b border-slate-100">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                              type="text"
+                              value={categorySearch}
+                              onChange={(e) => setCategorySearch(e.target.value)}
+                              placeholder="Search categories..."
+                              className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+                            />
+                          </div>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto py-1">
+                          {filteredCategoriesForDropdown.length === 0 ? (
+                            <p className="text-slate-500 text-sm px-3 py-2">No categories found</p>
+                          ) : (
+                            filteredCategoriesForDropdown.map((cat) => {
+                              const id = String(cat._id);
+                              const selected = editForm.categories.includes(id);
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditForm((f) =>
+                                      f
+                                        ? {
+                                            ...f,
+                                            categories: selected
+                                              ? f.categories.filter((c) => c !== id)
+                                              : [...f.categories, id],
+                                          }
+                                        : null
+                                    );
+                                  }}
+                                  className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-2 ${
+                                    selected ? 'bg-emerald-50 text-emerald-800' : 'hover:bg-slate-50 text-slate-900'
+                                  }`}
+                                >
+                                  {cat.category}
+                                  {selected && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
               </div>
             </div>
-            <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4">
+
+            {/* Footer */}
+            <div className="shrink-0 flex justify-end gap-3 border-t border-slate-200 bg-slate-50/80 px-6 py-4 rounded-b-xl">
               <button
                 type="button"
                 onClick={() => { setEditing(null); setEditForm(null); }}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>
@@ -606,9 +668,16 @@ export function ViewParents() {
                 type="button"
                 onClick={handleSaveEdit}
                 disabled={saving}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? (
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Saving...
+                  </span>
+                ) : (
+                  'Save changes'
+                )}
               </button>
             </div>
           </div>
