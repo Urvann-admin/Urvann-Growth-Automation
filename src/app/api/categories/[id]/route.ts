@@ -1,21 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { CategoryModel } from '@/models/category';
-import type { Rule, RuleConditionField } from '@/models/category';
+import type { Rule, RuleCondition, RuleConditionField, RuleItem } from '@/models/category';
 import { updateCategoryInStoreHippo } from '@/lib/storeHippoCategories';
 
 const RULE_CONDITION_FIELDS: RuleConditionField[] = ['Plant', 'variety', 'Colour', 'Height', 'Size', 'Type', 'Category'];
+
+function isRuleCondition(item: unknown): item is RuleCondition {
+  if (!item || typeof item !== 'object') return false;
+  const c = item as Record<string, unknown>;
+  return typeof c.field === 'string' && RULE_CONDITION_FIELDS.includes(c.field as RuleConditionField) && (typeof c.value === 'string' || typeof c.value === 'number');
+}
+
+function validateRuleItem(item: unknown): boolean {
+  if (isRuleCondition(item)) return true;
+  if (!item || typeof item !== 'object') return false;
+  const r = item as Record<string, unknown>;
+  if (r.rule_operator !== 'AND' && r.rule_operator !== 'OR') return false;
+  const arr = (r.items ?? r.conditions) as unknown[];
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  return arr.every((i) => validateRuleItem(i));
+}
 
 function validateRule(rule: unknown): rule is Rule {
   if (!rule || typeof rule !== 'object') return false;
   const r = rule as Record<string, unknown>;
   if (r.rule_operator !== 'AND' && r.rule_operator !== 'OR') return false;
-  if (!Array.isArray(r.conditions)) return false;
-  return (r.conditions as unknown[]).every((c) => {
-    if (!c || typeof c !== 'object') return false;
-    const cond = c as Record<string, unknown>;
-    return typeof cond.field === 'string' && RULE_CONDITION_FIELDS.includes(cond.field as RuleConditionField) && (typeof cond.value === 'string' || typeof cond.value === 'number');
-  });
+  const arr = (r.items ?? r.conditions) as unknown[];
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  return arr.every((i) => validateRuleItem(i));
+}
+
+function normalizeRule(rule: Rule): Rule {
+  if (Array.isArray((rule as any).items)) return rule;
+  const conds = (rule as any).conditions;
+  if (Array.isArray(conds)) return { rule_operator: rule.rule_operator, items: conds as RuleItem[] };
+  return rule;
 }
 
 export async function GET(
@@ -95,7 +115,7 @@ export async function PATCH(
     if (description !== undefined) updateData.description = String(description ?? '').trim();
     if (rule !== undefined) {
       if (rule == null) updateData.rule = undefined;
-      else if (validateRule(rule)) updateData.rule = rule as Rule;
+      else if (validateRule(rule)) updateData.rule = normalizeRule(rule as Rule);
     }
     if (Array.isArray(substores)) updateData.substores = substores.map((s: unknown) => String(s).trim()).filter(Boolean);
 

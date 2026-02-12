@@ -200,7 +200,7 @@ export function CategoryMasterForm() {
       data.type === 'Automatic' && data.conditions.length > 0
         ? {
             rule_operator: data.ruleOperator,
-            conditions: data.conditions
+            items: data.conditions
               .map((c) => ({
                 field: c.field,
                 value:
