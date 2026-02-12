@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Upload, X, Plus, Trash2, Save, AlertCircle, CheckCircle, Image as ImageIcon, ChevronDown, Search } from 'lucide-react';
+import { Upload, X, Trash2, Save, AlertCircle, CheckCircle, Image as ImageIcon, ChevronDown, Search, Check } from 'lucide-react';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
 import type { SellerMaster } from '@/models/sellerMaster';
+import { CustomSelect } from './CustomSelect';
 
 interface ProductFormData {
   plant: string;
@@ -423,22 +424,13 @@ export function ProductMasterForm() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Moss Stick
-              </label>
-              <select
-                value={formData.mossStick}
-                onChange={(e) => handleInputChange('mossStick', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              >
-                {MOSS_STICK_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <CustomSelect
+              label="Moss Stick"
+              value={formData.mossStick}
+              onChange={(v) => handleInputChange('mossStick', v)}
+              options={MOSS_STICK_OPTIONS}
+              placeholder="Select Moss Stick"
+            />
 
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -455,40 +447,21 @@ export function ProductMasterForm() {
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Type
-              </label>
-              <select
-                value={formData.type}
-                onChange={(e) => handleInputChange('type', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              >
-                {PLANT_TYPES.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <CustomSelect
+              label="Type"
+              value={formData.type}
+              onChange={(v) => handleInputChange('type', v)}
+              options={PLANT_TYPES}
+              placeholder="Select Type"
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Seller Name
-              </label>
-              <select
-                value={formData.seller}
-                onChange={(e) => handleInputChange('seller', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-              >
-                <option value="">Select Seller</option>
-                {sellers.map((seller) => (
-                  <option key={seller._id?.toString()} value={seller.seller_id}>
-                    {seller.seller_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <CustomSelect
+              label="Seller Name"
+              value={formData.seller}
+              onChange={(v) => handleInputChange('seller', v)}
+              options={[{ value: '', label: 'Select Seller' }, ...sellers.map((s) => ({ value: s.seller_id, label: s.seller_name }))]}
+              placeholder="Select Seller"
+            />
           </div>
 
           {/* Final Name - auto-generated */}
@@ -595,21 +568,21 @@ export function ProductMasterForm() {
               <button
                 type="button"
                 onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-white text-left transition-colors focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                   errors.categories ? 'border-red-300' : 'border-slate-300'
-                }`}
+                } ${categoryDropdownOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
               >
-                <span className="text-slate-500">
+                <span className={formData.categories.length > 0 ? 'text-slate-900' : 'text-slate-500'}>
                   {formData.categories.length === 0 
                     ? 'Select categories...' 
                     : `${formData.categories.length} ${formData.categories.length > 1 ? 'categories' : 'category'} selected`}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ml-2 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Dropdown Menu */}
               {categoryDropdownOpen && (
-                <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-hidden">
+                <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
                   {/* Search Input */}
                   <div className="p-2 border-b border-slate-200">
                     <div className="relative">
@@ -619,13 +592,13 @@ export function ProductMasterForm() {
                         value={categorySearch}
                         onChange={(e) => setCategorySearch(e.target.value)}
                         placeholder="Search categories..."
-                        className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-md focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                        className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       />
                     </div>
                   </div>
 
                   {/* Category List */}
-                  <div className="max-h-48 overflow-y-auto">
+                  <div className="max-h-56 overflow-y-auto">
                     {filteredCategories.length === 0 ? (
                       <p className="text-slate-500 text-sm p-3 text-center">No categories found</p>
                     ) : (
@@ -637,18 +610,18 @@ export function ProductMasterForm() {
                             key={categoryIdStr}
                             type="button"
                             onClick={() => handleCategoryToggle(categoryIdStr)}
-                            className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-slate-50 transition-colors ${
-                              isSelected ? 'bg-emerald-50' : ''
+                            className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
+                              isSelected ? 'bg-indigo-50 text-indigo-700' : 'text-slate-900 hover:bg-slate-50'
                             }`}
                           >
                             <div className="flex flex-col">
-                              <span className="text-sm font-medium text-slate-700">{category.category}</span>
+                              <span className="text-sm font-medium">{category.category}</span>
                               {category.typeOfCategory && (
                                 <span className="text-xs text-slate-400">{category.typeOfCategory}</span>
                               )}
                             </div>
                             {isSelected && (
-                              <CheckCircle className="w-4 h-4 text-emerald-600" />
+                              <Check className="w-4 h-4 text-indigo-600 shrink-0" />
                             )}
                           </button>
                         );

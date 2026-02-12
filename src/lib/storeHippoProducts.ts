@@ -49,15 +49,15 @@ export interface StoreHippoSyncResult {
 
 // Convert ParentMaster to StoreHippo format
 function convertToStoreHippoFormat(product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>): StoreHippoProductPayload {
-  // Generate alias from plant name if not provided
-  const alias = product.plant
+  const displayName = product.finalName || product.plant;
+  const alias = displayName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .substring(0, 50);
 
   const payload: StoreHippoProductPayload = {
-    name: product.plant,
+    name: displayName,
     alias: alias,
     price: product.price,
     publish: product.publish === 'published' ? '1' : '0',
@@ -83,14 +83,37 @@ function convertToStoreHippoFormat(product: Omit<ParentMaster, '_id' | 'createdA
   return payload;
 }
 
+// Fetch StoreHippo product _id by name (used after creation)
+async function fetchStoreHippoProductIdByName(name: string): Promise<string | null> {
+  const filter = JSON.stringify([{ field: 'name', operator: 'eq', value: name }]);
+  const url = `${BASE_URL}/api/1.1/entity/ms.products/?filters=${encodeURIComponent(filter)}`;
+
+  const response = await fetch(url, {
+    headers: { 'access-key': ACCESS_KEY },
+  });
+
+  if (!response.ok) {
+    console.error(`[StoreHippo] GET failed: ${response.status}`);
+    return null;
+  }
+
+  const json: { data?: { _id: string }[] } = await response.json();
+  const products = json.data;
+  if (Array.isArray(products) && products.length > 0 && products[0]._id) {
+    return products[0]._id;
+  }
+  return null;
+}
+
 // Sync product to StoreHippo
 export async function syncProductToStoreHippo(
   product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>
 ): Promise<StoreHippoSyncResult> {
   try {
     const payload = convertToStoreHippoFormat(product);
-    
-    console.log(`[StoreHippo] Syncing product: ${product.plant}`);
+    const displayName = product.finalName || product.plant;
+
+    console.log(`[StoreHippo] Syncing product: ${displayName}`);
     console.log(`[StoreHippo] Payload:`, JSON.stringify(payload, null, 2));
 
     const response = await fetch(`${BASE_URL}/api/1.1/entity/ms.products`, {
@@ -111,12 +134,15 @@ export async function syncProductToStoreHippo(
       };
     }
 
-    const result: StoreHippoProductResponse = await response.json();
-    console.log(`[StoreHippo] ✅ Product created with ID: ${result._id}`);
+    const productId = await fetchStoreHippoProductIdByName(displayName);
+    if (!productId) {
+      console.warn(`[StoreHippo] Product created but could not fetch _id for name: ${displayName}`);
+    }
+    console.log(`[StoreHippo] ✅ Product created with ID: ${productId}`);
 
     return {
       success: true,
-      storeHippoId: result._id,
+      storeHippoId: productId ?? undefined,
     };
   } catch (error) {
     console.error('[StoreHippo] Sync error:', error);
@@ -136,9 +162,10 @@ export async function updateProductInStoreHippo(
     // Convert partial product data to StoreHippo format
     const payload: Partial<StoreHippoProductPayload> = {};
     
-    if (product.plant) {
-      payload.name = product.plant;
-      payload.alias = product.plant
+    const displayName = product.finalName || product.plant;
+    if (displayName) {
+      payload.name = displayName;
+      payload.alias = displayName
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')

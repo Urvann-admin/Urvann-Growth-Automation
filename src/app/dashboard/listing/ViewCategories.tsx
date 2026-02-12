@@ -62,13 +62,12 @@ export function ViewCategories() {
     setSaving(true);
     setMessage(null);
     const id = String(editing._id);
+    const conditionsOrItems = (editForm as any).conditions ?? (editForm as any).items;
     const rule =
-      editForm.type === 'Automatic' && Array.isArray((editForm as any).conditions) && (editForm as any).conditions?.length
+      editForm.type === 'Automatic' && Array.isArray(conditionsOrItems) && conditionsOrItems?.length
         ? {
             rule_operator: (editForm as any).ruleOperator ?? 'AND',
-            conditions: (editForm as any).conditions.filter(
-              (c: any) => c && String(c.value).trim() !== ''
-            ),
+            items: conditionsOrItems.filter((c: any) => c && String((c.value ?? '')).trim() !== ''),
           }
         : undefined;
 

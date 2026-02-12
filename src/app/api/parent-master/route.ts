@@ -114,14 +114,16 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Update with StoreHippo ID if sync was successful
+    // Update with StoreHippo product_id if sync was successful
     if (storeHippoResult.storeHippoId && created._id) {
-      console.log(`[API] Updating product ${created._id} with StoreHippo _id: ${storeHippoResult.storeHippoId}`);
-      await ParentMasterModel.update(created._id, { 
-        storeHippoId: storeHippoResult.storeHippoId 
+      const productId = storeHippoResult.storeHippoId;
+      console.log(`[API] Updating product ${created._id} with product_id: ${productId}`);
+      await ParentMasterModel.update(created._id, {
+        product_id: productId,
+        storeHippoId: productId,
       } as any);
-      created = { ...created, storeHippoId: storeHippoResult.storeHippoId } as typeof created;
-      console.log(`[API] ✅ Product updated with StoreHippo id: ${storeHippoResult.storeHippoId}`);
+      created = { ...created, product_id: productId, storeHippoId: productId } as typeof created;
+      console.log(`[API] ✅ Product updated with product_id: ${productId}`);
     }
 
     console.log('Product successfully synced to StoreHippo:', storeHippoResult.storeHippoId);
@@ -333,6 +335,9 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   }
   if (data.images !== undefined && Array.isArray(data.images)) {
     sanitized.images = (data.images as unknown[]).map((img) => String(img).trim()).filter(Boolean);
+  }
+  if (data.product_id !== undefined) {
+    sanitized.product_id = String(data.product_id).trim();
   }
 
   return sanitized;

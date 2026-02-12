@@ -11,16 +11,19 @@ export type RuleConditionField =
   | 'Type'
   | 'Category';
 
-/** Rule condition: single field + value to evaluate */
+/** Rule condition: single field + value to evaluate (leaf node) */
 export interface RuleCondition {
   field: RuleConditionField;
   value: string | number;
 }
 
-/** Rule: operator (AND/OR) and list of conditions */
+/** Each item in a rule can be either a condition OR a nested rule */
+export type RuleItem = RuleCondition | Rule;
+
+/** Rule: operator (AND/OR) and list of items (conditions or nested rules) */
 export interface Rule {
   rule_operator: 'AND' | 'OR';
-  conditions: RuleCondition[];
+  items: RuleItem[];
 }
 
 export interface Category {

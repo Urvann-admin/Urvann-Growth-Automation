@@ -31,8 +31,10 @@ export interface ParentMaster {
   inventoryQuantity: number;
   /** AWS S3 image URLs */
   images: string[];
-  /** StoreHippo product ID */
+  /** StoreHippo product ID (fetched from StoreHippo API after creation) */
   storeHippoId?: string;
+  /** StoreHippo product _id - same as storeHippoId, canonical field for API mapping */
+  product_id?: string;
   /** Seller ID from sellerMaster */
   seller?: string;
   createdAt?: Date;

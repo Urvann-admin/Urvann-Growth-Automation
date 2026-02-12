@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CategoryModel } from '@/models/category';
-import type { Rule, RuleConditionField } from '@/models/category';
+import type { Rule, RuleCondition, RuleConditionField, RuleItem } from '@/models/category';
 import { syncCategoryToStoreHippo } from '@/lib/storeHippoCategories';
 
 export async function GET() {
@@ -20,16 +20,37 @@ export async function GET() {
 
 const RULE_CONDITION_FIELDS: RuleConditionField[] = ['Plant', 'variety', 'Colour', 'Height', 'Size', 'Type', 'Category'];
 
+function isRuleCondition(item: unknown): item is RuleCondition {
+  if (!item || typeof item !== 'object') return false;
+  const c = item as Record<string, unknown>;
+  return typeof c.field === 'string' && RULE_CONDITION_FIELDS.includes(c.field as RuleConditionField) && (typeof c.value === 'string' || typeof c.value === 'number');
+}
+
+function validateRuleItem(item: unknown): boolean {
+  if (isRuleCondition(item)) return true;
+  if (!item || typeof item !== 'object') return false;
+  const r = item as Record<string, unknown>;
+  if (r.rule_operator !== 'AND' && r.rule_operator !== 'OR') return false;
+  const arr = (r.items ?? r.conditions) as unknown[];
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  return arr.every((i) => validateRuleItem(i));
+}
+
 function validateRule(rule: unknown): rule is Rule {
   if (!rule || typeof rule !== 'object') return false;
   const r = rule as Record<string, unknown>;
   if (r.rule_operator !== 'AND' && r.rule_operator !== 'OR') return false;
-  if (!Array.isArray(r.conditions)) return false;
-  return (r.conditions as unknown[]).every((c) => {
-    if (!c || typeof c !== 'object') return false;
-    const cond = c as Record<string, unknown>;
-    return typeof cond.field === 'string' && RULE_CONDITION_FIELDS.includes(cond.field as RuleConditionField) && (typeof cond.value === 'string' || typeof cond.value === 'number');
-  });
+  const arr = (r.items ?? r.conditions) as unknown[];
+  if (!Array.isArray(arr) || arr.length === 0) return false;
+  return arr.every((i) => validateRuleItem(i));
+}
+
+/** Normalize rule: convert legacy `conditions` to `items` */
+function normalizeRule(rule: Rule): Rule {
+  if (Array.isArray((rule as any).items)) return rule;
+  const conds = (rule as any).conditions;
+  if (Array.isArray(conds)) return { rule_operator: rule.rule_operator, items: conds as RuleItem[] };
+  return rule;
 }
 
 export async function POST(request: NextRequest) {
@@ -69,7 +90,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (type === 'Automatic' && (!rule || !validateRule(rule) || !(rule as Rule).conditions?.length)) {
+    const ruleItems = rule && typeof rule === 'object' ? ((rule as any).items ?? (rule as any).conditions) : [];
+    if (type === 'Automatic' && (!rule || !validateRule(rule) || !Array.isArray(ruleItems) || ruleItems.length === 0)) {
       return NextResponse.json(
         { success: false, message: 'rule with at least one condition is required when type is Automatic' },
         { status: 400 }
@@ -112,7 +134,7 @@ export async function POST(request: NextRequest) {
     }
     categoryData.type = String(type).trim();
     categoryData.description = String(description).trim();
-    if (rule != null && validateRule(rule)) categoryData.rule = rule as Rule;
+    if (rule != null && validateRule(rule)) categoryData.rule = normalizeRule(rule as Rule);
     if (Array.isArray(substores)) {
       categoryData.substores = substores.map((s: unknown) => String(s).trim()).filter(Boolean);
     }
