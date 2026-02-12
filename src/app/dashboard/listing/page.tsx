@@ -6,8 +6,9 @@ import { useAuth } from '@/features/auth/hooks/useAuth';
 import { ArrowLeft, LayoutList, FolderTree, Package, List, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon } from 'lucide-react';
 import { ChristmasTheme } from '@/components/theme/ChristmasTheme';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
-import { CategoryMasterForm } from './components/CategoryMasterForm';
-import { ViewCategories } from '@/app/dashboard/listing/components/ViewCategories';
+import { CategoryMasterForm } from './CategoryMasterForm';
+import { ViewCategories } from './ViewCategories';
+import { ProductMasterForm } from './ProductMasterForm';
 
 type ListingTab = 'category-add' | 'category-view' | 'product-master' | 'listing';
 
@@ -283,14 +284,7 @@ export default function ListingPage() {
           >
             {activeTab === 'category-add' && <CategoryMasterForm />}
             {activeTab === 'category-view' && <ViewCategories />}
-            {activeTab === 'product-master' && (
-              <div>
-                <h2 className="text-xl font-semibold text-slate-900 mb-2">Product Master</h2>
-                <p className="text-sm text-slate-600">
-                  Manage products here. This section can host product catalog, SKUs, and product details.
-                </p>
-              </div>
-            )}
+            {activeTab === 'product-master' && <ProductMasterForm />}
             {activeTab === 'listing' && (
               <div>
                 <h2 className="text-xl font-semibold text-slate-900 mb-2">Listing</h2>
