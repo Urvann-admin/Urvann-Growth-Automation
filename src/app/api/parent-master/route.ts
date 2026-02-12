@@ -282,6 +282,7 @@ function validateParentMasterData(data: unknown): {
     publish: String(d.publish).trim(),
     inventoryQuantity: Number(d.inventoryQuantity),
     images: (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean),
+    hub: d.hub ? String(d.hub).trim() : undefined,
   };
 
   return { success: true, data: validated };
@@ -338,6 +339,9 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   }
   if (data.product_id !== undefined) {
     sanitized.product_id = String(data.product_id).trim();
+  }
+  if (data.hub !== undefined) {
+    sanitized.hub = String(data.hub).trim() || undefined;
   }
 
   return sanitized;

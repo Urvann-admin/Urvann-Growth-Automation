@@ -37,6 +37,8 @@ export interface ParentMaster {
   product_id?: string;
   /** Seller ID from sellerMaster */
   seller?: string;
+  /** Hub name (e.g. Whitefield, HSR) for inventory/listing scope */
+  hub?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // Run with: node .next/standalone/server.js (copy public + .next/static in first).
   // Helps avoid issues if something on the server removes .next — you can run from standalone.
   output: "standalone",
+  // Do not bundle these server-only packages; resolve at runtime.
+  serverExternalPackages: ["aws-sdk", "mongodb", "mongoose"],
   // Compiler optimizations
   compiler: {
     removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
