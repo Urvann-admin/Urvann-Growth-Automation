@@ -17,7 +17,11 @@ export function ListingContent({ activeTab }: ListingContentProps) {
     <main
       className={`flex-1 min-w-0 overflow-auto ${isChristmasTheme ? '' : 'bg-[#F4F6F8]'} ${isProductAdd ? 'p-2' : 'p-6'}`}
     >
-      {activeTab === 'category-add' && <CategoryMasterForm />}
+      {activeTab === 'category-add' && (
+        <div className="max-w-4xl mx-auto">
+          <CategoryMasterForm />
+        </div>
+      )}
       {activeTab === 'category-view' && <ViewCategories />}
       {activeTab === 'product-add' && <ProductMasterForm />}
       {activeTab === 'product-view-parent' && <ViewParents />}

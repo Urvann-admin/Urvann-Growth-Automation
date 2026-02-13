@@ -36,12 +36,10 @@ function getProductCode(productName: string): string {
     throw new SkuGenerationError('Product name must contain at least one word');
   }
 
-  const firstLetters = words
-    .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase())
-    .join('');
-
-  return firstLetters.padEnd(2, words[0].charAt(1)?.toUpperCase() || 'X');
+  // First 3 letters: take from first word, then second word if needed, uppercase
+  const letters = words.join('').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (letters.length === 0) throw new SkuGenerationError('Product name must contain at least one letter');
+  return letters.slice(0, 3).padEnd(3, 'X');
 }
 
 function getPaddedSequence(counter: number): string {
