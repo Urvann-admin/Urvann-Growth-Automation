@@ -13,6 +13,7 @@ export interface StepPricingProps {
   publish: string;
   hub: string;
   hubOptions: { value: string; label: string }[];
+  skuPreview?: string;
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
   onClearError: (key: string) => void;
@@ -28,6 +29,7 @@ export function StepPricing({
   publish,
   hub,
   hubOptions,
+  skuPreview = '',
   errors,
   onFieldChange,
   onClearError,
@@ -144,6 +146,18 @@ export function StepPricing({
           <span className="text-sm font-medium text-slate-700">Published</span>
         </label>
         <p className="text-xs text-slate-500">Tick to publish, leave unticked for draft</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">SKU</label>
+        <input
+          type="text"
+          readOnly
+          value={skuPreview || '—'}
+          className={`${inputBase} border-slate-300 bg-slate-50 text-slate-600 cursor-default`}
+          aria-label="SKU (auto-filled)"
+        />
+        <p className="text-xs text-slate-500 mt-1">Preview only — actual SKU is assigned when you create the product</p>
       </div>
     </div>
   );

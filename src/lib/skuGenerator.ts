@@ -36,12 +36,10 @@ function getProductCode(productName: string): string {
     throw new SkuGenerationError('Product name must contain at least one word');
   }
 
-  const firstLetters = words
-    .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase())
-    .join('');
-
-  return firstLetters.padEnd(2, words[0].charAt(1)?.toUpperCase() || 'X');
+  // First 3 letters: take from first word, then second word if needed, uppercase
+  const letters = words.join('').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (letters.length === 0) throw new SkuGenerationError('Product name must contain at least one letter');
+  return letters.slice(0, 3).padEnd(3, 'X');
 }
 
 function getPaddedSequence(counter: number): string {
@@ -89,11 +87,34 @@ export async function generateSKU(
   return `${baseSku}${checksum}`;
 }
 
+/** Parent products are always single unit; qty code in SKU is always "01" (not set/case). */
+const PARENT_QTY_CODE = '01';
+
 export async function generateParentSKU(
   hub: string,
   productName: string
 ): Promise<string> {
-  return generateSKU(hub, productName, 1);
+  const hubCode = getHubCode(hub);
+  const productCode = getProductCode(productName);
+  const counter = await SkuCounterModel.getNextCounter(hub);
+  const sequence = getPaddedSequence(counter);
+  return `${hubCode}${productCode}${sequence}${PARENT_QTY_CODE}`;
+}
+
+/**
+ * Returns what the next parent SKU would be, without incrementing the counter.
+ * Parent qty code is always "01" (single). For UI preview only.
+ */
+export async function previewParentSKU(
+  hub: string,
+  productName: string
+): Promise<string> {
+  const hubCode = getHubCode(hub);
+  const productCode = getProductCode(productName);
+  const currentCounter = await getCurrentCounterForHub(hub); // read-only, no increment
+  const nextCounter = currentCounter + 1;
+  const sequence = getPaddedSequence(nextCounter);
+  return `${hubCode}${productCode}${sequence}${PARENT_QTY_CODE}`;
 }
 
 export function validateHub(hub: string): boolean {
