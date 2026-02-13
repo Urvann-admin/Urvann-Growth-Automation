@@ -9,22 +9,17 @@ export interface StoreHippoProductPayload {
   name: string;
   alias: string;
   price: number;
+  compare_price?: number;
+  sort_order?: number;
   publish: string; // "1" for published, "0" for unpublished
-  categories: string[];
+  categories: string[]; // category aliases (e.g. indoor-plants)
   images: { image: string }[];
+  inventory_quantity: number;
+  inventory_management?: string; // "automatic" | "none"
+  inventory_management_level?: string; // "product" or empty
+  inventory_allow_out_of_stock?: number; // quantity allowed when out of stock
+  substore?: string[]; // substores derived from hub (e.g. bgl-e, bgl-e2)
   seller?: string; // seller_id from sellerMaster
-  // Additional fields can be added as custom fields
-  custom_fields?: {
-    plant?: string;
-    other_names?: string;
-    variety?: string;
-    colour?: string;
-    height?: number;
-    moss_stick?: string;
-    size?: number;
-    type?: string;
-    inventory_quantity?: number;
-  };
 }
 
 // StoreHippo product response format
@@ -63,19 +58,27 @@ function convertToStoreHippoFormat(product: Omit<ParentMaster, '_id' | 'createdA
     publish: product.publish === 'published' ? '1' : '0',
     categories: product.categories,
     images: (product.images || []).map((url) => ({ image: url })),
-    custom_fields: {
-      plant: product.plant,
-      other_names: product.otherNames,
-      variety: product.variety,
-      colour: product.colour,
-      height: product.height,
-      moss_stick: product.mossStick,
-      size: product.size,
-      type: product.type,
-      inventory_quantity: product.inventoryQuantity,
-    },
+    inventory_quantity: product.inventoryQuantity ?? 0,
   };
 
+  if (product.compare_price !== undefined && product.compare_price != null) {
+    payload.compare_price = product.compare_price;
+  }
+  if (product.sort_order !== undefined && product.sort_order != null) {
+    payload.sort_order = product.sort_order;
+  }
+  if (product.inventory_management) {
+    payload.inventory_management = product.inventory_management;
+  }
+  if (product.inventory_management_level) {
+    payload.inventory_management_level = product.inventory_management_level;
+  }
+  if (product.inventory_allow_out_of_stock !== undefined && product.inventory_allow_out_of_stock != null) {
+    payload.inventory_allow_out_of_stock = product.inventory_allow_out_of_stock;
+  }
+  if (product.substores && product.substores.length > 0) {
+    payload.substore = product.substores;
+  }
   if (product.seller) {
     payload.seller = product.seller;
   }
@@ -173,27 +176,19 @@ export async function updateProductInStoreHippo(
     }
     
     if (product.price !== undefined) payload.price = product.price;
+    if (product.compare_price !== undefined) payload.compare_price = product.compare_price;
+    if (product.sort_order !== undefined) payload.sort_order = product.sort_order;
     if (product.publish) payload.publish = product.publish === 'published' ? '1' : '0';
     if (product.categories) payload.categories = product.categories;
     if (product.images) payload.images = product.images.map((url) => ({ image: url }));
-    if (product.seller) payload.seller = product.seller;
-    
-    if (product.otherNames || product.variety || product.colour || 
-        product.height !== undefined || product.mossStick || 
-        product.size !== undefined || product.type || 
-        product.inventoryQuantity !== undefined) {
-      payload.custom_fields = {
-        ...(product.plant && { plant: product.plant }),
-        ...(product.otherNames && { other_names: product.otherNames }),
-        ...(product.variety && { variety: product.variety }),
-        ...(product.colour && { colour: product.colour }),
-        ...(product.height !== undefined && { height: product.height }),
-        ...(product.mossStick && { moss_stick: product.mossStick }),
-        ...(product.size !== undefined && { size: product.size }),
-        ...(product.type && { type: product.type }),
-        ...(product.inventoryQuantity !== undefined && { inventory_quantity: product.inventoryQuantity }),
-      };
+    if (product.inventoryQuantity !== undefined) payload.inventory_quantity = product.inventoryQuantity;
+    if (product.inventory_management) payload.inventory_management = product.inventory_management;
+    if (product.inventory_management_level) payload.inventory_management_level = product.inventory_management_level;
+    if (product.inventory_allow_out_of_stock !== undefined && product.inventory_allow_out_of_stock != null) {
+      payload.inventory_allow_out_of_stock = product.inventory_allow_out_of_stock;
     }
+    if (product.substores && product.substores.length > 0) payload.substore = product.substores;
+    if (product.seller) payload.seller = product.seller;
 
     console.log(`[StoreHippo] Updating product: ${storeHippoId}`);
 

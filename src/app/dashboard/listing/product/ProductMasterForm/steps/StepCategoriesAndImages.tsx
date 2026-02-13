@@ -19,9 +19,9 @@ export interface StepCategoriesAndImagesProps {
   onClearError: (key: string) => void;
 }
 
-function getCategoryName(categories: Category[], categoryId: string): string {
-  const cat = categories.find((c) => c._id === categoryId || c.categoryId === categoryId);
-  return cat?.category || categoryId;
+function getCategoryName(categories: Category[], categoryAlias: string): string {
+  const cat = categories.find((c) => c.alias === categoryAlias);
+  return cat?.category || categoryAlias;
 }
 
 export function StepCategoriesAndImages({
@@ -116,14 +116,14 @@ export function StepCategoriesAndImages({
                   <p className="text-slate-500 text-sm p-3 text-center">No categories found</p>
                 ) : (
                   filteredCategories.map((category) => {
-                    const categoryIdStr = String(category._id);
-                    const isSelected = selectedCategoryIds.includes(categoryIdStr);
+                    const categoryAlias = category.alias || '';
+                    const isSelected = selectedCategoryIds.includes(categoryAlias);
                     return (
                       <button
-                        key={categoryIdStr}
+                        key={categoryAlias || String(category._id)}
                         type="button"
                         onClick={() => {
-                          onCategoryToggle(categoryIdStr);
+                          onCategoryToggle(categoryAlias);
                           onClearError('categories');
                         }}
                         className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${

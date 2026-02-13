@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
 import { syncProductToStoreHippo } from '@/lib/storeHippoProducts';
+import { getSubstoresByHub } from '@/shared/constants/hubs';
 
 export async function GET(request: NextRequest) {
   try {
@@ -98,39 +99,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let created = await ParentMasterModel.create(validated.data!);
-    
-    // Sync to StoreHippo after successful MongoDB save
+    // Sync to StoreHippo first – do not save to DB if StoreHippo fails
     const storeHippoResult = await syncProductToStoreHippo(validated.data!);
-    
+
     if (!storeHippoResult.success) {
-      // Log StoreHippo sync failure but don't fail the entire request
       console.error('StoreHippo sync failed for product:', validated.data!.plant, storeHippoResult.error);
-      
-      return NextResponse.json({ 
-        success: true, 
-        data: created,
-        warning: `Product created locally but StoreHippo sync failed: ${storeHippoResult.error}`
-      });
+      return NextResponse.json(
+        { success: false, message: `StoreHippo sync failed: ${storeHippoResult.error}` },
+        { status: 422 }
+      );
     }
 
-    // Update with StoreHippo product_id if sync was successful
-    if (storeHippoResult.storeHippoId && created._id) {
-      const productId = storeHippoResult.storeHippoId;
-      console.log(`[API] Updating product ${created._id} with product_id: ${productId}`);
-      await ParentMasterModel.update(created._id, {
-        product_id: productId,
-        storeHippoId: productId,
-      } as any);
-      created = { ...created, product_id: productId, storeHippoId: productId } as typeof created;
-      console.log(`[API] ✅ Product updated with product_id: ${productId}`);
-    }
+    const productId = storeHippoResult.storeHippoId;
+    const dataToSave = {
+      ...validated.data!,
+      ...(productId && { product_id: productId, storeHippoId: productId }),
+    };
 
-    console.log('Product successfully synced to StoreHippo:', storeHippoResult.storeHippoId);
-    return NextResponse.json({ 
-      success: true, 
+    const created = await ParentMasterModel.create(dataToSave);
+
+    console.log('Product saved to DB and synced to StoreHippo:', productId);
+    return NextResponse.json({
+      success: true,
       data: created,
-      storeHippoSync: true
+      storeHippoSync: true,
     });
   } catch (error) {
     console.error('Error creating parent master product:', error);
@@ -265,6 +257,24 @@ function validateParentMasterData(data: unknown): {
     return { success: false, message: 'images must be an array' };
   }
 
+  const hub = d.hub ? String(d.hub).trim() : undefined;
+  const substores = hub ? getSubstoresByHub(hub) : [];
+
+  const priceNum = Number(d.price);
+  const comparePriceNum =
+    d.compare_price != null && d.compare_price !== '' ? Number(d.compare_price) : null;
+  if (
+    comparePriceNum != null &&
+    comparePriceNum > 0 &&
+    priceNum > 0 &&
+    comparePriceNum < priceNum
+  ) {
+    return {
+      success: false,
+      message: 'Compare price must be greater than or equal to Price (original price ≥ sale price).',
+    };
+  }
+
   // Build validated object
   const validated: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
     plant: String(d.plant).trim(),
@@ -279,10 +289,16 @@ function validateParentMasterData(data: unknown): {
     finalName: d.finalName ? String(d.finalName).trim() : undefined,
     categories: (d.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean),
     price: Number(d.price),
+    compare_price: d.compare_price != null && d.compare_price !== '' ? Number(d.compare_price) : undefined,
+    sort_order: d.sort_order != null && d.sort_order !== '' ? Number(d.sort_order) : undefined,
     publish: String(d.publish).trim(),
     inventoryQuantity: Number(d.inventoryQuantity),
+    inventory_management: d.inventory_management ? String(d.inventory_management).trim() : undefined,
+    inventory_management_level: d.inventory_management_level ? String(d.inventory_management_level).trim() : undefined,
+    inventory_allow_out_of_stock: d.inventory_allow_out_of_stock != null && d.inventory_allow_out_of_stock !== '' ? Number(d.inventory_allow_out_of_stock) : undefined,
     images: (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean),
-    hub: d.hub ? String(d.hub).trim() : undefined,
+    hub: hub || undefined,
+    substores: substores.length > 0 ? substores : undefined,
   };
 
   return { success: true, data: validated };
@@ -328,6 +344,23 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.price !== undefined) {
     sanitized.price = typeof data.price === 'number' ? data.price : parseFloat(String(data.price)) || 0;
   }
+  if (data.compare_price !== undefined) {
+    sanitized.compare_price = typeof data.compare_price === 'number' ? data.compare_price : parseFloat(String(data.compare_price)) || undefined;
+  }
+  if (data.sort_order !== undefined) {
+    sanitized.sort_order = typeof data.sort_order === 'number' ? data.sort_order : parseInt(String(data.sort_order), 10) || undefined;
+  }
+  if (data.inventory_management !== undefined) {
+    sanitized.inventory_management = String(data.inventory_management).trim() || undefined;
+  }
+  if (data.inventory_management_level !== undefined) {
+    sanitized.inventory_management_level = String(data.inventory_management_level).trim() || undefined;
+  }
+  if (data.inventory_allow_out_of_stock !== undefined && data.inventory_allow_out_of_stock !== '') {
+    sanitized.inventory_allow_out_of_stock = typeof data.inventory_allow_out_of_stock === 'number'
+      ? data.inventory_allow_out_of_stock
+      : parseInt(String(data.inventory_allow_out_of_stock), 10) || 0;
+  }
   if (data.publish !== undefined) {
     sanitized.publish = String(data.publish).trim();
   }
@@ -341,7 +374,12 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
     sanitized.product_id = String(data.product_id).trim();
   }
   if (data.hub !== undefined) {
-    sanitized.hub = String(data.hub).trim() || undefined;
+    const hub = String(data.hub).trim() || undefined;
+    sanitized.hub = hub;
+    sanitized.substores = hub ? getSubstoresByHub(hub) : [];
+  }
+  if (data.substores !== undefined && Array.isArray(data.substores)) {
+    sanitized.substores = (data.substores as unknown[]).map((s) => String(s).trim()).filter(Boolean);
   }
 
   return sanitized;
