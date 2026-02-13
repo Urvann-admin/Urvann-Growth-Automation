@@ -17,6 +17,7 @@ interface PaginationInfo {
 }
 
 interface EditParentForm {
+  sku: string;
   plant: string;
   otherNames: string;
   variety: string;
@@ -135,6 +136,7 @@ export function ViewParents() {
   const openEdit = (parent: ParentMaster) => {
     setEditing(parent);
     setEditForm({
+      sku: parent.sku ?? '',
       plant: parent.plant ?? '',
       otherNames: parent.otherNames ?? '',
       variety: parent.variety ?? '',

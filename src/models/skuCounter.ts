@@ -10,24 +10,26 @@ export interface SkuCounter {
 const COLLECTION_NAME = 'skuCounters';
 
 export class SkuCounterModel {
+  /** Increments the hub counter and returns the new value. Use only when creating a product. */
   static async getNextCounter(hub: string): Promise<number> {
     const collection = await getCollection(COLLECTION_NAME);
-    
+
     const result = await collection.findOneAndUpdate(
       { hub },
-      { 
+      {
         $inc: { counter: 1 },
-        $set: { lastUpdated: new Date() }
+        $set: { lastUpdated: new Date() },
       },
-      { 
+      {
         upsert: true,
-        returnDocument: 'after'
+        returnDocument: 'after',
       }
     );
 
     return result?.counter ?? 1;
   }
 
+  /** Read-only: returns current counter without incrementing. Use for SKU preview only. */
   static async getCurrentCounter(hub: string): Promise<number> {
     const collection = await getCollection(COLLECTION_NAME);
     const doc = await collection.findOne({ hub });

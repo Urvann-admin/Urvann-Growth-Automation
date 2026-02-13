@@ -103,6 +103,7 @@ export async function POST(request: NextRequest) {
     let sku: string | undefined;
     if (validated.data!.hub && validated.data!.plant) {
       try {
+        // generateParentSKU calls getNextCounter and increments the hub counter (preview does not)
         sku = await generateParentSKU(validated.data!.hub, validated.data!.plant);
         console.log(`Generated SKU: ${sku} for hub: ${validated.data!.hub}, product: ${validated.data!.plant}`);
       } catch (error) {

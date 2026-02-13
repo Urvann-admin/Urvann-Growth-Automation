@@ -10,6 +10,7 @@ import { MOSS_STICK_OPTIONS, PLANT_TYPES } from '../ProductMasterForm/types';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 
 interface EditParentForm {
+  sku: string;
   plant: string;
   otherNames: string;
   variety: string;
@@ -100,6 +101,16 @@ export function EditParentModal({
         <div className="p-6 space-y-6">
           <ModalSection title="Basics">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block sm:col-span-2">
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">SKU</span>
+                <input
+                  type="text"
+                  readOnly
+                  value={editForm.sku || '—'}
+                  className={`${inputClass} bg-slate-50 text-slate-600 cursor-default`}
+                  aria-label="SKU (auto-filled)"
+                />
+              </label>
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Plant name</span>
                 <input

@@ -89,11 +89,34 @@ export async function generateSKU(
   return `${baseSku}${checksum}`;
 }
 
+/** Parent products are always single unit; qty code in SKU is always "01" (not set/case). */
+const PARENT_QTY_CODE = '01';
+
 export async function generateParentSKU(
   hub: string,
   productName: string
 ): Promise<string> {
-  return generateSKU(hub, productName, 1);
+  const hubCode = getHubCode(hub);
+  const productCode = getProductCode(productName);
+  const counter = await SkuCounterModel.getNextCounter(hub);
+  const sequence = getPaddedSequence(counter);
+  return `${hubCode}${productCode}${sequence}${PARENT_QTY_CODE}`;
+}
+
+/**
+ * Returns what the next parent SKU would be, without incrementing the counter.
+ * Parent qty code is always "01" (single). For UI preview only.
+ */
+export async function previewParentSKU(
+  hub: string,
+  productName: string
+): Promise<string> {
+  const hubCode = getHubCode(hub);
+  const productCode = getProductCode(productName);
+  const currentCounter = await getCurrentCounterForHub(hub); // read-only, no increment
+  const nextCounter = currentCounter + 1;
+  const sequence = getPaddedSequence(nextCounter);
+  return `${hubCode}${productCode}${sequence}${PARENT_QTY_CODE}`;
 }
 
 export function validateHub(hub: string): boolean {

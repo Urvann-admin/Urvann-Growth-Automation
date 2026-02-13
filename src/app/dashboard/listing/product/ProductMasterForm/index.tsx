@@ -75,6 +75,7 @@ export function ProductMasterForm() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [sellers, setSellers] = useState<SellerMaster[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [skuPreview, setSkuPreview] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const createButtonClickedRef = useRef(false);
 
@@ -104,6 +105,25 @@ export function ProductMasterForm() {
       })
       .catch((e) => console.error('Error fetching sellers:', e));
   }, []);
+
+  useEffect(() => {
+    const hub = formData.hub?.trim();
+    const plant = formData.plant?.trim();
+    if (!hub || !plant) {
+      setSkuPreview('');
+      return;
+    }
+    const controller = new AbortController();
+    const params = new URLSearchParams({ hub, plant });
+    fetch(`/api/parent-master/preview-sku?${params.toString()}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.success && typeof json.sku === 'string') setSkuPreview(json.sku);
+        else setSkuPreview('');
+      })
+      .catch(() => setSkuPreview(''));
+    return () => controller.abort();
+  }, [formData.hub, formData.plant]);
 
   const setField = <K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -296,7 +316,7 @@ export function ProductMasterForm() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Step tracker – outside the card, like category-add */}
-      <div className="relative">
+      <div className="relative mt-6 mb-6">
         <div
           className="absolute top-5 h-0.5 bg-slate-200 rounded-full"
           style={{
@@ -389,6 +409,7 @@ export function ProductMasterForm() {
                 publish={formData.publish}
                 hub={formData.hub}
                 hubOptions={hubOptions}
+                skuPreview={skuPreview}
                 errors={errors}
                 onFieldChange={handleFieldChange}
                 onClearError={clearError}
@@ -411,7 +432,13 @@ export function ProductMasterForm() {
               />
             )}
             {currentStep.id === 'review' && (
-              <StepReview data={formData} finalName={finalName} categories={categories} />
+              <StepReview
+                data={formData}
+                finalName={finalName}
+                categories={categories}
+                skuPreview={skuPreview}
+                selectedImageCount={selectedImages.length}
+              />
             )}
           </div>
 

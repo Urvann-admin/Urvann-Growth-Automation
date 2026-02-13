@@ -109,11 +109,11 @@ export function CustomSelect({
             {filteredOptions.length === 0 ? (
               <p className="text-slate-500 text-sm p-3 text-center">No options found</p>
             ) : (
-              filteredOptions.map((opt) => {
+              filteredOptions.map((opt, index) => {
                 const isSelected = opt.value === value;
                 return (
                   <button
-                    key={opt.value}
+                    key={opt.value ? `${opt.value}-${index}` : `option-${index}`}
                     type="button"
                     onClick={() => {
                       onChange(opt.value);
