@@ -1,43 +1,30 @@
 'use client';
 
-import { CustomSelect } from '../../../components';
-import { MOSS_STICK_OPTIONS, PLANT_TYPES } from '../types';
-
-export interface StepBasicsProps {
+export interface StepProductInfoProps {
   plant: string;
   otherNames: string;
   variety: string;
   colour: string;
   height: number | '';
-  mossStick: string;
   size: number | '';
-  type: string;
-  seller: string;
-  sort_order: number | '';
   finalName: string;
-  sellerOptions: { value: string; label: string }[];
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
   onClearError: (key: string) => void;
 }
 
-export function StepBasics({
+export function StepProductInfo({
   plant,
   otherNames,
   variety,
   colour,
   height,
-  mossStick,
   size,
-  type,
-  seller,
-  sort_order,
   finalName,
-  sellerOptions,
   errors,
   onFieldChange,
   onClearError,
-}: StepBasicsProps) {
+}: StepProductInfoProps) {
   const inputBase = 'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500';
   const inputError = 'border-red-300';
   const inputNormal = 'border-slate-300';
@@ -98,13 +85,6 @@ export function StepBasics({
             placeholder="Height in feet"
           />
         </div>
-        <CustomSelect
-          label="Moss Stick"
-          value={mossStick}
-          onChange={(v) => onFieldChange('mossStick', v)}
-          options={MOSS_STICK_OPTIONS}
-          placeholder="Select Moss Stick"
-        />
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Size (inches)</label>
           <input
@@ -116,32 +96,6 @@ export function StepBasics({
             className={`${inputBase} ${inputNormal}`}
             placeholder="Size in inches"
           />
-        </div>
-        <CustomSelect
-          label="Type"
-          value={type}
-          onChange={(v) => onFieldChange('type', v)}
-          options={PLANT_TYPES}
-          placeholder="Select Type"
-        />
-        <CustomSelect
-          label="Seller Name"
-          value={seller}
-          onChange={(v) => onFieldChange('seller', v)}
-          options={sellerOptions}
-          placeholder="Select Seller"
-        />
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Sort Order</label>
-          <input
-            type="number"
-            min={0}
-            value={sort_order}
-            onChange={(e) => onFieldChange('sort_order', e.target.value ? parseInt(e.target.value, 10) : '')}
-            className={`${inputBase} ${inputNormal}`}
-            placeholder="Optional"
-          />
-          <p className="text-xs text-slate-500 mt-1">Display order (optional, can leave empty)</p>
         </div>
       </div>
       <div>

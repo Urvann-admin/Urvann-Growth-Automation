@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const user = await UserModel.findByEmail(email) as User | null;
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Incorrect email' },
         { status: 401 }
       );
     }
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const isValid = await UserModel.validatePassword(user, password);
     if (!isValid) {
       return NextResponse.json(
-        { error: 'Invalid email or password' },
+        { error: 'Incorrect password' },
         { status: 401 }
       );
     }

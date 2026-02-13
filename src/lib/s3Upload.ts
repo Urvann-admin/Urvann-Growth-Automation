@@ -79,3 +79,55 @@ export async function uploadMultipleImagesToS3(files: File[], folder: string = '
     errors,
   };
 }
+
+export async function deleteImageFromS3(imageUrl: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const url = new URL(imageUrl);
+    const key = url.pathname.substring(1);
+
+    const deleteParams = {
+      Bucket: BUCKET_NAME,
+      Key: key,
+    };
+
+    await s3.deleteObject(deleteParams).promise();
+
+    return { success: true };
+  } catch (error) {
+    console.error('S3 delete error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+export async function deleteMultipleImagesFromS3(imageUrls: string[]): Promise<{
+  success: boolean;
+  deletedCount: number;
+  errors: string[];
+}> {
+  const results = await Promise.allSettled(
+    imageUrls.map(url => deleteImageFromS3(url))
+  );
+
+  let deletedCount = 0;
+  const errors: string[] = [];
+
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled' && result.value.success) {
+      deletedCount++;
+    } else {
+      const error = result.status === 'rejected' 
+        ? result.reason 
+        : result.value.error || 'Unknown error';
+      errors.push(`URL ${imageUrls[index]}: ${error}`);
+    }
+  });
+
+  return {
+    success: deletedCount > 0,
+    deletedCount,
+    errors,
+  };
+}

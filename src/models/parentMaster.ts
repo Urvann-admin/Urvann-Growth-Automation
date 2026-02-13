@@ -21,6 +21,8 @@ export interface ParentMaster {
   type?: string;
   /** Final name: plant + other names + variety + colour + in + size + inch + type */
   finalName?: string;
+  /** Product description (rich text HTML) */
+  description?: string;
   /** Array of category aliases (e.g. indoor-plants, outdoor-plants) */
   categories: string[];
   /** Price of the product */
@@ -51,6 +53,8 @@ export interface ParentMaster {
   hub?: string;
   /** Substores derived from hub mapping (e.g. bgl-e, bgl-e2 for Whitefield) */
   substores?: string[];
+  /** SKU generated for this product (format: [HUB][PRODUCT][SEQUENCE][QTY][CHECKSUM]) */
+  sku?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

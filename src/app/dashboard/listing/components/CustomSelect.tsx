@@ -46,8 +46,10 @@ export function CustomSelect({
 
   useEffect(() => {
     if (open && searchable) {
-      setSearch('');
-      searchInputRef.current?.focus();
+      queueMicrotask(() => {
+        setSearch('');
+        searchInputRef.current?.focus();
+      });
     }
   }, [open, searchable]);
 

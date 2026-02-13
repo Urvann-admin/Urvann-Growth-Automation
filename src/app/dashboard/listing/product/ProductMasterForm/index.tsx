@@ -13,13 +13,21 @@ import {
   type StepId,
   type ProductFormData,
 } from './types';
-import { StepBasics, StepPricing, StepCategoriesAndImages, StepReview } from './steps';
+import { StepProductInfo, StepDetails, StepPricing, StepCategoriesAndImages, StepReview } from './steps';
+
+function isDescriptionEmpty(html: string): boolean {
+  const stripped = html.replace(/<[^>]*>/g, '').trim();
+  return stripped.length === 0;
+}
 
 function validateStep(stepId: StepId, data: ProductFormData): Record<string, string> {
   const err: Record<string, string> = {};
   switch (stepId) {
-    case 'basics':
+    case 'product-info':
       if (!data.plant.trim()) err.plant = 'Plant name is required';
+      break;
+    case 'details':
+      if (isDescriptionEmpty(data.description)) err.description = 'Description is required';
       break;
     case 'pricing':
       if (!data.price || data.price <= 0) err.price = 'Price must be greater than 0';
@@ -231,6 +239,7 @@ export function ProductMasterForm() {
         size: typeof formData.size === 'number' ? formData.size : undefined,
         type: formData.type || undefined,
         seller: formData.seller || undefined,
+        description: formData.description.trim() || undefined,
         sort_order: typeof formData.sort_order === 'number' ? formData.sort_order : undefined,
         finalName: finalName || undefined,
         categories: formData.categories,
@@ -342,19 +351,27 @@ export function ProductMasterForm() {
         <form onSubmit={handleSubmit} className="p-4 space-y-5">
           {/* Step content */}
           <div className="min-h-[200px]">
-            {currentStep.id === 'basics' && (
-              <StepBasics
+            {currentStep.id === 'product-info' && (
+              <StepProductInfo
                 plant={formData.plant}
                 otherNames={formData.otherNames}
                 variety={formData.variety}
                 colour={formData.colour}
                 height={formData.height}
-                mossStick={formData.mossStick}
                 size={formData.size}
+                finalName={finalName}
+                errors={errors}
+                onFieldChange={handleFieldChange}
+                onClearError={clearError}
+              />
+            )}
+            {currentStep.id === 'details' && (
+              <StepDetails
+                mossStick={formData.mossStick}
                 type={formData.type}
                 seller={formData.seller}
+                description={formData.description}
                 sort_order={formData.sort_order}
-                finalName={finalName}
                 sellerOptions={sellerOptions}
                 errors={errors}
                 onFieldChange={handleFieldChange}

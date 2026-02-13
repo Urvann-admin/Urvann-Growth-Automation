@@ -1,4 +1,4 @@
-export type StepId = 'basics' | 'pricing' | 'categories-images' | 'review';
+export type StepId = 'product-info' | 'details' | 'pricing' | 'categories-images' | 'review';
 
 export interface ProductFormData {
   plant: string;
@@ -10,6 +10,7 @@ export interface ProductFormData {
   size: number | '';
   type: string;
   seller: string;
+  description: string;
   sort_order: number | '';
   categories: string[];
   price: number | '';
@@ -24,7 +25,8 @@ export interface ProductFormData {
 }
 
 export const STEPS: { id: StepId; label: string; title: string }[] = [
-  { id: 'basics', label: 'Basics', title: 'Product identity & details' },
+  { id: 'product-info', label: 'Product Info', title: 'Basic product information' },
+  { id: 'details', label: 'Details', title: 'Attributes & description' },
   { id: 'pricing', label: 'Pricing', title: 'Price, inventory & publish' },
   { id: 'categories-images', label: 'Categories & images', title: 'Categories and product images' },
   { id: 'review', label: 'Review', title: 'Review and create' },
@@ -40,6 +42,7 @@ export const initialFormData: ProductFormData = {
   size: '',
   type: '',
   seller: '',
+  description: '',
   sort_order: '',
   categories: [],
   price: '',

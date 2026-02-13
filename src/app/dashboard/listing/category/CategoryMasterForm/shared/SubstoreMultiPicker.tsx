@@ -37,17 +37,19 @@ export function SubstoreMultiPicker({
 
   useEffect(() => {
     if (open) {
-      if (isHubMode && optionToSubstores) {
-        const selectedHubs = new Set<string>();
-        options.forEach((opt) => {
-          const subs = optionToSubstores(opt.value);
-          if (subs.length > 0 && subs.every((s) => valueNorm.has(s.toLowerCase()))) selectedHubs.add(opt.value);
-        });
-        setSelected(selectedHubs);
-      } else {
-        setSelected(new Set(value.filter(Boolean)));
-      }
-      setSearch('');
+      queueMicrotask(() => {
+        if (isHubMode && optionToSubstores) {
+          const selectedHubs = new Set<string>();
+          options.forEach((opt) => {
+            const subs = optionToSubstores(opt.value);
+            if (subs.length > 0 && subs.every((s) => valueNorm.has(s.toLowerCase()))) selectedHubs.add(opt.value);
+          });
+          setSelected(selectedHubs);
+        } else {
+          setSelected(new Set(value.filter(Boolean)));
+        }
+        setSearch('');
+      });
     }
   }, [open, value, valueNorm, options, isHubMode, optionToSubstores]);
 

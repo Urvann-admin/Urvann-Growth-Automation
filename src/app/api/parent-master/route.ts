@@ -3,6 +3,7 @@ import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
 import { syncProductToStoreHippo } from '@/lib/storeHippoProducts';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
+import { generateParentSKU } from '@/lib/skuGenerator';
 
 export async function GET(request: NextRequest) {
   try {
@@ -99,8 +100,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let sku: string | undefined;
+    if (validated.data!.hub && validated.data!.plant) {
+      try {
+        sku = await generateParentSKU(validated.data!.hub, validated.data!.plant);
+        console.log(`Generated SKU: ${sku} for hub: ${validated.data!.hub}, product: ${validated.data!.plant}`);
+      } catch (error) {
+        console.error('SKU generation failed:', error);
+        return NextResponse.json(
+          { success: false, message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+          { status: 422 }
+        );
+      }
+    }
+
+    const dataWithSku = {
+      ...validated.data!,
+      ...(sku && { sku }),
+    };
+
     // Sync to StoreHippo first – do not save to DB if StoreHippo fails
-    const storeHippoResult = await syncProductToStoreHippo(validated.data!);
+    const storeHippoResult = await syncProductToStoreHippo(dataWithSku);
 
     if (!storeHippoResult.success) {
       console.error('StoreHippo sync failed for product:', validated.data!.plant, storeHippoResult.error);
@@ -112,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     const productId = storeHippoResult.storeHippoId;
     const dataToSave = {
-      ...validated.data!,
+      ...dataWithSku,
       ...(productId && { product_id: productId, storeHippoId: productId }),
     };
 
@@ -286,6 +306,7 @@ function validateParentMasterData(data: unknown): {
     size: typeof d.size === 'number' ? d.size : undefined,
     type: d.type ? String(d.type).trim() : undefined,
     seller: d.seller ? String(d.seller).trim() : undefined,
+    description: d.description ? String(d.description).trim() : undefined,
     finalName: d.finalName ? String(d.finalName).trim() : undefined,
     categories: (d.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean),
     price: Number(d.price),
@@ -338,6 +359,9 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.seller !== undefined) {
     sanitized.seller = String(data.seller).trim();
   }
+  if (data.description !== undefined) {
+    sanitized.description = String(data.description).trim();
+  }
   if (data.categories !== undefined && Array.isArray(data.categories)) {
     sanitized.categories = (data.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean);
   }
@@ -380,6 +404,9 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   }
   if (data.substores !== undefined && Array.isArray(data.substores)) {
     sanitized.substores = (data.substores as unknown[]).map((s) => String(s).trim()).filter(Boolean);
+  }
+  if (data.sku !== undefined) {
+    sanitized.sku = String(data.sku).trim();
   }
 
   return sanitized;

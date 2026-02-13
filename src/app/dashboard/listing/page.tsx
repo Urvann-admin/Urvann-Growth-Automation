@@ -13,6 +13,7 @@ import {
 export default function ListingPage() {
   const {
     user,
+    isLoading,
     loading,
     activeTab,
     setActiveTab,
@@ -26,12 +27,12 @@ export default function ListingPage() {
 
   const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
 
-  if (loading) {
-    return <ListingLoadingScreen />;
+  // Redirect when auth is ready and user is missing
+  if (!isLoading && !user) {
+    return null;
   }
 
-  if (!user) return null;
-
+  // Show full layout immediately; only the content area shows loading while auth resolves
   return (
     <ChristmasTheme variant="dashboard">
       <div
@@ -56,7 +57,7 @@ export default function ListingPage() {
         />
         <div className="flex-1 flex flex-col min-w-0">
           <ListingTopBar activeTab={activeTab} />
-          <ListingContent activeTab={activeTab} />
+          <ListingContent activeTab={activeTab} loading={loading} />
         </div>
       </div>
     </ChristmasTheme>

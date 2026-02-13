@@ -20,6 +20,8 @@ export interface StoreHippoProductPayload {
   inventory_allow_out_of_stock?: number; // quantity allowed when out of stock
   substore?: string[]; // substores derived from hub (e.g. bgl-e, bgl-e2)
   seller?: string; // seller_id from sellerMaster
+  sku?: string; // SKU code for the product
+  description?: string; // Product description (rich text HTML)
 }
 
 // StoreHippo product response format
@@ -81,6 +83,12 @@ function convertToStoreHippoFormat(product: Omit<ParentMaster, '_id' | 'createdA
   }
   if (product.seller) {
     payload.seller = product.seller;
+  }
+  if (product.sku) {
+    payload.sku = product.sku;
+  }
+  if (product.description) {
+    payload.description = product.description;
   }
 
   return payload;
@@ -189,6 +197,8 @@ export async function updateProductInStoreHippo(
     }
     if (product.substores && product.substores.length > 0) payload.substore = product.substores;
     if (product.seller) payload.seller = product.seller;
+    if (product.sku) payload.sku = product.sku;
+    if (product.description) payload.description = product.description;
 
     console.log(`[StoreHippo] Updating product: ${storeHippoId}`);
 
