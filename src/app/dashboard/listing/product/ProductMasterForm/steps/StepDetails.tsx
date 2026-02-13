@@ -1,6 +1,6 @@
 'use client';
 
-import { CustomSelect } from '../../../components';
+import { CustomSelect } from '../../../components/CustomSelect';
 import { MOSS_STICK_OPTIONS, PLANT_TYPES } from '../types';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
 

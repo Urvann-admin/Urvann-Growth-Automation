@@ -1,1 +1,1 @@
-export { ViewCategories } from './ViewCategories';
+export { ViewCategories } from './ViewCategories/index';

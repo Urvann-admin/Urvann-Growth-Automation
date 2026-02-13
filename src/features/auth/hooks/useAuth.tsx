@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import React, { useState, useEffect, createContext, useContext, ReactNode, useMemo } from 'react';
 import { authService } from '@/shared/services/api';
 import { storage } from '@/shared/utils';
 import { STORAGE_KEYS } from '@/shared/constants';
@@ -187,7 +187,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setError(null);
   };
 
-  const contextValue: AuthContextType = {
+  const contextValue = useMemo<AuthContextType>(() => ({
     user,
     isAuthenticated,
     isLoading,
@@ -197,7 +197,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
     refreshToken,
     clearError,
-  };
+  }), [user, isAuthenticated, isLoading, error, login, register, logout, refreshToken, clearError]);
 
   return (
     <AuthContext.Provider value={contextValue}>

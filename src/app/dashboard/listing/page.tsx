@@ -1,14 +1,12 @@
 'use client';
 
+import { useCallback } from 'react';
 import { ChristmasTheme } from '@/components/theme/ChristmasTheme';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
 import { useListingState } from './hooks/useListingState';
-import {
-  ListingLoadingScreen,
-  ListingSidebar,
-  ListingTopBar,
-  ListingContent,
-} from './components';
+import { ListingSidebar } from './components/ListingSidebar';
+import { ListingTopBar } from './components/ListingTopBar';
+import { ListingContent } from './components/ListingContent';
 
 export default function ListingPage() {
   const {
@@ -27,12 +25,22 @@ export default function ListingPage() {
 
   const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
 
-  // Redirect when auth is ready and user is missing
-  if (!isLoading && !user) {
-    return null;
+  const onCategorySectionToggle = useCallback(() => setCategorySectionOpen((o) => !o), []);
+  const onProductSectionToggle = useCallback(() => setProductSectionOpen((o) => !o), []);
+  const onSidebarCollapsedToggle = useCallback(() => setSidebarCollapsed((c) => !c), []);
+
+  // Show loading while auth is resolving
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
-  // Show full layout immediately; only the content area shows loading while auth resolves
   return (
     <ChristmasTheme variant="dashboard">
       <div
@@ -49,15 +57,15 @@ export default function ListingPage() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           categorySectionOpen={categorySectionOpen}
-          onCategorySectionToggle={() => setCategorySectionOpen((o) => !o)}
+          onCategorySectionToggle={onCategorySectionToggle}
           productSectionOpen={productSectionOpen}
-          onProductSectionToggle={() => setProductSectionOpen((o) => !o)}
+          onProductSectionToggle={onProductSectionToggle}
           sidebarCollapsed={sidebarCollapsed}
-          onSidebarCollapsedToggle={() => setSidebarCollapsed((c) => !c)}
+          onSidebarCollapsedToggle={onSidebarCollapsedToggle}
         />
         <div className="flex-1 flex flex-col min-w-0">
           <ListingTopBar activeTab={activeTab} />
-          <ListingContent activeTab={activeTab} loading={loading} />
+          <ListingContent activeTab={activeTab} />
         </div>
       </div>
     </ChristmasTheme>
