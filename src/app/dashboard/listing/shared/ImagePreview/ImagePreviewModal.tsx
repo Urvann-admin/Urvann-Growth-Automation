@@ -93,6 +93,7 @@ export function ImagePreviewModal({
         className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* eslint-disable-next-line @next/next/no-img-element -- dynamic/blob preview URLs */}
         <img
           src={images[currentIndex]}
           alt={`Preview ${currentIndex + 1}`}
@@ -117,6 +118,7 @@ export function ImagePreviewModal({
                   : 'border-white/30 hover:border-white/60'
               }`}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- dynamic preview URLs */}
               <img
                 src={img}
                 alt={`Thumbnail ${idx + 1}`}

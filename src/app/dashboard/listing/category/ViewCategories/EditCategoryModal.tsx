@@ -1,6 +1,5 @@
 'use client';
 
-import type { Category } from '@/models/category';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { SubstoreMultiPicker } from '../CategoryMasterForm/shared';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';

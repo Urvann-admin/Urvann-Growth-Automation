@@ -263,6 +263,7 @@ export function StepCategoriesAndImages({
                     key={index}
                     className="group relative aspect-square rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-50 hover:border-emerald-400 transition-all"
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element -- blob URL from File, not static asset */}
                     <img
                       src={objectUrl}
                       alt={`Selected ${index + 1}`}
@@ -306,6 +307,7 @@ export function StepCategoriesAndImages({
                   key={index}
                   className="group relative aspect-square rounded-xl overflow-hidden border-2 border-slate-200 bg-slate-50 hover:border-emerald-400 transition-all"
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- dynamic preview URL */}
                   <img
                     src={url}
                     alt={`Uploaded ${index + 1}`}

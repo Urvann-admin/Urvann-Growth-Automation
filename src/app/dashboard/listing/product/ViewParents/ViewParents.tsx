@@ -67,7 +67,7 @@ export function ViewParents() {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
+  const fetchSellers = useCallback(() => {
     fetch('/api/sellers')
       .then((res) => res.json())
       .then((json) => {
@@ -76,9 +76,13 @@ export function ViewParents() {
       .catch(() => {});
   }, []);
 
+  // Defer categories and sellers until edit modal opens to speed up initial load
   useEffect(() => {
-    if (editing) fetchCategories();
-  }, [editing, fetchCategories]);
+    if (editing) {
+      fetchCategories();
+      fetchSellers();
+    }
+  }, [editing, fetchCategories, fetchSellers]);
 
   useEffect(() => {
     if (!editing) return;
@@ -121,7 +125,7 @@ export function ViewParents() {
 
   useEffect(() => {
     fetchParents(1);
-  }, []);
+  }, [fetchParents]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

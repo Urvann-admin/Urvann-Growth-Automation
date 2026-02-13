@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAllHubCounters } from '@/lib/skuGenerator';
 import { SkuCounterModel } from '@/models/skuCounter';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Next.js route signature requires request
 export async function GET(request: NextRequest) {
   try {
     const counters = await getAllHubCounters();

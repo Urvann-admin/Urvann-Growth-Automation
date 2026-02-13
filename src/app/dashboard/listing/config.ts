@@ -1,4 +1,4 @@
-import { FolderTree, Package, List, Plus, ListIcon, type LucideIcon } from 'lucide-react';
+import { List, Plus, ListIcon, type LucideIcon } from 'lucide-react';
 
 export type ListingTab =
   | 'category-add'

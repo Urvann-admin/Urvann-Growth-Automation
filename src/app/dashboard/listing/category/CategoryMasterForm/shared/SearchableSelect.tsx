@@ -31,8 +31,10 @@ export function SearchableSelect({
 
   useEffect(() => {
     if (open) {
-      setSearch('');
-      setTimeout(() => inputRef.current?.focus(), 0);
+      queueMicrotask(() => {
+        setSearch('');
+        inputRef.current?.focus();
+      });
     }
   }, [open]);
 

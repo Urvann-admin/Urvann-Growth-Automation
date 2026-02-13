@@ -51,8 +51,9 @@ export async function PUT(
       );
     }
 
-    // Remove _id from update data if present
-    const { _id, createdAt, ...updateData } = body;
+    const updateData = { ...body };
+    delete (updateData as Record<string, unknown>)._id;
+    delete (updateData as Record<string, unknown>).createdAt;
     
     const result = await ParentMasterModel.update(id, updateData);
     
