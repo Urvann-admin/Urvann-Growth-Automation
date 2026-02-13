@@ -10,10 +10,15 @@ export interface ProductFormData {
   size: number | '';
   type: string;
   seller: string;
+  sort_order: number | '';
   categories: string[];
   price: number | '';
+  compare_price: number | '';
   publish: string;
   inventoryQuantity: number | '';
+  inventory_management: string;
+  inventory_management_level: string;
+  inventory_allow_out_of_stock: number | '';
   images: string[];
   hub: string;
 }
@@ -35,13 +40,29 @@ export const initialFormData: ProductFormData = {
   size: '',
   type: '',
   seller: '',
+  sort_order: '',
   categories: [],
   price: '',
+  compare_price: '',
   publish: 'draft',
   inventoryQuantity: '',
+  inventory_management: 'none',
+  inventory_management_level: '',
+  inventory_allow_out_of_stock: '',
   images: [],
   hub: '',
 };
+
+export const INVENTORY_MANAGEMENT_OPTIONS = [
+  { value: '', label: 'Select' },
+  { value: 'automatic', label: 'Automatic' },
+  { value: 'none', label: 'None' },
+];
+
+export const INVENTORY_MANAGEMENT_LEVEL_OPTIONS = [
+  { value: '', label: 'Leave empty' },
+  { value: 'product', label: 'Product' },
+];
 
 export const MOSS_STICK_OPTIONS = [
   { value: '', label: 'Select Moss Stick' },

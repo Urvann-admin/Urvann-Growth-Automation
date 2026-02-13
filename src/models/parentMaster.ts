@@ -21,14 +21,24 @@ export interface ParentMaster {
   type?: string;
   /** Final name: plant + other names + variety + colour + in + size + inch + type */
   finalName?: string;
-  /** Array of category IDs/names */
+  /** Array of category aliases (e.g. indoor-plants, outdoor-plants) */
   categories: string[];
   /** Price of the product */
   price: number;
+  /** Compare price (strikethrough/original price) */
+  compare_price?: number;
+  /** Sort order for display */
+  sort_order?: number;
   /** Publish status */
   publish: string;
   /** Inventory quantity */
   inventoryQuantity: number;
+  /** Inventory management: 'automatic' | 'none' */
+  inventory_management?: string;
+  /** Inventory management level: 'product' or empty */
+  inventory_management_level?: string;
+  /** Quantity allowed when out of stock (amount user can purchase) */
+  inventory_allow_out_of_stock?: number;
   /** AWS S3 image URLs */
   images: string[];
   /** StoreHippo product ID (fetched from StoreHippo API after creation) */
@@ -39,6 +49,8 @@ export interface ParentMaster {
   seller?: string;
   /** Hub name (e.g. Whitefield, HSR) for inventory/listing scope */
   hub?: string;
+  /** Substores derived from hub mapping (e.g. bgl-e, bgl-e2 for Whitefield) */
+  substores?: string[];
   createdAt?: Date;
   updatedAt?: Date;
 }

@@ -26,6 +26,14 @@ function validateStep(stepId: StepId, data: ProductFormData): Record<string, str
       if (data.inventoryQuantity === '' || data.inventoryQuantity < 0) {
         err.inventoryQuantity = 'Inventory quantity must be 0 or greater';
       }
+      if (
+        typeof data.compare_price === 'number' &&
+        typeof data.price === 'number' &&
+        data.compare_price > 0 &&
+        data.compare_price < data.price
+      ) {
+        err.compare_price = 'Compare price must be greater than or equal to Price (original price ≥ sale price)';
+      }
       break;
     case 'categories-images':
       if (data.categories.length === 0) err.categories = 'Select at least one category';
@@ -101,7 +109,7 @@ export function ProductMasterForm() {
     });
   };
 
-  const handleFieldChange = (field: string, value: string | number | '') => {
+  const handleFieldChange = (field: string, value: string | number | '' | boolean) => {
     setField(field as keyof ProductFormData, value as ProductFormData[keyof ProductFormData]);
   };
 
@@ -223,11 +231,17 @@ export function ProductMasterForm() {
         size: typeof formData.size === 'number' ? formData.size : undefined,
         type: formData.type || undefined,
         seller: formData.seller || undefined,
+        sort_order: typeof formData.sort_order === 'number' ? formData.sort_order : undefined,
         finalName: finalName || undefined,
         categories: formData.categories,
         price: Number(formData.price),
+        compare_price: typeof formData.compare_price === 'number' ? formData.compare_price : undefined,
         publish: formData.publish,
         inventoryQuantity: Number(formData.inventoryQuantity),
+        inventory_management: formData.inventory_management || undefined,
+        inventory_management_level: formData.inventory_management_level || undefined,
+        inventory_allow_out_of_stock:
+          typeof formData.inventory_allow_out_of_stock === 'number' ? formData.inventory_allow_out_of_stock : undefined,
         images: allImageUrls,
         hub: formData.hub?.trim() || undefined,
       };
@@ -339,6 +353,7 @@ export function ProductMasterForm() {
                 size={formData.size}
                 type={formData.type}
                 seller={formData.seller}
+                sort_order={formData.sort_order}
                 finalName={finalName}
                 sellerOptions={sellerOptions}
                 errors={errors}
@@ -349,7 +364,11 @@ export function ProductMasterForm() {
             {currentStep.id === 'pricing' && (
               <StepPricing
                 price={formData.price}
+                compare_price={formData.compare_price}
                 inventoryQuantity={formData.inventoryQuantity}
+                inventory_management={formData.inventory_management}
+                inventory_management_level={formData.inventory_management_level}
+                inventory_allow_out_of_stock={formData.inventory_allow_out_of_stock}
                 publish={formData.publish}
                 hub={formData.hub}
                 hubOptions={hubOptions}

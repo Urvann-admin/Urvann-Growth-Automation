@@ -8,7 +8,7 @@ import type { SellerMaster } from '@/models/sellerMaster';
 import { Notification } from '@/components/ui/Notification';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { CustomSelect } from '../components';
-import { MOSS_STICK_OPTIONS, PLANT_TYPES } from './ProductMasterForm/types';
+import { MOSS_STICK_OPTIONS, PLANT_TYPES, INVENTORY_MANAGEMENT_OPTIONS, INVENTORY_MANAGEMENT_LEVEL_OPTIONS } from './ProductMasterForm/types';
 
 interface PaginationInfo {
   total: number;
@@ -17,9 +17,9 @@ interface PaginationInfo {
   totalPages: number;
 }
 
-function getCategoryName(categories: Category[], categoryId: string): string {
-  const cat = categories.find((c) => c._id === categoryId || c.categoryId === categoryId);
-  return cat?.category || categoryId;
+function getCategoryName(categories: Category[], categoryAlias: string): string {
+  const cat = categories.find((c) => c.alias === categoryAlias);
+  return cat?.category || categoryAlias;
 }
 
 export function ViewParents() {
@@ -45,10 +45,15 @@ export function ViewParents() {
     size: number | '';
     type: string;
     seller: string;
+    sort_order: number | '';
     categories: string[];
     price: number | '';
+    compare_price: number | '';
     publish: string;
     inventoryQuantity: number | '';
+    inventory_management: string;
+    inventory_management_level: string;
+    inventory_allow_out_of_stock: number | '';
     images: string[];
     hub: string;
   } | null>(null);
@@ -170,10 +175,15 @@ export function ViewParents() {
         size: p.size ?? '',
         type: p.type ?? '',
         seller: p.seller ?? '',
+        sort_order: p.sort_order ?? '',
         categories: Array.isArray(p.categories) ? p.categories : [],
         price: p.price ?? '',
+        compare_price: p.compare_price ?? '',
         publish: p.publish ?? 'draft',
         inventoryQuantity: p.inventoryQuantity ?? '',
+        inventory_management: p.inventory_management ?? 'none',
+        inventory_management_level: p.inventory_management_level ?? '',
+        inventory_allow_out_of_stock: p.inventory_allow_out_of_stock ?? '',
         images: Array.isArray(p.images) ? p.images : [],
         hub: p.hub ?? '',
       });
@@ -186,6 +196,21 @@ export function ViewParents() {
 
   const handleSaveEdit = async () => {
     if (!editing?._id || !editForm) return;
+    const priceNum = Number(editForm.price);
+    const comparePriceNum =
+      editForm.compare_price !== '' ? Number(editForm.compare_price) : null;
+    if (
+      comparePriceNum != null &&
+      comparePriceNum > 0 &&
+      priceNum > 0 &&
+      comparePriceNum < priceNum
+    ) {
+      setMessage({
+        type: 'error',
+        text: 'Compare price must be greater than or equal to Price (original price ≥ sale price).',
+      });
+      return;
+    }
     setSaving(true);
     setMessage(null);
     const id = String(editing._id);
@@ -199,10 +224,16 @@ export function ViewParents() {
       size: editForm.size !== '' ? Number(editForm.size) : undefined,
       type: editForm.type || undefined,
       seller: editForm.seller || undefined,
+      sort_order: editForm.sort_order !== '' ? Number(editForm.sort_order) : undefined,
       categories: editForm.categories,
       price: Number(editForm.price),
+      compare_price: editForm.compare_price !== '' ? Number(editForm.compare_price) : undefined,
       publish: editForm.publish,
       inventoryQuantity: Number(editForm.inventoryQuantity),
+      inventory_management: editForm.inventory_management || undefined,
+      inventory_management_level: editForm.inventory_management_level || undefined,
+      inventory_allow_out_of_stock:
+        editForm.inventory_allow_out_of_stock !== '' ? Number(editForm.inventory_allow_out_of_stock) : undefined,
       images: editForm.images,
       hub: editForm.hub?.trim() || undefined,
     };
@@ -494,6 +525,21 @@ export function ViewParents() {
                       options={hubOptions}
                       placeholder="Select Hub"
                     />
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Sort order</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={editForm.sort_order}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, sort_order: e.target.value ? parseInt(e.target.value, 10) : '' } : null
+                          )
+                        }
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                        placeholder="Optional"
+                      />
+                    </label>
                   </div>
                 </section>
 
@@ -502,7 +548,7 @@ export function ViewParents() {
                   <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4">
                     Pricing & status
                   </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <label className="block">
                       <span className="block text-sm font-medium text-slate-700 mb-1.5">Price</span>
                       <input
@@ -516,6 +562,22 @@ export function ViewParents() {
                           )
                         }
                         className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1.5">Compare price</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={editForm.compare_price}
+                        onChange={(e) =>
+                          setEditForm((f) =>
+                            f ? { ...f, compare_price: e.target.value ? parseFloat(e.target.value) : '' } : null
+                          )
+                        }
+                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
+                        placeholder="Optional"
                       />
                     </label>
                     <label className="block">
@@ -534,7 +596,43 @@ export function ViewParents() {
                         className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow"
                       />
                     </label>
-                    <div className="flex items-end pb-2.5">
+                    <div className="flex flex-col gap-3">
+                      <CustomSelect
+                        label="Inventory management"
+                        value={editForm.inventory_management}
+                        onChange={(v) => setEditForm((f) => f ? { ...f, inventory_management: v } : null)}
+                        options={INVENTORY_MANAGEMENT_OPTIONS}
+                        placeholder="Select"
+                      />
+                      <CustomSelect
+                        label="Inventory management level"
+                        value={editForm.inventory_management_level}
+                        onChange={(v) => setEditForm((f) => f ? { ...f, inventory_management_level: v } : null)}
+                        options={INVENTORY_MANAGEMENT_LEVEL_OPTIONS}
+                        placeholder="Leave empty"
+                      />
+                      <label className="block">
+                        <span className="block text-sm font-medium text-slate-700 mb-1.5">Allow out of stock (quantity)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={editForm.inventory_allow_out_of_stock}
+                          onChange={(e) =>
+                            setEditForm((f) =>
+                              f
+                                ? {
+                                    ...f,
+                                    inventory_allow_out_of_stock: e.target.value
+                                      ? parseInt(e.target.value, 10)
+                                      : '',
+                                  }
+                                : null
+                            )
+                          }
+                          className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+                          placeholder="0"
+                        />
+                      </label>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
@@ -619,11 +717,11 @@ export function ViewParents() {
                             <p className="text-slate-500 text-sm px-3 py-2">No categories found</p>
                           ) : (
                             filteredCategoriesForDropdown.map((cat) => {
-                              const id = String(cat._id);
-                              const selected = editForm.categories.includes(id);
+                              const alias = cat.alias || '';
+                              const selected = editForm.categories.includes(alias);
                               return (
                                 <button
-                                  key={id}
+                                  key={alias || String(cat._id)}
                                   type="button"
                                   onClick={() => {
                                     setEditForm((f) =>
@@ -631,8 +729,8 @@ export function ViewParents() {
                                         ? {
                                             ...f,
                                             categories: selected
-                                              ? f.categories.filter((c) => c !== id)
-                                              : [...f.categories, id],
+                                              ? f.categories.filter((c) => c !== alias)
+                                              : [...f.categories, alias],
                                           }
                                         : null
                                     );

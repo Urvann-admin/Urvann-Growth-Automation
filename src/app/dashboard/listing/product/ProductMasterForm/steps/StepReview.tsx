@@ -9,9 +9,9 @@ export interface StepReviewProps {
   categories: Category[];
 }
 
-function getCategoryName(categories: Category[], categoryId: string): string {
-  const cat = categories.find((c) => c._id === categoryId || c.categoryId === categoryId);
-  return cat?.category || categoryId;
+function getCategoryName(categories: Category[], categoryAlias: string): string {
+  const cat = categories.find((c) => c.alias === categoryAlias);
+  return cat?.category || categoryAlias;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -42,8 +42,13 @@ export function StepReview({ data, finalName, categories }: StepReviewProps) {
         <Row label="Type" value={data.type || '—'} />
         <Row label="Seller" value={data.seller || '—'} />
         <Row label="Final name" value={finalName || '—'} />
+        <Row label="Sort order" value={data.sort_order !== '' ? data.sort_order : '—'} />
         <Row label="Price" value={data.price !== '' ? data.price : '—'} />
+        <Row label="Compare price" value={data.compare_price !== '' ? data.compare_price : '—'} />
         <Row label="Inventory quantity" value={data.inventoryQuantity !== '' ? data.inventoryQuantity : '—'} />
+        <Row label="Inventory management" value={data.inventory_management || '—'} />
+        <Row label="Inventory management level" value={data.inventory_management_level || '—'} />
+        <Row label="Allow out of stock (qty)" value={data.inventory_allow_out_of_stock !== '' ? data.inventory_allow_out_of_stock : '—'} />
         <Row label="Hub" value={data.hub || '—'} />
         <Row label="Publish" value={data.publish === 'published' ? 'Yes' : 'Draft'} />
         <Row

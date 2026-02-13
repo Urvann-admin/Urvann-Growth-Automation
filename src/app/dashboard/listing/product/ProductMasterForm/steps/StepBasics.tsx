@@ -13,6 +13,7 @@ export interface StepBasicsProps {
   size: number | '';
   type: string;
   seller: string;
+  sort_order: number | '';
   finalName: string;
   sellerOptions: { value: string; label: string }[];
   errors: Record<string, string>;
@@ -30,6 +31,7 @@ export function StepBasics({
   size,
   type,
   seller,
+  sort_order,
   finalName,
   sellerOptions,
   errors,
@@ -129,6 +131,18 @@ export function StepBasics({
           options={sellerOptions}
           placeholder="Select Seller"
         />
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Sort Order</label>
+          <input
+            type="number"
+            min={0}
+            value={sort_order}
+            onChange={(e) => onFieldChange('sort_order', e.target.value ? parseInt(e.target.value, 10) : '')}
+            className={`${inputBase} ${inputNormal}`}
+            placeholder="Optional"
+          />
+          <p className="text-xs text-slate-500 mt-1">Display order (optional, can leave empty)</p>
+        </div>
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-2">Final Name</label>
