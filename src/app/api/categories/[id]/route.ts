@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { CategoryModel } from '@/models/category';
 import type { Rule, RuleCondition, RuleConditionField, RuleItem } from '@/models/category';
-import { updateCategoryInStoreHippo } from '@/lib/storeHippoCategories';
+import { updateCategoryInStoreHippo, deleteCategoryFromStoreHippo } from '@/lib/storeHippoCategories';
 
 const RULE_CONDITION_FIELDS: RuleConditionField[] = ['Plant', 'variety', 'Colour', 'Height', 'Size', 'Type', 'Category'];
 
@@ -148,6 +148,67 @@ export async function PATCH(
     console.error('Error updating category:', error);
     return NextResponse.json(
       { success: false, message: 'Failed to update category' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    
+    if (!id || !ObjectId.isValid(id)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid category ID' },
+        { status: 400 }
+      );
+    }
+
+    const category = await CategoryModel.findById(id);
+    
+    if (!category) {
+      return NextResponse.json(
+        { success: false, message: 'Category not found' },
+        { status: 404 }
+      );
+    }
+
+    const errors: string[] = [];
+
+    if ((category as any).categoryId) {
+      console.log(`[Delete] Deleting category from StoreHippo: ${(category as any).categoryId}`);
+      const storeHippoResult = await deleteCategoryFromStoreHippo((category as any).categoryId);
+      if (!storeHippoResult.success) {
+        console.warn(`[Delete] StoreHippo deletion failed: ${storeHippoResult.error}`);
+        errors.push(`StoreHippo: ${storeHippoResult.error}`);
+      }
+    }
+
+    const result = await CategoryModel.delete(id);
+    
+    if (result.deletedCount === 0) {
+      return NextResponse.json(
+        { success: false, message: 'Category not found in database' },
+        { status: 404 }
+      );
+    }
+
+    console.log(`[Delete] Category deleted from database: ${id}`);
+
+    return NextResponse.json({ 
+      success: true, 
+      message: errors.length > 0 
+        ? `Category deleted with warnings: ${errors.join('; ')}` 
+        : 'Category deleted successfully from all systems',
+      warnings: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    console.error('Error deleting category:', error);
+    return NextResponse.json(
+      { success: false, message: 'Failed to delete category' },
       { status: 500 }
     );
   }

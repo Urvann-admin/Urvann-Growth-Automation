@@ -417,3 +417,35 @@ export async function syncCategoryToStoreHippo(categoryData: any): Promise<{ suc
     return { success: false, error: errorMessage };
   }
 }
+
+/**
+ * Delete category from StoreHippo
+ */
+export async function deleteCategoryFromStoreHippo(storeHippoId: string): Promise<{ success: boolean; error?: string }> {
+  if (!storeHippoId || !String(storeHippoId).trim()) {
+    console.warn(`[StoreHippo Categories] deleteCategoryFromStoreHippo: no storeHippoId provided`);
+    return { success: false, error: 'No StoreHippo category ID provided' };
+  }
+
+  const url = `${BASE_URL}/api/1.1/entity/ms.categories/${encodeURIComponent(storeHippoId)}`;
+  console.log(`[StoreHippo Categories] DELETE ${url}`);
+
+  try {
+    const response = await makeApiRequest(url, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      console.error(`[StoreHippo Categories] DELETE failed (${response.status}):`, errorText);
+      return { success: false, error: `StoreHippo API error (${response.status}): ${errorText}` };
+    }
+
+    console.log(`[StoreHippo Categories] ✅ Category deleted successfully: _id=${storeHippoId}`);
+    return { success: true };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(`[StoreHippo Categories] ❌ deleteCategoryFromStoreHippo failed:`, error);
+    return { success: false, error: msg };
+  }
+}
