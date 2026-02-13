@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/Button";
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -192,15 +193,18 @@ export default function DashboardPage() {
         {/* Dashboard Cards - 4 per row */}
         <div className="flex flex-col items-center gap-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-7xl">
-            {/* Listing Card - First */}
-            <div 
-              className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-slate-50/50 to-slate-100/30 border border-slate-200 hover:shadow-md hover:border-slate-300'}`}
+            {/* Listing Card - First - Using Link for reliable navigation (avoids hydration/click issues) */}
+            <Link
+              href="/dashboard/listing"
+              className={`group block rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-slate-50/50 to-slate-100/30 border border-slate-200 hover:shadow-md hover:border-slate-300'}`}
               style={isChristmasTheme ? {
                 background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
                 border: `2px solid ${CHRISTMAS_COLORS.light}`,
                 boxShadow: `0 4px 6px -1px ${CHRISTMAS_COLORS.primary}/10`,
               } : {}}
-              onClick={() => router.push('/dashboard/listing')}
+              onClick={(e) => {
+                console.log('[Dashboard] Listing card clicked, navigating to /dashboard/listing');
+              }}
               onMouseEnter={(e) => {
                 if (isChristmasTheme) {
                   e.currentTarget.style.boxShadow = `0 10px 15px -3px ${CHRISTMAS_COLORS.primary}/30`;
@@ -268,7 +272,7 @@ export default function DashboardPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
-            </div>
+            </Link>
 
             {/* Growth Metrics Card */}
             <div 

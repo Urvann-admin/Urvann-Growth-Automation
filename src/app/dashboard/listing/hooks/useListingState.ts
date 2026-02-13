@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import type { ListingTab } from '../config';
@@ -20,16 +20,17 @@ export function useListingState() {
   const [categorySectionOpen, setCategorySectionOpen] = useState(true);
   const [productSectionOpen, setProductSectionOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
   const [loading, setLoading] = useState(true);
 
+  // Handle auth state changes
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading) return; // Still loading auth
+    
     if (!user) {
       router.push('/auth/login');
       return;
     }
-    queueMicrotask(() => setLoading(false));
+    setLoading(false);
   }, [user, isLoading, router]);
 
   // Sync activeTab when hash changes (e.g. browser back/forward)

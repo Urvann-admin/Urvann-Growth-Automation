@@ -5,7 +5,7 @@ import { X, Check, ChevronDown, Search } from 'lucide-react';
 import type { Category } from '@/models/category';
 import type { SellerMaster } from '@/models/sellerMaster';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
-import { CustomSelect } from '../../components';
+import { CustomSelect } from '../../components/CustomSelect';
 import { MOSS_STICK_OPTIONS, PLANT_TYPES } from '../ProductMasterForm/types';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 

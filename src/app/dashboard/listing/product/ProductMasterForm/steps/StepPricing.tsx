@@ -1,6 +1,6 @@
 'use client';
 
-import { CustomSelect } from '../../../components';
+import { CustomSelect } from '../../../components/CustomSelect';
 import { INVENTORY_MANAGEMENT_OPTIONS, INVENTORY_MANAGEMENT_LEVEL_OPTIONS } from '../types';
 
 export interface StepPricingProps {

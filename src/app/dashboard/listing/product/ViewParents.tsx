@@ -1,1 +1,1 @@
-export { ViewParents } from './ViewParents';
+export { ViewParents } from './ViewParents/index';
