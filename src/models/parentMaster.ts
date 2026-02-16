@@ -25,6 +25,8 @@ export interface ParentMaster {
   description?: string;
   /** Array of category aliases (e.g. indoor-plants, outdoor-plants) */
   categories: string[];
+  /** Array of collection _ids from collectionMaster (stored in DB); sent to StoreHippo as collection aliases */
+  collectionIds?: (string | ObjectId)[];
   /** Price of the product */
   price: number;
   /** Compare price (strikethrough/original price) */

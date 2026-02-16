@@ -10,7 +10,7 @@ const VALID_HASHES: ListingTab[] = [
   'category-view',
   'product-add',
   'product-view-parent',
-  'listing',
+  'seller-add', 'seller-view', 'listing',
   'image-upload',
   'image-view',
   'upload-logs',
@@ -29,6 +29,7 @@ export function useListingState() {
   const [categorySectionOpen, setCategorySectionOpen] = useState(true);
   const [productSectionOpen, setProductSectionOpen] = useState(true);
   const [imageSectionOpen, setImageSectionOpen] = useState(true);
+  const [sellerSectionOpen, setSellerSectionOpen] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -52,6 +53,7 @@ export function useListingState() {
         if (hash === 'product-add' || hash === 'product-view-parent') setProductSectionOpen(true);
         if (hash === 'category-add' || hash === 'category-view') setCategorySectionOpen(true);
         if (hash === 'image-upload' || hash === 'image-view' || hash === 'upload-logs') setImageSectionOpen(true);
+        if (hash === 'seller-add' || hash === 'seller-view') setSellerSectionOpen(true);
       }
     };
     window.addEventListener('hashchange', syncFromHash);
@@ -77,6 +79,8 @@ export function useListingState() {
     setProductSectionOpen,
     imageSectionOpen,
     setImageSectionOpen,
+    sellerSectionOpen,
+    setSellerSectionOpen,
     sidebarCollapsed,
     setSidebarCollapsed,
   };

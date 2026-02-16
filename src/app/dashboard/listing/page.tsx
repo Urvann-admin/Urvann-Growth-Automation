@@ -21,6 +21,8 @@ export default function ListingPage() {
     setProductSectionOpen,
     imageSectionOpen,
     setImageSectionOpen,
+    sellerSectionOpen,
+    setSellerSectionOpen,
     sidebarCollapsed,
     setSidebarCollapsed,
   } = useListingState();
@@ -30,6 +32,7 @@ export default function ListingPage() {
   const onCategorySectionToggle = useCallback(() => setCategorySectionOpen((o) => !o), []);
   const onProductSectionToggle = useCallback(() => setProductSectionOpen((o) => !o), []);
   const onImageSectionToggle = useCallback(() => setImageSectionOpen((o) => !o), []);
+  const onSellerSectionToggle = useCallback(() => setSellerSectionOpen((o) => !o), []);
   const onSidebarCollapsedToggle = useCallback(() => setSidebarCollapsed((c) => !c), []);
 
   // Show loading while auth is resolving
@@ -65,6 +68,8 @@ export default function ListingPage() {
           onProductSectionToggle={onProductSectionToggle}
           imageSectionOpen={imageSectionOpen}
           onImageSectionToggle={onImageSectionToggle}
+          sellerSectionOpen={sellerSectionOpen}
+          onSellerSectionToggle={onSellerSectionToggle}
           sidebarCollapsed={sidebarCollapsed}
           onSidebarCollapsedToggle={onSidebarCollapsedToggle}
         />

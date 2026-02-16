@@ -5,6 +5,8 @@ export type ListingTab =
   | 'category-view'
   | 'product-add'
   | 'product-view-parent'
+  | 'seller-add'
+  | 'seller-view'
   | 'listing'
   | 'image-upload'
   | 'image-view'
@@ -27,6 +29,11 @@ export const IMAGE_SUB_TABS: { id: ListingTab; label: string }[] = [
   { id: 'upload-logs', label: 'Logs' },
 ];
 
+export const SELLER_SUB_TABS: { id: ListingTab; label: string }[] = [
+  { id: 'seller-add', label: 'Add Seller' },
+  { id: 'seller-view', label: 'View Seller' },
+];
+
 export interface ListingTabConfig {
   id: ListingTab;
   label: string;
@@ -39,6 +46,8 @@ export const TAB_CONFIG: ListingTabConfig[] = [
   { id: 'category-view', label: 'View Category', subtitle: 'View and edit categories', icon: ListIcon },
   { id: 'product-add', label: 'Add Product', subtitle: 'Create a new product', icon: Plus },
   { id: 'product-view-parent', label: 'View Parent', subtitle: 'View parent products', icon: ListIcon },
+  { id: 'seller-add', label: 'Add Seller', subtitle: 'Create a new seller', icon: Plus },
+  { id: 'seller-view', label: 'View Seller', subtitle: 'View and edit sellers', icon: ListIcon },
   { id: 'listing', label: 'Listing', subtitle: 'Listing rules and status', icon: List },
   { id: 'image-upload', label: 'Add Image', subtitle: 'Bulk upload images', icon: Upload },
   { id: 'image-view', label: 'View Image', subtitle: 'View image collections', icon: ListIcon },

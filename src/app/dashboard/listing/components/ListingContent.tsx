@@ -7,6 +7,7 @@ import { ProductMasterForm, ViewParents } from '../product';
 import { ImageUploader } from '../image/components/ImageUploader';
 import { ImageCollectionsView } from '../image/components/ImageCollectionsView';
 import { UploadLogsView } from '../image/components/UploadLogsView';
+import { ViewSellers, AddSellerForm } from '../seller';
 
 export interface ListingContentProps {
   activeTab: ListingTab;
@@ -29,6 +30,12 @@ export function ListingContent({ activeTab }: ListingContentProps) {
       {activeTab === 'category-view' && <ViewCategories />}
       {activeTab === 'product-add' && <ProductMasterForm />}
       {activeTab === 'product-view-parent' && <ViewParents />}
+      {activeTab === 'seller-add' && (
+        <div className="max-w-2xl mx-auto">
+          <AddSellerForm />
+        </div>
+      )}
+      {activeTab === 'seller-view' && <ViewSellers />}
       {activeTab === 'listing' && <ListingPlaceholder />}
       {activeTab === 'image-upload' && (
         <div className="max-w-2xl mx-auto">

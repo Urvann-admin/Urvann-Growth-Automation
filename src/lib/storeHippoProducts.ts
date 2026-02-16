@@ -13,6 +13,7 @@ export interface StoreHippoProductPayload {
   sort_order?: number;
   publish: string; // "1" for published, "0" for unpublished
   categories: string[]; // category aliases (e.g. indoor-plants)
+  collections?: string[]; // collection aliases (from collectionMaster)
   images: { image: string }[];
   inventory_quantity: number;
   inventory_management?: string; // "automatic" | "none"
@@ -44,8 +45,16 @@ export interface StoreHippoSyncResult {
   error?: string;
 }
 
+export interface StoreHippoSyncOptions {
+  /** Collection aliases to send to StoreHippo (resolved from collectionIds in API) */
+  collectionAliases?: string[];
+}
+
 // Convert ParentMaster to StoreHippo format
-function convertToStoreHippoFormat(product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>): StoreHippoProductPayload {
+function convertToStoreHippoFormat(
+  product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>,
+  options?: StoreHippoSyncOptions
+): StoreHippoProductPayload {
   const displayName = product.finalName || product.plant;
   const alias = displayName
     .toLowerCase()
@@ -62,6 +71,10 @@ function convertToStoreHippoFormat(product: Omit<ParentMaster, '_id' | 'createdA
     images: (product.images || []).map((url) => ({ image: url })),
     inventory_quantity: product.inventoryQuantity ?? 0,
   };
+
+  if (options?.collectionAliases && options.collectionAliases.length > 0) {
+    payload.collections = options.collectionAliases;
+  }
 
   if (product.compare_price !== undefined && product.compare_price != null) {
     payload.compare_price = product.compare_price;
@@ -118,10 +131,11 @@ async function fetchStoreHippoProductIdByName(name: string): Promise<string | nu
 
 // Sync product to StoreHippo
 export async function syncProductToStoreHippo(
-  product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>
+  product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>,
+  options?: StoreHippoSyncOptions
 ): Promise<StoreHippoSyncResult> {
   try {
-    const payload = convertToStoreHippoFormat(product);
+    const payload = convertToStoreHippoFormat(product, options);
     const displayName = product.finalName || product.plant;
 
     console.log(`[StoreHippo] Syncing product: ${displayName}`);
@@ -167,7 +181,8 @@ export async function syncProductToStoreHippo(
 // Update product in StoreHippo
 export async function updateProductInStoreHippo(
   storeHippoId: string,
-  product: Partial<Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>>
+  product: Partial<Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>>,
+  options?: StoreHippoSyncOptions
 ): Promise<StoreHippoSyncResult> {
   try {
     // Convert partial product data to StoreHippo format
@@ -188,6 +203,9 @@ export async function updateProductInStoreHippo(
     if (product.sort_order !== undefined) payload.sort_order = product.sort_order;
     if (product.publish) payload.publish = product.publish === 'published' ? '1' : '0';
     if (product.categories) payload.categories = product.categories;
+    if (options?.collectionAliases && options.collectionAliases.length > 0) {
+      payload.collections = options.collectionAliases;
+    }
     if (product.images) payload.images = product.images.map((url) => ({ image: url }));
     if (product.inventoryQuantity !== undefined) payload.inventory_quantity = product.inventoryQuantity;
     if (product.inventory_management) payload.inventory_management = product.inventory_management;

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Check, Save } from 'lucide-react';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
+import type { CollectionMaster } from '@/models/collectionMaster';
 import type { SellerMaster } from '@/models/sellerMaster';
 import { Notification } from '@/components/ui/Notification';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
@@ -73,6 +74,7 @@ export function ProductMasterForm() {
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [collections, setCollections] = useState<CollectionMaster[]>([]);
   const [sellers, setSellers] = useState<SellerMaster[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [skuPreview, setSkuPreview] = useState<string>('');
@@ -96,6 +98,15 @@ export function ProductMasterForm() {
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
+
+  useEffect(() => {
+    fetch('/api/collection-master?limit=100')
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.success && Array.isArray(json.data)) setCollections(json.data);
+      })
+      .catch((e) => console.error('Error fetching collections:', e));
+  }, []);
 
   useEffect(() => {
     fetch('/api/sellers')
@@ -155,6 +166,22 @@ export function ProductMasterForm() {
     setFormData((prev) => ({
       ...prev,
       categories: prev.categories.filter((id) => id !== categoryId),
+    }));
+  };
+
+  const handleCollectionToggle = (collectionId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      collectionIds: prev.collectionIds.includes(collectionId)
+        ? prev.collectionIds.filter((id) => id !== collectionId)
+        : [...prev.collectionIds, collectionId],
+    }));
+  };
+
+  const handleRemoveCollection = (collectionId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      collectionIds: prev.collectionIds.filter((id) => id !== collectionId),
     }));
   };
 
@@ -263,6 +290,7 @@ export function ProductMasterForm() {
         sort_order: typeof formData.sort_order === 'number' ? formData.sort_order : undefined,
         finalName: finalName || undefined,
         categories: formData.categories,
+        collectionIds: formData.collectionIds.length > 0 ? formData.collectionIds : undefined,
         price: Number(formData.price),
         compare_price: typeof formData.compare_price === 'number' ? formData.compare_price : undefined,
         publish: formData.publish,
@@ -355,7 +383,7 @@ export function ProductMasterForm() {
                   {isCompleted ? <Check className="w-5 h-5" strokeWidth={2.5} /> : i + 1}
                 </div>
                 <span
-                  className={`text-xs font-medium mt-1.5 text-center truncate w-full max-w-[4.5rem] sm:max-w-none ${
+                  className={`text-xs font-medium mt-1.5 text-center truncate w-full max-w-18 sm:max-w-none ${
                     isCurrent ? 'text-slate-900' : isCompleted ? 'text-slate-700' : 'text-slate-400'
                   }`}
                 >
@@ -418,13 +446,17 @@ export function ProductMasterForm() {
             {currentStep.id === 'categories-images' && (
               <StepCategoriesAndImages
                 categories={categories}
+                collections={collections}
                 selectedCategoryIds={formData.categories}
+                selectedCollectionIds={formData.collectionIds}
                 selectedImages={selectedImages}
                 uploadedImageUrls={formData.images}
                 errors={errors}
                 fileInputRef={fileInputRef}
                 onCategoryToggle={handleCategoryToggle}
                 onRemoveCategory={handleRemoveCategory}
+                onCollectionToggle={handleCollectionToggle}
+                onRemoveCollection={handleRemoveCollection}
                 onImageSelect={handleImageSelect}
                 onRemoveSelectedImage={removeSelectedImage}
                 onRemoveUploadedImage={removeUploadedImage}
@@ -436,6 +468,7 @@ export function ProductMasterForm() {
                 data={formData}
                 finalName={finalName}
                 categories={categories}
+                collections={collections}
                 skuPreview={skuPreview}
                 selectedImageCount={selectedImages.length}
               />

@@ -13,6 +13,7 @@ export interface ProductFormData {
   description: string;
   sort_order: number | '';
   categories: string[];
+  collectionIds: string[];
   price: number | '';
   compare_price: number | '';
   publish: string;
@@ -45,6 +46,7 @@ export const initialFormData: ProductFormData = {
   description: '',
   sort_order: '',
   categories: [],
+  collectionIds: [],
   price: '',
   compare_price: '',
   publish: 'draft',

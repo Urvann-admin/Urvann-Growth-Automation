@@ -1,6 +1,8 @@
+import { ObjectId } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
+import { CollectionMasterModel } from '@/models/collectionMaster';
 import { syncProductToStoreHippo } from '@/lib/storeHippoProducts';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
 import { generateParentSKU } from '@/lib/skuGenerator';
@@ -120,8 +122,23 @@ export async function POST(request: NextRequest) {
       ...(sku && { sku }),
     };
 
+    // Resolve collectionIds to aliases for StoreHippo payload (DB stores IDs, StoreHippo gets aliases)
+    let collectionAliases: string[] | undefined;
+    if (dataWithSku.collectionIds && dataWithSku.collectionIds.length > 0) {
+      const ids = dataWithSku.collectionIds.filter((id) => id && String(id).trim());
+      const objectIds = ids
+        .map((id) => (typeof id === 'string' && ObjectId.isValid(id) ? new ObjectId(id) : id))
+        .filter((id): id is ObjectId => id instanceof ObjectId);
+      if (objectIds.length > 0) {
+        const collections = await CollectionMasterModel.findAll({ _id: { $in: objectIds } });
+        collectionAliases = collections.map((c) => c.alias).filter(Boolean);
+      }
+    }
+
     // Sync to StoreHippo first – do not save to DB if StoreHippo fails
-    const storeHippoResult = await syncProductToStoreHippo(dataWithSku);
+    const storeHippoResult = await syncProductToStoreHippo(dataWithSku, {
+      ...(collectionAliases && collectionAliases.length > 0 && { collectionAliases }),
+    });
 
     if (!storeHippoResult.success) {
       console.error('StoreHippo sync failed for product:', validated.data!.plant, storeHippoResult.error);
@@ -321,6 +338,10 @@ function validateParentMasterData(data: unknown): {
     images: (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean),
     hub: hub || undefined,
     substores: substores.length > 0 ? substores : undefined,
+    collectionIds:
+      Array.isArray(d.collectionIds) ?
+        (d.collectionIds as unknown[]).map((c) => String(c).trim()).filter(Boolean) :
+        undefined,
   };
 
   return { success: true, data: validated };
@@ -365,6 +386,9 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   }
   if (data.categories !== undefined && Array.isArray(data.categories)) {
     sanitized.categories = (data.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean);
+  }
+  if (data.collectionIds !== undefined && Array.isArray(data.collectionIds)) {
+    sanitized.collectionIds = (data.collectionIds as unknown[]).map((c) => String(c).trim()).filter(Boolean);
   }
   if (data.price !== undefined) {
     sanitized.price = typeof data.price === 'number' ? data.price : parseFloat(String(data.price)) || 0;

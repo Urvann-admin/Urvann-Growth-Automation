@@ -1,12 +1,13 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutList, FolderTree, Package, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon, Image as ImageIcon, ScrollText, Upload } from 'lucide-react';
+import { LayoutList, FolderTree, Package, Store, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon, Image as ImageIcon, ScrollText, Upload } from 'lucide-react';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
 import {
   CATEGORY_SUB_TABS,
   PRODUCT_SUB_TABS,
   IMAGE_SUB_TABS,
+  SELLER_SUB_TABS,
   TAB_CONFIG,
   LISTING_TOP_LEVEL_TABS,
   type ListingTab,
@@ -21,6 +22,8 @@ export interface ListingSidebarProps {
   onProductSectionToggle: () => void;
   imageSectionOpen: boolean;
   onImageSectionToggle: () => void;
+  sellerSectionOpen: boolean;
+  onSellerSectionToggle: () => void;
   sidebarCollapsed: boolean;
   onSidebarCollapsedToggle: () => void;
 }
@@ -34,6 +37,8 @@ export function ListingSidebar({
   onProductSectionToggle,
   imageSectionOpen,
   onImageSectionToggle,
+  sellerSectionOpen,
+  onSellerSectionToggle,
   sidebarCollapsed,
   onSidebarCollapsedToggle,
 }: ListingSidebarProps) {
@@ -41,7 +46,7 @@ export function ListingSidebar({
 
   return (
     <aside
-      className={`flex-shrink-0 h-screen sticky top-0 rounded-r-xl shadow-lg overflow-hidden transition-[width] duration-300 ease-in-out ${
+      className={`shrink-0 h-screen sticky top-0 rounded-r-xl shadow-lg overflow-hidden transition-[width] duration-300 ease-in-out ${
         sidebarCollapsed ? 'w-[72px]' : 'w-60'
       } ${isChristmasTheme ? '' : 'bg-[#330033] border-r border-[#330033]'}`}
       style={
@@ -83,6 +88,14 @@ export function ListingSidebar({
           onTabChange={onTabChange}
           sectionOpen={imageSectionOpen}
           onSectionToggle={onImageSectionToggle}
+          collapsed={sidebarCollapsed}
+          isChristmasTheme={isChristmasTheme}
+        />
+        <SellerNavSection
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          sectionOpen={sellerSectionOpen}
+          onSectionToggle={onSellerSectionToggle}
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />
@@ -363,6 +376,78 @@ function ImageNavSection({
               </button>
             );
           })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SellerNavSection({
+  activeTab,
+  onTabChange,
+  sectionOpen,
+  onSectionToggle,
+  collapsed,
+  isChristmasTheme,
+}: {
+  activeTab: ListingTab;
+  onTabChange: (id: ListingTab) => void;
+  sectionOpen: boolean;
+  onSectionToggle: () => void;
+  collapsed: boolean;
+  isChristmasTheme: boolean;
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => !collapsed && onSectionToggle()}
+        title={collapsed ? 'Seller Master' : undefined}
+        className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
+          collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
+        } ${
+          isChristmasTheme
+            ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            : 'text-white hover:bg-white/10'
+        }`}
+      >
+        <Store className="w-5 h-5 shrink-0" strokeWidth={2} />
+        {!collapsed && (
+          <>
+            <span className="truncate flex-1">Seller Master</span>
+            <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
+          </>
+        )}
+      </button>
+      {!collapsed && sectionOpen && (
+        <div className="ml-4 mt-0.5 space-y-0.5 pl-2">
+          {SELLER_SUB_TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => onTabChange(id)}
+              className={`w-full flex items-center gap-2 rounded-md py-2 px-2 text-left text-sm transition-all focus:outline-none focus-visible:ring-0 ${
+                activeTab === id
+                  ? isChristmasTheme
+                    ? 'bg-slate-100 text-slate-900 font-medium'
+                    : 'bg-[#E6007A] text-white font-medium'
+                  : isChristmasTheme
+                    ? 'text-slate-600 hover:bg-slate-50'
+                    : 'text-white/90 hover:bg-white/10'
+              }`}
+              style={
+                activeTab === id && isChristmasTheme
+                  ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
+                  : {}
+              }
+            >
+              {id === 'seller-add' ? (
+                <Plus className="w-4 h-4 shrink-0" />
+              ) : (
+                <ListIcon className="w-4 h-4 shrink-0" />
+              )}
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>

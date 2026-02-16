@@ -2,6 +2,7 @@
 
 import type { ProductFormData } from '../types';
 import type { Category } from '@/models/category';
+import type { CollectionMaster } from '@/models/collectionMaster';
 
 export interface StepReviewProps {
   data: ProductFormData;
@@ -10,6 +11,7 @@ export interface StepReviewProps {
   skuPreview?: string;
   /** Count of images selected in step 4 (not yet uploaded; uploaded on submit) */
   selectedImageCount?: number;
+  collections: CollectionMaster[];
 }
 
 function getCategoryName(categories: Category[], categoryAlias: string): string {
@@ -26,9 +28,12 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function StepReview({ data, finalName, categories, skuPreview = '', selectedImageCount = 0 }: StepReviewProps) {
+export function StepReview({ data, finalName, categories, skuPreview = '', selectedImageCount = 0, collections }: StepReviewProps) {
   const categoryNames = data.categories.map((id) => getCategoryName(categories, id));
   const totalImageCount = data.images.length + selectedImageCount;
+  const collectionNames = (data.collectionIds ?? []).map((id) =>
+    collections.find((c) => String(c._id) === id)?.name ?? id
+  );
 
   return (
     <div>
@@ -62,6 +67,25 @@ export function StepReview({ data, finalName, categories, skuPreview = '', selec
             categoryNames.length > 0 ? (
               <span className="flex flex-wrap gap-1.5">
                 {categoryNames.map((name) => (
+                  <span
+                    key={name}
+                    className="inline-flex rounded-lg border border-slate-200 bg-[#F4F6F8] px-2 py-0.5 text-xs text-slate-800"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              '—'
+            )
+          }
+        />
+        <Row
+          label="Collections"
+          value={
+            collectionNames.length > 0 ? (
+              <span className="flex flex-wrap gap-1.5">
+                {collectionNames.map((name) => (
                   <span
                     key={name}
                     className="inline-flex rounded-lg border border-slate-200 bg-[#F4F6F8] px-2 py-0.5 text-xs text-slate-800"
