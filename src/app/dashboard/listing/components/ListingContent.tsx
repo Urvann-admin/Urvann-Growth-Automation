@@ -4,6 +4,9 @@ import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
 import type { ListingTab } from '../config';
 import { CategoryMasterForm, ViewCategories } from '../category';
 import { ProductMasterForm, ViewParents } from '../product';
+import { ImageUploader } from '../image/components/ImageUploader';
+import { ImageCollectionsView } from '../image/components/ImageCollectionsView';
+import { UploadLogsView } from '../image/components/UploadLogsView';
 
 export interface ListingContentProps {
   activeTab: ListingTab;
@@ -13,6 +16,7 @@ export function ListingContent({ activeTab }: ListingContentProps) {
   const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
 
   const isProductAdd = activeTab === 'product-add';
+
   return (
     <main
       className={`flex-1 min-w-0 overflow-auto ${isChristmasTheme ? '' : 'bg-[#F4F6F8]'} ${isProductAdd ? 'p-2' : 'p-6'}`}
@@ -26,6 +30,21 @@ export function ListingContent({ activeTab }: ListingContentProps) {
       {activeTab === 'product-add' && <ProductMasterForm />}
       {activeTab === 'product-view-parent' && <ViewParents />}
       {activeTab === 'listing' && <ListingPlaceholder />}
+      {activeTab === 'image-upload' && (
+        <div className="max-w-2xl mx-auto">
+          <ImageUploader />
+        </div>
+      )}
+      {activeTab === 'image-view' && (
+        <div className="max-w-5xl mx-auto">
+          <ImageCollectionsView />
+        </div>
+      )}
+      {activeTab === 'upload-logs' && (
+        <div className="max-w-5xl mx-auto">
+          <UploadLogsView />
+        </div>
+      )}
     </main>
   );
 }

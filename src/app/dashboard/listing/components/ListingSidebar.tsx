@@ -1,10 +1,12 @@
 'use client';
 
-import { LayoutList, FolderTree, Package, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { LayoutList, FolderTree, Package, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon, Image as ImageIcon, ScrollText, Upload } from 'lucide-react';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
 import {
   CATEGORY_SUB_TABS,
   PRODUCT_SUB_TABS,
+  IMAGE_SUB_TABS,
   TAB_CONFIG,
   LISTING_TOP_LEVEL_TABS,
   type ListingTab,
@@ -17,6 +19,8 @@ export interface ListingSidebarProps {
   onCategorySectionToggle: () => void;
   productSectionOpen: boolean;
   onProductSectionToggle: () => void;
+  imageSectionOpen: boolean;
+  onImageSectionToggle: () => void;
   sidebarCollapsed: boolean;
   onSidebarCollapsedToggle: () => void;
 }
@@ -28,6 +32,8 @@ export function ListingSidebar({
   onCategorySectionToggle,
   productSectionOpen,
   onProductSectionToggle,
+  imageSectionOpen,
+  onImageSectionToggle,
   sidebarCollapsed,
   onSidebarCollapsedToggle,
 }: ListingSidebarProps) {
@@ -69,6 +75,14 @@ export function ListingSidebar({
           onTabChange={onTabChange}
           sectionOpen={productSectionOpen}
           onSectionToggle={onProductSectionToggle}
+          collapsed={sidebarCollapsed}
+          isChristmasTheme={isChristmasTheme}
+        />
+        <ImageNavSection
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          sectionOpen={imageSectionOpen}
+          onSectionToggle={onImageSectionToggle}
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />
@@ -273,6 +287,82 @@ function ProductNavSection({
               <span className="truncate">{label}</span>
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ImageNavSection({
+  activeTab,
+  onTabChange,
+  sectionOpen,
+  onSectionToggle,
+  collapsed,
+  isChristmasTheme,
+}: {
+  activeTab: ListingTab;
+  onTabChange: (id: ListingTab) => void;
+  sectionOpen: boolean;
+  onSectionToggle: () => void;
+  collapsed: boolean;
+  isChristmasTheme: boolean;
+}) {
+  const subIcons: Record<string, LucideIcon> = {
+    'image-upload': Upload,
+    'image-view': ListIcon,
+    'upload-logs': ScrollText,
+  };
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => !collapsed && onSectionToggle()}
+        title={collapsed ? 'Image' : undefined}
+        className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
+          collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
+        } ${
+          isChristmasTheme
+            ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            : 'text-white hover:bg-white/10'
+        }`}
+      >
+        <ImageIcon className="w-5 h-5 shrink-0" strokeWidth={2} />
+        {!collapsed && (
+          <>
+            <span className="truncate flex-1">Image</span>
+            <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
+          </>
+        )}
+      </button>
+      {!collapsed && sectionOpen && (
+        <div className="ml-4 mt-0.5 space-y-0.5 pl-2">
+          {IMAGE_SUB_TABS.map(({ id, label }) => {
+            const Icon = subIcons[id] ?? ListIcon;
+            return (
+              <button
+                key={id}
+                onClick={() => onTabChange(id)}
+                className={`w-full flex items-center gap-2 rounded-md py-2 px-2 text-left text-sm transition-all focus:outline-none focus-visible:ring-0 ${
+                  activeTab === id
+                    ? isChristmasTheme
+                      ? 'bg-slate-100 text-slate-900 font-medium'
+                      : 'bg-[#E6007A] text-white font-medium'
+                    : isChristmasTheme
+                      ? 'text-slate-600 hover:bg-slate-50'
+                      : 'text-white/90 hover:bg-white/10'
+                }`}
+                style={
+                  activeTab === id && isChristmasTheme
+                    ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
+                    : {}
+                }
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span className="truncate">{label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
