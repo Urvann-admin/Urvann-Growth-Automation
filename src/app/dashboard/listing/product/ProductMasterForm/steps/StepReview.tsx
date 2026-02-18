@@ -3,6 +3,7 @@
 import type { ProductFormData } from '../types';
 import type { Category } from '@/models/category';
 import type { CollectionMaster } from '@/models/collectionMaster';
+import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 
 export interface StepReviewProps {
   data: ProductFormData;
@@ -12,6 +13,8 @@ export interface StepReviewProps {
   /** Count of images selected in step 4 (not yet uploaded; uploaded on submit) */
   selectedImageCount?: number;
   collections: CollectionMaster[];
+  /** Procurement sellers (for listing price = price × seller.multiplicationFactor) */
+  procurementSellers?: ProcurementSellerMaster[];
 }
 
 function getCategoryName(categories: Category[], categoryAlias: string): string {
@@ -28,12 +31,17 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function StepReview({ data, finalName, categories, skuPreview = '', selectedImageCount = 0, collections }: StepReviewProps) {
+export function StepReview({ data, finalName, categories, skuPreview = '', selectedImageCount = 0, collections, procurementSellers = [] }: StepReviewProps) {
   const categoryNames = data.categories.map((id) => getCategoryName(categories, id));
   const totalImageCount = data.images.length + selectedImageCount;
   const collectionNames = (data.collectionIds ?? []).map((id) =>
     collections.find((c) => String(c._id) === id)?.name ?? id
   );
+  const selectedSeller = data.seller ? procurementSellers.find((s) => String(s._id) === data.seller) : null;
+  const listingPrice =
+    selectedSeller && typeof data.price === 'number' && data.price !== ''
+      ? data.price * (selectedSeller.multiplicationFactor ?? 1)
+      : null;
 
   return (
     <div>
@@ -50,17 +58,11 @@ export function StepReview({ data, finalName, categories, skuPreview = '', selec
         <Row label="Moss stick" value={data.mossStick || '—'} />
         <Row label="Size (inches)" value={data.size !== '' ? data.size : '—'} />
         <Row label="Type" value={data.type || '—'} />
-        <Row label="Seller" value={data.seller || '—'} />
+        <Row label="Procurement seller" value={selectedSeller?.seller_name ?? '—'} />
         <Row label="Final name" value={finalName || '—'} />
-        <Row label="Sort order" value={data.sort_order !== '' ? data.sort_order : '—'} />
         <Row label="Price" value={data.price !== '' ? data.price : '—'} />
-        <Row label="Compare price" value={data.compare_price !== '' ? data.compare_price : '—'} />
-        <Row label="Inventory quantity" value={data.inventoryQuantity !== '' ? data.inventoryQuantity : '—'} />
-        <Row label="Inventory management" value={data.inventory_management || '—'} />
-        <Row label="Inventory management level" value={data.inventory_management_level || '—'} />
-        <Row label="Allow out of stock (qty)" value={data.inventory_allow_out_of_stock !== '' ? data.inventory_allow_out_of_stock : '—'} />
+        <Row label="Listing price" value={listingPrice != null ? listingPrice : '—'} />
         <Row label="Hub" value={data.hub || '—'} />
-        <Row label="Publish" value={data.publish === 'published' ? 'Yes' : 'Draft'} />
         <Row
           label="Categories"
           value={

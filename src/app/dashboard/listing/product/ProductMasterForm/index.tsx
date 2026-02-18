@@ -5,9 +5,15 @@ import { ChevronLeft, ChevronRight, Check, Save } from 'lucide-react';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
 import type { CollectionMaster } from '@/models/collectionMaster';
-import type { SellerMaster } from '@/models/sellerMaster';
+import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { Notification } from '@/components/ui/Notification';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
+import {
+  clearFormStorageOnReload,
+  getPersistedForm,
+  setPersistedForm,
+  removePersistedForm,
+} from '../../hooks/useFormPersistence';
 import {
   STEPS,
   initialFormData,
@@ -15,6 +21,8 @@ import {
   type ProductFormData,
 } from './types';
 import { StepProductInfo, StepDetails, StepPricing, StepCategoriesAndImages, StepReview } from './steps';
+
+const FORM_STORAGE_KEY = 'listing_form_product';
 
 function isDescriptionEmpty(html: string): boolean {
   const stripped = html.replace(/<[^>]*>/g, '').trim();
@@ -32,17 +40,6 @@ function validateStep(stepId: StepId, data: ProductFormData): Record<string, str
       break;
     case 'pricing':
       if (!data.price || data.price <= 0) err.price = 'Price must be greater than 0';
-      if (data.inventoryQuantity === '' || data.inventoryQuantity < 0) {
-        err.inventoryQuantity = 'Inventory quantity must be 0 or greater';
-      }
-      if (
-        typeof data.compare_price === 'number' &&
-        typeof data.price === 'number' &&
-        data.compare_price > 0 &&
-        data.compare_price < data.price
-      ) {
-        err.compare_price = 'Compare price must be greater than or equal to Price (original price ≥ sale price)';
-      }
       break;
     case 'categories-images':
       if (data.categories.length === 0) err.categories = 'Select at least one category';
@@ -67,15 +64,22 @@ function computeFinalName(data: ProductFormData): string {
 }
 
 export function ProductMasterForm() {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [formData, setFormData] = useState<ProductFormData>(initialFormData);
+  const [stepIndex, setStepIndex] = useState(() => {
+    clearFormStorageOnReload(FORM_STORAGE_KEY);
+    const saved = getPersistedForm<{ formData: ProductFormData; stepIndex: number }>(FORM_STORAGE_KEY);
+    return saved?.stepIndex ?? 0;
+  });
+  const [formData, setFormData] = useState<ProductFormData>(() => {
+    const saved = getPersistedForm<{ formData: ProductFormData; stepIndex: number }>(FORM_STORAGE_KEY);
+    return saved?.formData ?? initialFormData;
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [collections, setCollections] = useState<CollectionMaster[]>([]);
-  const [sellers, setSellers] = useState<SellerMaster[]>([]);
+  const [sellers, setSellers] = useState<ProcurementSellerMaster[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [skuPreview, setSkuPreview] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -96,6 +100,10 @@ export function ProductMasterForm() {
   }, []);
 
   useEffect(() => {
+    setPersistedForm(FORM_STORAGE_KEY, { formData, stepIndex });
+  }, [formData, stepIndex]);
+
+  useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
 
@@ -109,12 +117,12 @@ export function ProductMasterForm() {
   }, []);
 
   useEffect(() => {
-    fetch('/api/sellers')
+    fetch('/api/procurement-seller-master?limit=500')
       .then((res) => res.json())
       .then((json) => {
         if (json?.success && Array.isArray(json.data)) setSellers(json.data);
       })
-      .catch((e) => console.error('Error fetching sellers:', e));
+      .catch((e) => console.error('Error fetching procurement sellers:', e));
   }, []);
 
   useEffect(() => {
@@ -287,18 +295,10 @@ export function ProductMasterForm() {
         type: formData.type || undefined,
         seller: formData.seller || undefined,
         description: formData.description.trim() || undefined,
-        sort_order: typeof formData.sort_order === 'number' ? formData.sort_order : undefined,
         finalName: finalName || undefined,
         categories: formData.categories,
         collectionIds: formData.collectionIds.length > 0 ? formData.collectionIds : undefined,
         price: Number(formData.price),
-        compare_price: typeof formData.compare_price === 'number' ? formData.compare_price : undefined,
-        publish: formData.publish,
-        inventoryQuantity: Number(formData.inventoryQuantity),
-        inventory_management: formData.inventory_management || undefined,
-        inventory_management_level: formData.inventory_management_level || undefined,
-        inventory_allow_out_of_stock:
-          typeof formData.inventory_allow_out_of_stock === 'number' ? formData.inventory_allow_out_of_stock : undefined,
         images: allImageUrls,
         hub: formData.hub?.trim() || undefined,
       };
@@ -311,6 +311,7 @@ export function ProductMasterForm() {
       const result = await response.json();
 
       if (result.success) {
+        removePersistedForm(FORM_STORAGE_KEY);
         setMessage({
           type: 'success',
           text: result.warning ? `Product created with warning: ${result.warning}` : 'Product created successfully!',
@@ -332,7 +333,7 @@ export function ProductMasterForm() {
   };
 
   const sellerOptions = useMemo(
-    () => [{ value: '', label: 'Select Seller' }, ...sellers.map((s) => ({ value: s.seller_id, label: s.seller_name }))],
+    () => [{ value: '', label: 'Select Procurement Seller' }, ...sellers.map((s) => ({ value: String(s._id), label: s.seller_name }))],
     [sellers]
   );
 
@@ -419,7 +420,6 @@ export function ProductMasterForm() {
                 type={formData.type}
                 seller={formData.seller}
                 description={formData.description}
-                sort_order={formData.sort_order}
                 sellerOptions={sellerOptions}
                 errors={errors}
                 onFieldChange={handleFieldChange}
@@ -429,12 +429,6 @@ export function ProductMasterForm() {
             {currentStep.id === 'pricing' && (
               <StepPricing
                 price={formData.price}
-                compare_price={formData.compare_price}
-                inventoryQuantity={formData.inventoryQuantity}
-                inventory_management={formData.inventory_management}
-                inventory_management_level={formData.inventory_management_level}
-                inventory_allow_out_of_stock={formData.inventory_allow_out_of_stock}
-                publish={formData.publish}
                 hub={formData.hub}
                 hubOptions={hubOptions}
                 skuPreview={skuPreview}
@@ -471,6 +465,7 @@ export function ProductMasterForm() {
                 collections={collections}
                 skuPreview={skuPreview}
                 selectedImageCount={selectedImages.length}
+                procurementSellers={sellers}
               />
             )}
           </div>

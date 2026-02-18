@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
-import { deleteProductFromStoreHippo } from '@/lib/storeHippoProducts';
+import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
 import { deleteMultipleImagesFromS3 } from '@/lib/s3Upload';
 
 export async function GET(
@@ -51,10 +51,30 @@ export async function PUT(
       );
     }
 
-    const updateData = { ...body };
-    delete (updateData as Record<string, unknown>)._id;
-    delete (updateData as Record<string, unknown>).createdAt;
-    
+    const updateData = { ...body } as Record<string, unknown>;
+    delete updateData._id;
+    delete updateData.createdAt;
+    delete updateData.compare_price;
+    delete updateData.sort_order;
+    delete updateData.publish;
+    delete updateData.inventoryQuantity;
+    delete updateData.inventory_management;
+    delete updateData.inventory_management_level;
+    delete updateData.inventory_allow_out_of_stock;
+
+    const existing = await ParentMasterModel.findById(id);
+    const updatingSeller = updateData.seller !== undefined;
+    const updatingPrice = updateData.price !== undefined;
+    if (updatingSeller || updatingPrice) {
+      const sellerId = (updateData.seller ?? existing?.seller) != null ? String(updateData.seller ?? existing?.seller).trim() : null;
+      const priceVal = updateData.price != null ? Number(updateData.price) : (existing && 'price' in existing ? Number(existing.price) : null);
+      if (sellerId && priceVal != null && !isNaN(priceVal)) {
+        const procurementSeller = await ProcurementSellerMasterModel.findById(sellerId);
+        const factor = procurementSeller?.multiplicationFactor ?? 1;
+        updateData.listing_price = priceVal * factor;
+      }
+    }
+
     const result = await ParentMasterModel.update(id, updateData);
     
     if (result.matchedCount === 0) {
@@ -106,15 +126,6 @@ export async function DELETE(
 
     const errors: string[] = [];
 
-    if (product.storeHippoId) {
-      console.log(`[Delete] Deleting from StoreHippo: ${product.storeHippoId}`);
-      const storeHippoResult = await deleteProductFromStoreHippo(product.storeHippoId);
-      if (!storeHippoResult.success) {
-        console.warn(`[Delete] StoreHippo deletion failed: ${storeHippoResult.error}`);
-        errors.push(`StoreHippo: ${storeHippoResult.error}`);
-      }
-    }
-
     if (product.images && Array.isArray(product.images) && product.images.length > 0) {
       console.log(`[Delete] Deleting ${product.images.length} images from S3`);
       const s3Result = await deleteMultipleImagesFromS3(product.images);
@@ -141,7 +152,7 @@ export async function DELETE(
       success: true, 
       message: errors.length > 0 
         ? `Product deleted with warnings: ${errors.join('; ')}` 
-        : 'Product deleted successfully from all systems',
+        : 'Product deleted successfully',
       warnings: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

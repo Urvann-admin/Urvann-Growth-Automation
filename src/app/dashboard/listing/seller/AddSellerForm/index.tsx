@@ -1,19 +1,61 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Notification } from '@/components/ui/Notification';
+import {
+  clearFormStorageOnReload,
+  getPersistedForm,
+  setPersistedForm,
+  removePersistedForm,
+} from '../../hooks/useFormPersistence';
+
+const FORM_STORAGE_KEY = 'listing_form_seller';
+
+interface SellerFormState {
+  seller_name: string;
+  place: string;
+  multiplicationFactor: string;
+  billNo: string;
+  phoneNumber: string;
+}
 
 export function AddSellerForm() {
-  const [seller_name, setSeller_name] = useState('');
-  const [place, setPlace] = useState('');
-  const [multiplicationFactor, setMultiplicationFactor] = useState('');
-  const [billNo, setBillNo] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [seller_name, setSeller_name] = useState(() => {
+    clearFormStorageOnReload(FORM_STORAGE_KEY);
+    const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
+    return saved?.seller_name ?? '';
+  });
+  const [place, setPlace] = useState(() => {
+    const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
+    return saved?.place ?? '';
+  });
+  const [multiplicationFactor, setMultiplicationFactor] = useState(() => {
+    const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
+    return saved?.multiplicationFactor ?? '';
+  });
+  const [billNo, setBillNo] = useState(() => {
+    const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
+    return saved?.billNo ?? '';
+  });
+  const [phoneNumber, setPhoneNumber] = useState(() => {
+    const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
+    return saved?.phoneNumber ?? '';
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+
+  useEffect(() => {
+    setPersistedForm(FORM_STORAGE_KEY, {
+      seller_name,
+      place,
+      multiplicationFactor,
+      billNo,
+      phoneNumber,
+    });
+  }, [seller_name, place, multiplicationFactor, billNo, phoneNumber]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +86,7 @@ export function AddSellerForm() {
         setSaving(false);
         return;
       }
+      removePersistedForm(FORM_STORAGE_KEY);
       setMessage({ type: 'success', text: 'Seller created successfully.' });
       setSeller_name('');
       setPlace('');

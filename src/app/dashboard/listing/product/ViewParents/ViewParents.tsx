@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
-import type { SellerMaster } from '@/models/sellerMaster';
+import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { Notification } from '@/components/ui/Notification';
 import { SearchBar, Pagination, ConfirmDialog } from '../../shared';
 import { ParentTable } from './ParentTable';
@@ -27,15 +27,8 @@ interface EditParentForm {
   size: number | '';
   type: string;
   seller: string;
-  sort_order: number | '';
   categories: string[];
   price: number | '';
-  compare_price: number | '';
-  publish: string;
-  inventoryQuantity: number | '';
-  inventory_management: string;
-  inventory_management_level: string;
-  inventory_allow_out_of_stock: number | '';
   images: string[];
   hub: string;
 }
@@ -55,7 +48,7 @@ export function ViewParents() {
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<EditParentForm | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [sellers, setSellers] = useState<SellerMaster[]>([]);
+  const [sellers, setSellers] = useState<ProcurementSellerMaster[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<ParentMaster | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -69,7 +62,7 @@ export function ViewParents() {
   }, []);
 
   const fetchSellers = useCallback(() => {
-    fetch('/api/sellers')
+    fetch('/api/procurement-seller-master?limit=500')
       .then((res) => res.json())
       .then((json) => {
         if (json?.success && Array.isArray(json.data)) setSellers(json.data);
@@ -146,15 +139,8 @@ export function ViewParents() {
       size: parent.size ?? '',
       type: parent.type ?? '',
       seller: parent.seller ?? '',
-      sort_order: parent.sort_order ?? '',
       categories: Array.isArray(parent.categories) ? parent.categories : [],
       price: parent.price ?? '',
-      compare_price: parent.compare_price ?? '',
-      publish: parent.publish ?? 'draft',
-      inventoryQuantity: parent.inventoryQuantity ?? '',
-      inventory_management: parent.inventory_management ?? 'none',
-      inventory_management_level: parent.inventory_management_level ?? '',
-      inventory_allow_out_of_stock: parent.inventory_allow_out_of_stock ?? '',
       images: Array.isArray(parent.images) ? parent.images : [],
       hub: parent.hub ?? '',
     });
@@ -162,21 +148,6 @@ export function ViewParents() {
 
   const handleSaveEdit = async () => {
     if (!editing?._id || !editForm) return;
-
-    const priceNum = editForm.price !== '' ? Number(editForm.price) : 0;
-    const comparePriceNum = editForm.compare_price !== '' ? Number(editForm.compare_price) : null;
-    if (
-      comparePriceNum != null &&
-      comparePriceNum > 0 &&
-      priceNum > 0 &&
-      comparePriceNum < priceNum
-    ) {
-      setMessage({
-        type: 'error',
-        text: 'Compare price must be greater than or equal to Price (original price ≥ sale price).',
-      });
-      return;
-    }
 
     setSaving(true);
     setMessage(null);
@@ -191,18 +162,8 @@ export function ViewParents() {
       size: editForm.size !== '' ? Number(editForm.size) : undefined,
       type: editForm.type || undefined,
       seller: editForm.seller || undefined,
-      sort_order: editForm.sort_order !== '' ? Number(editForm.sort_order) : undefined,
       categories: editForm.categories,
       price: Number(editForm.price),
-      compare_price: editForm.compare_price !== '' ? Number(editForm.compare_price) : undefined,
-      publish: editForm.publish,
-      inventoryQuantity: Number(editForm.inventoryQuantity),
-      inventory_management: editForm.inventory_management || undefined,
-      inventory_management_level: editForm.inventory_management_level || undefined,
-      inventory_allow_out_of_stock:
-        editForm.inventory_allow_out_of_stock !== ''
-          ? Number(editForm.inventory_allow_out_of_stock)
-          : undefined,
       images: editForm.images,
       hub: editForm.hub?.trim() || undefined,
     };
@@ -249,7 +210,7 @@ export function ViewParents() {
       }
       setMessage({
         type: 'success',
-        text: data.warnings ? `Product deleted with warnings: ${data.warnings.join('; ')}` : 'Product deleted successfully from all systems',
+        text: data.warnings ? `Product deleted with warnings: ${data.warnings.join('; ')}` : 'Product deleted successfully.',
       });
       setDeleteConfirm(null);
       fetchParents(pagination.page);
@@ -313,7 +274,7 @@ export function ViewParents() {
       <ConfirmDialog
         isOpen={!!deleteConfirm}
         title="Delete Product"
-        message={`Are you sure you want to delete "${deleteConfirm?.plant}"? This will permanently remove the product from the database, StoreHippo, and delete all associated images from S3. This action cannot be undone.`}
+        message={`Are you sure you want to delete "${deleteConfirm?.plant}"? This will permanently remove the product from the database and delete all associated images from S3. This action cannot be undone.`}
         confirmLabel="Delete Product"
         cancelLabel="Cancel"
         confirmVariant="danger"

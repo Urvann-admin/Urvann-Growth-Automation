@@ -4,23 +4,18 @@ import type { ParentMaster } from '@/models/parentMaster';
 const BASE_URL = process.env.STOREHIPPO_BASE_URL || 'https://uaturvann.storehippo.com';
 const ACCESS_KEY = process.env.URVANN_API_ACCESS_KEY || '13945648c9da5fdbfc71e3a397218e75';
 
-// StoreHippo product payload format
+// StoreHippo product payload format (legacy; parent master no longer syncs to StoreHippo)
 export interface StoreHippoProductPayload {
   name: string;
   alias: string;
   price: number;
-  compare_price?: number;
-  sort_order?: number;
   publish: string; // "1" for published, "0" for unpublished
   categories: string[]; // category aliases (e.g. indoor-plants)
   collections?: string[]; // collection aliases (from collectionMaster)
   images: { image: string }[];
   inventory_quantity: number;
-  inventory_management?: string; // "automatic" | "none"
-  inventory_management_level?: string; // "product" or empty
-  inventory_allow_out_of_stock?: number; // quantity allowed when out of stock
   substore?: string[]; // substores derived from hub (e.g. bgl-e, bgl-e2)
-  seller?: string; // seller_id from sellerMaster
+  seller?: string; // procurement seller _id or legacy seller_id
   sku?: string; // SKU code for the product
   description?: string; // Product description (rich text HTML)
 }
@@ -50,7 +45,7 @@ export interface StoreHippoSyncOptions {
   collectionAliases?: string[];
 }
 
-// Convert ParentMaster to StoreHippo format
+// Convert ParentMaster to StoreHippo format (legacy; parent master no longer syncs)
 function convertToStoreHippoFormat(
   product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>,
   options?: StoreHippoSyncOptions
@@ -66,31 +61,16 @@ function convertToStoreHippoFormat(
     name: displayName,
     alias: alias,
     price: product.price,
-    publish: product.publish === 'published' ? '1' : '0',
+    publish: '0',
     categories: product.categories,
     images: (product.images || []).map((url) => ({ image: url })),
-    inventory_quantity: product.inventoryQuantity ?? 0,
+    inventory_quantity: 0,
   };
 
   if (options?.collectionAliases && options.collectionAliases.length > 0) {
     payload.collections = options.collectionAliases;
   }
 
-  if (product.compare_price !== undefined && product.compare_price != null) {
-    payload.compare_price = product.compare_price;
-  }
-  if (product.sort_order !== undefined && product.sort_order != null) {
-    payload.sort_order = product.sort_order;
-  }
-  if (product.inventory_management) {
-    payload.inventory_management = product.inventory_management;
-  }
-  if (product.inventory_management_level) {
-    payload.inventory_management_level = product.inventory_management_level;
-  }
-  if (product.inventory_allow_out_of_stock !== undefined && product.inventory_allow_out_of_stock != null) {
-    payload.inventory_allow_out_of_stock = product.inventory_allow_out_of_stock;
-  }
   if (product.substores && product.substores.length > 0) {
     payload.substore = product.substores;
   }
@@ -199,20 +179,11 @@ export async function updateProductInStoreHippo(
     }
     
     if (product.price !== undefined) payload.price = product.price;
-    if (product.compare_price !== undefined) payload.compare_price = product.compare_price;
-    if (product.sort_order !== undefined) payload.sort_order = product.sort_order;
-    if (product.publish) payload.publish = product.publish === 'published' ? '1' : '0';
     if (product.categories) payload.categories = product.categories;
     if (options?.collectionAliases && options.collectionAliases.length > 0) {
       payload.collections = options.collectionAliases;
     }
     if (product.images) payload.images = product.images.map((url) => ({ image: url }));
-    if (product.inventoryQuantity !== undefined) payload.inventory_quantity = product.inventoryQuantity;
-    if (product.inventory_management) payload.inventory_management = product.inventory_management;
-    if (product.inventory_management_level) payload.inventory_management_level = product.inventory_management_level;
-    if (product.inventory_allow_out_of_stock !== undefined && product.inventory_allow_out_of_stock != null) {
-      payload.inventory_allow_out_of_stock = product.inventory_allow_out_of_stock;
-    }
     if (product.substores && product.substores.length > 0) payload.substore = product.substores;
     if (product.seller) payload.seller = product.seller;
     if (product.sku) payload.sku = product.sku;

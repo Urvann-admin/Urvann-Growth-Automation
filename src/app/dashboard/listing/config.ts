@@ -1,4 +1,4 @@
-import { List, Plus, ListIcon, Upload, Image as ImageIcon, ScrollText, type LucideIcon } from 'lucide-react';
+import { List, Plus, ListIcon, Upload, Image as ImageIcon, ScrollText, FileText, type LucideIcon } from 'lucide-react';
 
 export type ListingTab =
   | 'category-add'
@@ -7,6 +7,8 @@ export type ListingTab =
   | 'product-view-parent'
   | 'seller-add'
   | 'seller-view'
+  | 'invoice-add'
+  | 'invoice-view'
   | 'listing'
   | 'image-upload'
   | 'image-view'
@@ -34,6 +36,11 @@ export const SELLER_SUB_TABS: { id: ListingTab; label: string }[] = [
   { id: 'seller-view', label: 'View Seller' },
 ];
 
+export const INVOICE_SUB_TABS: { id: ListingTab; label: string }[] = [
+  { id: 'invoice-add', label: 'Add Invoice' },
+  { id: 'invoice-view', label: 'View Invoice' },
+];
+
 export interface ListingTabConfig {
   id: ListingTab;
   label: string;
@@ -48,10 +55,28 @@ export const TAB_CONFIG: ListingTabConfig[] = [
   { id: 'product-view-parent', label: 'View Parent', subtitle: 'View parent products', icon: ListIcon },
   { id: 'seller-add', label: 'Add Seller', subtitle: 'Create a new seller', icon: Plus },
   { id: 'seller-view', label: 'View Seller', subtitle: 'View and edit sellers', icon: ListIcon },
+  { id: 'invoice-add', label: 'Add Invoice', subtitle: 'Record invoice from Excel or form', icon: Plus },
+  { id: 'invoice-view', label: 'View Invoice', subtitle: 'View and edit purchase records', icon: ListIcon },
   { id: 'listing', label: 'Listing', subtitle: 'Listing rules and status', icon: List },
   { id: 'image-upload', label: 'Add Image', subtitle: 'Bulk upload images', icon: Upload },
   { id: 'image-view', label: 'View Image', subtitle: 'View image collections', icon: ListIcon },
   { id: 'upload-logs', label: 'Logs', subtitle: 'View image upload logs', icon: ScrollText },
 ];
 
-export const LISTING_TOP_LEVEL_TABS: ListingTab[] = ['listing'];
+/** No standalone top-level "Listing" tab; sections are under the Listing nav section */
+export const LISTING_TOP_LEVEL_TABS: ListingTab[] = [];
+
+/** Section tabs shown in main content when sidebar "Listing" is active */
+export type ListingSectionTab = 'listing' | 'revival' | 'growth' | 'consumer';
+
+export interface ListingSectionTabConfig {
+  id: ListingSectionTab;
+  label: string;
+}
+
+export const LISTING_SECTION_TABS: ListingSectionTabConfig[] = [
+  { id: 'listing', label: 'Listing' },
+  { id: 'revival', label: 'Revival' },
+  { id: 'growth', label: 'Growth' },
+  { id: 'consumer', label: 'Consumer' },
+];

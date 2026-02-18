@@ -2,8 +2,7 @@ import { ObjectId } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
-import { CollectionMasterModel } from '@/models/collectionMaster';
-import { syncProductToStoreHippo } from '@/lib/storeHippoProducts';
+import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
 import { generateParentSKU } from '@/lib/skuGenerator';
 
@@ -14,7 +13,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const search = searchParams.get('search') || '';
     const category = searchParams.get('category') || '';
-    const publish = searchParams.get('publish') || '';
+    const section = searchParams.get('section') || '';
+    const minQuantity = parseInt(searchParams.get('minQuantity') || '0', 10);
     const sortField = searchParams.get('sortField') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') === 'asc' ? 1 : -1;
 
@@ -28,15 +28,18 @@ export async function GET(request: NextRequest) {
         { otherNames: regex },
         { variety: regex },
         { type: regex },
+        { sku: regex },
       ];
     }
     
     if (category) {
       query.categories = category;
     }
-    
-    if (publish) {
-      query.publish = publish;
+
+    // Section-based filtering: only show parents with quantities > minQuantity in the specified section
+    if (section && ['listing', 'revival', 'growth', 'consumer'].includes(section)) {
+      const sectionField = `typeBreakdown.${section}`;
+      query[sectionField] = { $gt: minQuantity };
     }
 
     const result = await ParentMasterModel.findWithPagination(
@@ -84,6 +87,15 @@ export async function POST(request: NextRequest) {
         }
         validatedItems.push(validated.data!);
       }
+
+      for (let i = 0; i < validatedItems.length; i++) {
+        const item = validatedItems[i];
+        if (item.seller && item.price != null) {
+          const procurementSeller = await ProcurementSellerMasterModel.findById(item.seller);
+          const factor = procurementSeller?.multiplicationFactor ?? 1;
+          (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.price) * factor;
+        }
+      }
       
       const result = await ParentMasterModel.createMany(validatedItems);
       return NextResponse.json({
@@ -122,45 +134,24 @@ export async function POST(request: NextRequest) {
       ...(sku && { sku }),
     };
 
-    // Resolve collectionIds to aliases for StoreHippo payload (DB stores IDs, StoreHippo gets aliases)
-    let collectionAliases: string[] | undefined;
-    if (dataWithSku.collectionIds && dataWithSku.collectionIds.length > 0) {
-      const ids = dataWithSku.collectionIds.filter((id) => id && String(id).trim());
-      const objectIds = ids
-        .map((id) => (typeof id === 'string' && ObjectId.isValid(id) ? new ObjectId(id) : id))
-        .filter((id): id is ObjectId => id instanceof ObjectId);
-      if (objectIds.length > 0) {
-        const collections = await CollectionMasterModel.findAll({ _id: { $in: objectIds } });
-        collectionAliases = collections.map((c) => c.alias).filter(Boolean);
-      }
+    // Compute listing_price = price * procurement seller multiplicationFactor
+    let listing_price: number | undefined;
+    if (dataWithSku.seller && dataWithSku.price != null) {
+      const procurementSeller = await ProcurementSellerMasterModel.findById(dataWithSku.seller);
+      const factor = procurementSeller?.multiplicationFactor ?? 1;
+      listing_price = Number(dataWithSku.price) * factor;
     }
-
-    // Sync to StoreHippo first – do not save to DB if StoreHippo fails
-    const storeHippoResult = await syncProductToStoreHippo(dataWithSku, {
-      ...(collectionAliases && collectionAliases.length > 0 && { collectionAliases }),
-    });
-
-    if (!storeHippoResult.success) {
-      console.error('StoreHippo sync failed for product:', validated.data!.plant, storeHippoResult.error);
-      return NextResponse.json(
-        { success: false, message: `StoreHippo sync failed: ${storeHippoResult.error}` },
-        { status: 422 }
-      );
-    }
-
-    const productId = storeHippoResult.storeHippoId;
     const dataToSave = {
       ...dataWithSku,
-      ...(productId && { product_id: productId, storeHippoId: productId }),
+      ...(listing_price !== undefined && { listing_price }),
     };
 
     const created = await ParentMasterModel.create(dataToSave);
 
-    console.log('Product saved to DB and synced to StoreHippo:', productId);
+    console.log('Product saved to DB:', created._id);
     return NextResponse.json({
       success: true,
       data: created,
-      storeHippoSync: true,
     });
   } catch (error) {
     console.error('Error creating parent master product:', error);
@@ -184,8 +175,22 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate the update data (partial validation)
-    const sanitized = sanitizeUpdateData(updateData);
-    
+    let sanitized = sanitizeUpdateData(updateData);
+
+    // Recompute listing_price when seller or price are updated
+    const updatingSeller = sanitized.seller !== undefined || (updateData.seller != null);
+    const updatingPrice = sanitized.price !== undefined || (updateData.price != null);
+    if (updatingSeller || updatingPrice) {
+      const existing = await ParentMasterModel.findById(_id);
+      const sellerId = (sanitized.seller ?? existing?.seller ?? (updateData.seller != null ? String(updateData.seller).trim() : null)) ?? null;
+      const priceVal = sanitized.price ?? (existing && 'price' in existing ? Number(existing.price) : null) ?? (updateData.price != null ? Number(updateData.price) : null);
+      if (sellerId != null && sellerId !== '' && priceVal != null && !isNaN(priceVal)) {
+        const procurementSeller = await ProcurementSellerMasterModel.findById(sellerId);
+        const factor = procurementSeller?.multiplicationFactor ?? 1;
+        sanitized = { ...sanitized, listing_price: priceVal * factor };
+      }
+    }
+
     const result = await ParentMasterModel.update(_id, sanitized);
     
     if (result.matchedCount === 0) {
@@ -277,14 +282,6 @@ function validateParentMasterData(data: unknown): {
     return { success: false, message: 'price is required and must be a non-negative number' };
   }
 
-  if (!d.publish || typeof d.publish !== 'string') {
-    return { success: false, message: 'publish is required and must be a string' };
-  }
-
-  if (d.inventoryQuantity === undefined || typeof d.inventoryQuantity !== 'number' || d.inventoryQuantity < 0) {
-    return { success: false, message: 'inventoryQuantity is required and must be a non-negative number' };
-  }
-
   // Categories must be an array
   if (!Array.isArray(d.categories)) {
     return { success: false, message: 'categories must be an array' };
@@ -297,21 +294,6 @@ function validateParentMasterData(data: unknown): {
 
   const hub = d.hub ? String(d.hub).trim() : undefined;
   const substores = hub ? getSubstoresByHub(hub) : [];
-
-  const priceNum = Number(d.price);
-  const comparePriceNum =
-    d.compare_price != null && d.compare_price !== '' ? Number(d.compare_price) : null;
-  if (
-    comparePriceNum != null &&
-    comparePriceNum > 0 &&
-    priceNum > 0 &&
-    comparePriceNum < priceNum
-  ) {
-    return {
-      success: false,
-      message: 'Compare price must be greater than or equal to Price (original price ≥ sale price).',
-    };
-  }
 
   // Build validated object
   const validated: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
@@ -328,13 +310,6 @@ function validateParentMasterData(data: unknown): {
     finalName: d.finalName ? String(d.finalName).trim() : undefined,
     categories: (d.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean),
     price: Number(d.price),
-    compare_price: d.compare_price != null && d.compare_price !== '' ? Number(d.compare_price) : undefined,
-    sort_order: d.sort_order != null && d.sort_order !== '' ? Number(d.sort_order) : undefined,
-    publish: String(d.publish).trim(),
-    inventoryQuantity: Number(d.inventoryQuantity),
-    inventory_management: d.inventory_management ? String(d.inventory_management).trim() : undefined,
-    inventory_management_level: d.inventory_management_level ? String(d.inventory_management_level).trim() : undefined,
-    inventory_allow_out_of_stock: d.inventory_allow_out_of_stock != null && d.inventory_allow_out_of_stock !== '' ? Number(d.inventory_allow_out_of_stock) : undefined,
     images: (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean),
     hub: hub || undefined,
     substores: substores.length > 0 ? substores : undefined,
@@ -393,28 +368,8 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.price !== undefined) {
     sanitized.price = typeof data.price === 'number' ? data.price : parseFloat(String(data.price)) || 0;
   }
-  if (data.compare_price !== undefined) {
-    sanitized.compare_price = typeof data.compare_price === 'number' ? data.compare_price : parseFloat(String(data.compare_price)) || undefined;
-  }
-  if (data.sort_order !== undefined) {
-    sanitized.sort_order = typeof data.sort_order === 'number' ? data.sort_order : parseInt(String(data.sort_order), 10) || undefined;
-  }
-  if (data.inventory_management !== undefined) {
-    sanitized.inventory_management = String(data.inventory_management).trim() || undefined;
-  }
-  if (data.inventory_management_level !== undefined) {
-    sanitized.inventory_management_level = String(data.inventory_management_level).trim() || undefined;
-  }
-  if (data.inventory_allow_out_of_stock !== undefined && data.inventory_allow_out_of_stock !== '') {
-    sanitized.inventory_allow_out_of_stock = typeof data.inventory_allow_out_of_stock === 'number'
-      ? data.inventory_allow_out_of_stock
-      : parseInt(String(data.inventory_allow_out_of_stock), 10) || 0;
-  }
-  if (data.publish !== undefined) {
-    sanitized.publish = String(data.publish).trim();
-  }
-  if (data.inventoryQuantity !== undefined) {
-    sanitized.inventoryQuantity = typeof data.inventoryQuantity === 'number' ? data.inventoryQuantity : parseInt(String(data.inventoryQuantity), 10) || 0;
+  if (data.listing_price !== undefined) {
+    sanitized.listing_price = typeof data.listing_price === 'number' ? data.listing_price : parseFloat(String(data.listing_price)) || undefined;
   }
   if (data.images !== undefined && Array.isArray(data.images)) {
     sanitized.images = (data.images as unknown[]).map((img) => String(img).trim()).filter(Boolean);

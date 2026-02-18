@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Check, ChevronDown, Search } from 'lucide-react';
 import type { Category } from '@/models/category';
-import type { SellerMaster } from '@/models/sellerMaster';
+import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { CustomSelect } from '../../components/CustomSelect';
 import { MOSS_STICK_OPTIONS, PLANT_TYPES } from '../ProductMasterForm/types';
@@ -20,15 +20,8 @@ interface EditParentForm {
   size: number | '';
   type: string;
   seller: string;
-  sort_order: number | '';
   categories: string[];
   price: number | '';
-  compare_price: number | '';
-  publish: string;
-  inventoryQuantity: number | '';
-  inventory_management: string;
-  inventory_management_level: string;
-  inventory_allow_out_of_stock: number | '';
   images: string[];
   hub: string;
 }
@@ -38,7 +31,7 @@ interface EditParentModalProps {
   editForm: EditParentForm | null;
   saving: boolean;
   categories: Category[];
-  sellers: SellerMaster[];
+  sellers: ProcurementSellerMaster[];
   onClose: () => void;
   onSave: () => void;
   onChange: (form: EditParentForm) => void;
@@ -76,8 +69,8 @@ export function EditParentModal({
   if (!editForm) return null;
 
   const sellerOptions = [
-    { value: '', label: 'Select Seller' },
-    ...sellers.map((s) => ({ value: s.seller_id, label: s.seller_name })),
+    { value: '', label: 'Select Procurement Seller' },
+    ...sellers.map((s) => ({ value: String(s._id), label: s.seller_name })),
   ];
   const hubOptions = [
     { value: '', label: 'Select Hub' },
@@ -196,11 +189,11 @@ export function EditParentModal({
                 placeholder="Select Type"
               />
               <CustomSelect
-                label="Seller"
+                label="Procurement Seller"
                 value={editForm.seller}
                 onChange={(v) => onChange({ ...editForm, seller: v })}
                 options={sellerOptions}
-                placeholder="Select Seller"
+                placeholder="Select Procurement Seller"
               />
               <CustomSelect
                 label="Hub"
@@ -212,8 +205,8 @@ export function EditParentModal({
             </div>
           </ModalSection>
 
-          <ModalSection title="Pricing & status">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <ModalSection title="Pricing">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Price</span>
                 <input
@@ -230,37 +223,7 @@ export function EditParentModal({
                   className={inputClass}
                 />
               </label>
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Inventory quantity</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={editForm.inventoryQuantity}
-                  onChange={(e) =>
-                    onChange({
-                      ...editForm,
-                      inventoryQuantity: e.target.value ? parseInt(e.target.value, 10) : '',
-                    })
-                  }
-                  className={inputClass}
-                />
-              </label>
-              <div className="flex items-end pb-2.5">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editForm.publish === 'published'}
-                    onChange={(e) =>
-                      onChange({
-                        ...editForm,
-                        publish: e.target.checked ? 'published' : 'draft',
-                      })
-                    }
-                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span className="text-sm font-medium text-slate-700">Published</span>
-                </label>
-              </div>
+              <p className="text-xs text-slate-500 self-end pb-2.5">Listing price is computed on save (price × procurement seller factor).</p>
             </div>
           </ModalSection>
 
