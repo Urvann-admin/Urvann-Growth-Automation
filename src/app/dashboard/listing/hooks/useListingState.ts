@@ -16,7 +16,6 @@ const VALID_HASHES: ListingTab[] = [
   'product-view-parent',
   'seller-add',
   'seller-view',
-  'invoice-add',
   'invoice-view',
   'listing',
   'image-upload',
@@ -65,6 +64,7 @@ export function useListingState() {
   const [invoiceSectionOpen, setInvoiceSectionOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [listingSectionTab, setListingSectionTab] = useState<ListingSectionTab>(getInitialSectionTab);
+  const [listingViewMode, setListingViewMode] = useState<'create' | 'view-all'>('create');
   const [loading, setLoading] = useState(true);
 
   // Handle auth state changes
@@ -89,7 +89,7 @@ export function useListingState() {
         if (hash === 'listing') setListingSectionOpen(true);
         if (hash === 'image-upload' || hash === 'image-view' || hash === 'upload-logs') setImageSectionOpen(true);
         if (hash === 'seller-add' || hash === 'seller-view') setSellerSectionOpen(true);
-        if (hash === 'invoice-add' || hash === 'invoice-view') setInvoiceSectionOpen(true);
+        if (hash === 'invoice-view') setInvoiceSectionOpen(true);
       }
     };
     window.addEventListener('hashchange', syncFromHash);
@@ -123,6 +123,8 @@ export function useListingState() {
     setActiveTab: setActiveTabWithHash,
     listingSectionTab,
     setListingSectionTab: setListingSectionTabWithStorage,
+    listingViewMode,
+    setListingViewMode,
     categorySectionOpen,
     setCategorySectionOpen,
     productSectionOpen,

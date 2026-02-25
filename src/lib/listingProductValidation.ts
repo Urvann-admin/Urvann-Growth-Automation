@@ -1,4 +1,4 @@
-import type { ListingFormData } from '@/app/dashboard/listing/components/ListingProductForm/types';
+import type { ListingFormData } from '@/app/dashboard/listing/listing-screen/components/ListingProductForm/types';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
 
@@ -76,7 +76,7 @@ export function validateListingProductForm(
   // Check if quantity is available from all parents (for child listing)
   if (!errors.quantity && selectedParents.length > 0 && !isParentListing) {
     const insufficientParents = selectedParents.filter(parent => {
-      const availableQuantity = parent.typeBreakdown?.[section] || 0;
+      const availableQuantity = parent.inventory_quantity ?? 0;
       return availableQuantity < quantity;
     });
 
@@ -170,13 +170,13 @@ export function validateParentSelection(
 
   // Check quantity availability
   const insufficientParents = selectedParents.filter(parent => {
-    const availableQuantity = parent.typeBreakdown?.[section] || 0;
+    const availableQuantity = parent.inventory_quantity ?? 0;
     return availableQuantity < requiredQuantity;
   });
 
   if (insufficientParents.length > 0) {
     const details = insufficientParents.map(parent => {
-      const available = parent.typeBreakdown?.[section] || 0;
+      const available = parent.inventory_quantity ?? 0;
       return `${parent.plant} (${parent.sku}): ${available} available, ${requiredQuantity} required`;
     }).join('; ');
     errors.quantity = `Insufficient quantities: ${details}`;
@@ -282,7 +282,7 @@ export function calculateMaxQuantity(
   if (selectedParents.length === 0) return 0;
 
   return Math.min(
-    ...selectedParents.map(parent => parent.typeBreakdown?.[section] || 0)
+    ...selectedParents.map(parent => parent.inventory_quantity ?? 0)
   );
 }
 

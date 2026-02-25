@@ -41,7 +41,22 @@ listing/
 │   ├── ProductMasterForm/      # Product creation form
 │   └── page.tsx
 │
-├── components/                  # Shared form components
+├── listing-screen/              # Listing sub-tab (create/view listing products)
+│   ├── components/             # Listing-screen UI
+│   │   ├── ViewListingProducts/
+│   │   ├── ListingProductForm/
+│   │   ├── SplitScreenListing/
+│   │   ├── ListingSectionTabs.tsx
+│   │   ├── ParentSelector.tsx
+│   │   ├── ParentQuantityDisplay.tsx
+│   │   ├── ImageCollectionDropdown.tsx
+│   │   └── ListingLoadingScreen.tsx
+│   ├── hooks/
+│   │   └── useListingFormPersistence.ts
+│   ├── utils/                  # Optional; add when needed
+│   └── index.ts                # Barrel (public API)
+│
+├── components/                  # Layout + shared UI (listing module only)
 │   ├── CustomSelect.tsx
 │   ├── ListingContent.tsx
 │   ├── ListingSidebar.tsx

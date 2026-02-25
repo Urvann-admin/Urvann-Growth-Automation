@@ -9,7 +9,7 @@ import {
   getPersistedForm,
   setPersistedForm,
   removePersistedForm,
-} from './useFormPersistence';
+} from '../../hooks/useFormPersistence';
 
 export interface ListingFormPersistenceState {
   formData: ListingFormData;

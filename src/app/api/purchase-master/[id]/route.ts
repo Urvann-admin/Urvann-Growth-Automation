@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PurchaseMasterModel } from '@/models/purchaseMaster';
+import { syncParentFromPurchases } from '../syncParent';
 
 export async function GET(
   request: NextRequest,
@@ -43,6 +44,9 @@ export async function PUT(
         { status: 400 }
       );
     }
+    const existing = await PurchaseMasterModel.findById(id);
+    const oldParentSku = existing ? String(existing.parentSku || '').trim() : '';
+
     const updateData = { ...body } as Record<string, unknown>;
     delete updateData._id;
     delete updateData.createdAt;
@@ -61,6 +65,23 @@ export async function PUT(
       );
     }
     const updated = await PurchaseMasterModel.findById(id);
+    const newParentSku = updated ? String(updated.parentSku || '').trim() : '';
+
+    if (newParentSku) {
+      try {
+        await syncParentFromPurchases(newParentSku);
+      } catch (err) {
+        console.warn('[purchase-master] Failed to sync parent for sku:', newParentSku, err);
+      }
+    }
+    if (oldParentSku && oldParentSku !== newParentSku) {
+      try {
+        await syncParentFromPurchases(oldParentSku);
+      } catch (err) {
+        console.warn('[purchase-master] Failed to sync parent for sku:', oldParentSku, err);
+      }
+    }
+
     return NextResponse.json({ success: true, data: updated });
   } catch (error) {
     console.error('[purchase-master] PUT id error:', error);
@@ -83,12 +104,22 @@ export async function DELETE(
         { status: 400 }
       );
     }
+    const existing = await PurchaseMasterModel.findById(id);
+    const parentSku = existing ? String(existing.parentSku || '').trim() : '';
+
     const result = await PurchaseMasterModel.delete(id);
     if (result.deletedCount === 0) {
       return NextResponse.json(
         { success: false, message: 'Purchase record not found' },
         { status: 404 }
       );
+    }
+    if (parentSku) {
+      try {
+        await syncParentFromPurchases(parentSku);
+      } catch (err) {
+        console.warn('[purchase-master] Failed to sync parent for sku after delete:', parentSku, err);
+      }
     }
     return NextResponse.json({ success: true, message: 'Deleted successfully' });
   } catch (error) {

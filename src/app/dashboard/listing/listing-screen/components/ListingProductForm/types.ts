@@ -1,4 +1,5 @@
 import type { ListingSection, ListingStatus } from '@/models/listingProduct';
+import { POT_TYPES_WITH_PRICING } from '@/shared/constants/pots';
 
 /** Whether the user is listing a parent product (single) or a child product (can be multi-parent). */
 export type ListingType = 'parent' | 'child';
@@ -24,6 +25,7 @@ export interface ListingFormData {
   description: string;
   
   // Pricing and inventory
+  /** Number of units per set (for classic form this is the main quantity). */
   quantity: number | '';
   price: number; // Calculated automatically
   inventory_quantity: number; // Calculated automatically
@@ -81,15 +83,10 @@ export const MOSS_STICK_OPTIONS = [
 
 export const PLANT_TYPES = [
   { value: '', label: 'Select Type' },
-  { value: 'Black Nursery Pot', label: 'Black Nursery Pot' },
-  { value: 'Black Square Nursery Pot', label: 'Black Square Nursery Pot' },
-  { value: 'Black Super Nursery Pot', label: 'Black Super Nursery Pot' },
-  { value: 'Glass Bowl', label: 'Glass Bowl' },
-  { value: 'Hanging Basket', label: 'Hanging Basket' },
-  { value: 'Hanging Pot', label: 'Hanging Pot' },
-  { value: 'Nursery Bag', label: 'Nursery Bag' },
-  { value: 'Nursery Pot', label: 'Nursery Pot' },
-  { value: 'White Nursery Pot', label: 'White Nursery Pot' },
+  ...POT_TYPES_WITH_PRICING.map((cfg) => ({
+    value: cfg.value,
+    label: cfg.value,
+  })),
 ];
 
 export const LISTING_STATUS_OPTIONS = [

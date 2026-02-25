@@ -6,6 +6,7 @@ export interface EditPurchaseForm {
   billNumber: string;
   productCode: string;
   productName: string;
+  itemType: string;
   quantity: string;
   amount: string;
   parentSku: string;
@@ -72,6 +73,18 @@ export function EditPurchaseModal({
                   className={inputClass}
                   placeholder="Optional"
                 />
+              </label>
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Item Type</span>
+                <select
+                  value={editForm.itemType}
+                  onChange={(e) => onChange({ ...editForm, itemType: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="">Select</option>
+                  <option value="Product">Product</option>
+                  <option value="Consumable">Consumable</option>
+                </select>
               </label>
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Quantity</span>

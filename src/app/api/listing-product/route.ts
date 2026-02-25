@@ -1,12 +1,14 @@
 import { ObjectId } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { ListingProductModel } from '@/models/listingProduct';
-import type { ListingProduct, ListingSection, ListingStatus } from '@/models/listingProduct';
+import type { ListingProduct, ListingSection, ListingStatus, ListingParentItem } from '@/models/listingProduct';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { CategoryModel } from '@/models/category';
 import { generateSKU } from '@/lib/skuGenerator';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
+import { getPotPrice } from '@/shared/constants/pots';
+import { withDerivedParentSkus } from '@/models/listingProduct';
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: result.items,
+      data: result.items.map(withDerivedParentSkus),
       pagination: {
         total: result.total,
         page: result.page,
@@ -121,7 +123,7 @@ export async function POST(request: NextRequest) {
     console.log('Listing product saved to DB:', created._id);
     return NextResponse.json({
       success: true,
-      data: created,
+      data: withDerivedParentSkus(created),
     });
   } catch (error) {
     console.error('Error creating listing product:', error);
@@ -244,17 +246,23 @@ async function validateListingProductData(data: unknown): Promise<{
 
   const d = data as Record<string, unknown>;
 
+  // New flow: prefer detailed parentItems if present
+  const hasParentItems = Array.isArray((d as any).parentItems) && (d as any).parentItems.length > 0;
+
   // Required fields
-  if (!Array.isArray(d.parentSkus) || d.parentSkus.length === 0) {
-    return { success: false, message: 'parentSkus is required and must be a non-empty array' };
+  if (!hasParentItems && (!Array.isArray(d.parentSkus) || d.parentSkus.length === 0)) {
+    return { success: false, message: 'Either parentItems or parentSkus is required and must be non-empty' };
   }
 
   if (!d.plant || typeof d.plant !== 'string' || !String(d.plant).trim()) {
     return { success: false, message: 'plant is required and must be a non-empty string' };
   }
 
-  if (d.quantity === undefined || d.quantity === null || typeof d.quantity !== 'number' || d.quantity <= 0) {
-    return { success: false, message: 'quantity is required and must be a positive number' };
+  if (!hasParentItems) {
+    // Legacy single-quantity flow
+    if (d.quantity === undefined || d.quantity === null || typeof d.quantity !== 'number' || d.quantity <= 0) {
+      return { success: false, message: 'quantity is required and must be a positive number' };
+    }
   }
 
   if (!d.section || !['listing', 'revival', 'growth', 'consumer'].includes(d.section as string)) {
@@ -271,19 +279,41 @@ async function validateListingProductData(data: unknown): Promise<{
     return { success: false, message: 'images must be an array' };
   }
 
-  // Validate parent SKUs exist and have sufficient quantities
-  const parentSkus = (d.parentSkus as string[]).map(sku => String(sku).trim()).filter(Boolean);
-  const parents = await Promise.all(parentSkus.map(sku => ParentMasterModel.findBySku(sku)));
+  // Build parentItems list for calculations (supports legacy + new flow)
+  let parentItems: ListingParentItem[] = [];
+
+  if (hasParentItems) {
+    parentItems = ((d as any).parentItems as any[]).map((item) => ({
+      parentSku: String(item.parentSku || '').trim(),
+      quantity: Number(item.quantity) || 0,
+      unitPrice: Number(item.unitPrice) || 0,
+    })).filter((item) => item.parentSku && item.quantity > 0);
+
+    if (parentItems.length === 0) {
+      return { success: false, message: 'parentItems must contain at least one valid parent with positive quantity' };
+    }
+  } else {
+    // Fallback legacy shape: use parentSkus + global quantity
+    const parentSkusLegacy = (d.parentSkus as string[]).map((sku) => String(sku).trim()).filter(Boolean);
+    parentItems = parentSkusLegacy.map((sku) => ({
+      parentSku: sku,
+      quantity: Number(d.quantity),
+      unitPrice: 0, // will be filled from parent.price below
+    }));
+  }
+
+  const parentSkus = parentItems.map((item) => item.parentSku);
+  const parents = await Promise.all(parentSkus.map((sku) => ParentMasterModel.findBySku(sku)));
   
   for (let i = 0; i < parents.length; i++) {
     const parent = parents[i];
     if (!parent) {
       return { success: false, message: `Parent with SKU ${parentSkus[i]} not found` };
     }
-    
-    const availableQuantity = parent.typeBreakdown?.[d.section as ListingSection] || 0;
-    if (availableQuantity < (d.quantity as number)) {
-      return { success: false, message: `Insufficient quantity for parent ${parentSkus[i]}. Available: ${availableQuantity}, Required: ${d.quantity}` };
+    const requiredFromParent = parentItems[i].quantity;
+    const availableQuantity = parent.inventory_quantity ?? 0;
+    if (availableQuantity < requiredFromParent) {
+      return { success: false, message: `Insufficient quantity for parent ${parentSkus[i]}. Available: ${availableQuantity}, Required: ${requiredFromParent}` };
     }
   }
 
@@ -293,24 +323,49 @@ async function validateListingProductData(data: unknown): Promise<{
   const combinedCategories = new Set<string>();
   const combinedCollectionIds = new Set<string>();
 
-  for (const parent of parents) {
-    if (parent) {
-      totalPrice += (parent.price || 0) * (d.quantity as number);
-      
-      const availableQuantity = parent.typeBreakdown?.[d.section as ListingSection] || 0;
-      const inventoryForThisParent = Math.floor(availableQuantity / (d.quantity as number));
-      minInventoryQuantity = Math.min(minInventoryQuantity, inventoryForThisParent);
-      
-      // Combine categories
-      if (parent.categories) {
-        parent.categories.forEach(cat => combinedCategories.add(cat));
-      }
-      
-      // Combine collection IDs
-      if (parent.collectionIds) {
-        parent.collectionIds.forEach(id => combinedCollectionIds.add(String(id)));
-      }
+  // Helper: find parentMaster for a given sku
+  const getParentForSku = (sku: string) => {
+    const index = parentSkus.indexOf(sku);
+    return index >= 0 ? parents[index] : undefined;
+  };
+
+  for (const item of parentItems) {
+    const parent = getParentForSku(item.parentSku);
+    if (!parent) continue;
+
+    const effectiveUnitPrice = parent.price || 0;
+    item.unitPrice = effectiveUnitPrice;
+
+    // Price contribution from this parent in ONE set
+    totalPrice += effectiveUnitPrice * item.quantity;
+
+    const availableQuantity = parent.inventory_quantity ?? 0;
+    const inventoryForThisParent = item.quantity > 0
+      ? Math.floor(availableQuantity / item.quantity)
+      : 0;
+    minInventoryQuantity = Math.min(minInventoryQuantity, inventoryForThisParent);
+
+    // Combine categories
+    if (parent.categories) {
+      parent.categories.forEach((cat) => combinedCategories.add(cat));
     }
+
+    // Combine collection IDs
+    if (parent.collectionIds) {
+      parent.collectionIds.forEach((id) => combinedCollectionIds.add(String(id)));
+    }
+  }
+
+  // Pot based pricing
+  const potQuantity = typeof (d as any).potQuantity === 'number'
+    ? (d as any).potQuantity
+    : Number((d as any).potQuantity || 0);
+  const potSize = typeof d.size === 'number' ? d.size : typeof d.size === 'string' ? parseFloat(d.size) : undefined;
+  const potType = d.type ? String(d.type).trim() : undefined;
+
+  const potPricePerUnit = getPotPrice(potType, potSize);
+  if (potQuantity > 0 && potPricePerUnit > 0) {
+    totalPrice += potPricePerUnit * potQuantity;
   }
 
   // Apply category rules to get additional categories
@@ -327,9 +382,19 @@ async function validateListingProductData(data: unknown): Promise<{
 
   // Generate SKU if not provided
   let sku: string | undefined;
-  if (d.hub && d.plant && d.quantity) {
+  const setQuantity = typeof (d as any).setQuantity === 'number'
+    ? (d as any).setQuantity
+    : Number((d as any).setQuantity || 0);
+
+  const skuQuantityForCode = setQuantity > 0
+    ? setQuantity
+    : typeof d.quantity === 'number'
+      ? d.quantity
+      : Number(d.quantity || 0) || 1;
+
+  if (d.hub && d.plant && skuQuantityForCode) {
     try {
-      sku = await generateSKU(String(d.hub).trim(), String(d.plant).trim(), Number(d.quantity));
+      sku = await generateSKU(String(d.hub).trim(), String(d.plant).trim(), skuQuantityForCode);
     } catch (error) {
       console.error('SKU generation failed:', error);
       return { success: false, message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
@@ -339,27 +404,33 @@ async function validateListingProductData(data: unknown): Promise<{
   const hub = d.hub ? String(d.hub).trim() : undefined;
   const substores = hub ? getSubstoresByHub(hub) : [];
 
-  // Build validated object
+  // Build validated object (only parentItems persisted; parentSkus is derived from parentItems when needed)
   const validated: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'> = {
-    parentSkus: parentSkus,
+    parentItems,
     plant: String(d.plant).trim(),
     otherNames: d.otherNames ? String(d.otherNames).trim() : undefined,
     variety: d.variety ? String(d.variety).trim() : undefined,
     colour: d.colour ? String(d.colour).trim() : undefined,
     height: typeof d.height === 'number' ? d.height : undefined,
     mossStick: d.mossStick ? String(d.mossStick).trim() : undefined,
-    size: typeof d.size === 'number' ? d.size : undefined,
-    type: d.type ? String(d.type).trim() : undefined,
-    finalName: generateFinalName({
-      plant: String(d.plant).trim(),
-      otherNames: d.otherNames ? String(d.otherNames).trim() : undefined,
-      variety: d.variety ? String(d.variety).trim() : undefined,
-      colour: d.colour ? String(d.colour).trim() : undefined,
-      size: typeof d.size === 'number' ? d.size : undefined,
-      type: d.type ? String(d.type).trim() : undefined,
-    }),
+    size: typeof d.size === 'number' ? d.size : potSize,
+    type: potType,
+    finalName: (() => {
+      const setQty = setQuantity > 0 ? setQuantity : 1;
+      const fromParents = generateFinalNameFromParents(parentItems, getParentForSku, potSize, potType, setQty);
+      return fromParents || generateFinalName({
+        plant: String(d.plant).trim(),
+        otherNames: d.otherNames ? String(d.otherNames).trim() : undefined,
+        variety: d.variety ? String(d.variety).trim() : undefined,
+        colour: d.colour ? String(d.colour).trim() : undefined,
+        size: typeof d.size === 'number' ? d.size : undefined,
+        type: d.type ? String(d.type).trim() : undefined,
+      });
+    })(),
     description: d.description ? String(d.description).trim() : undefined,
-    quantity: Number(d.quantity),
+    quantity: typeof d.quantity === 'number' ? d.quantity : Number(d.quantity || 0) || 1,
+    setQuantity: setQuantity > 0 ? setQuantity : undefined,
+    potQuantity: potQuantity > 0 ? potQuantity : undefined,
     price: totalPrice,
     inventory_quantity: minInventoryQuantity === Infinity ? 0 : minInventoryQuantity,
     categories: Array.from(combinedCategories),
@@ -443,7 +514,35 @@ async function sanitizeUpdateData(data: Record<string, unknown>, existing: Listi
   return { success: true, data: sanitized };
 }
 
-// Helper function to generate final name
+// Helper: name of parent (before ' in ') for listing name
+function parentNameBeforeIn(parent: { finalName?: string; plant?: string } | null): string {
+  if (!parent) return '';
+  const name = String((parent.finalName || parent.plant || '').trim());
+  const idx = name.toLowerCase().indexOf(' in ');
+  return idx >= 0 ? name.slice(0, idx).trim() : name;
+}
+
+/** Generate final name: when setQty=1: parent1 & parent2 in size inch type; when setQty>1: Set of N parent1 & parent2 in size inch type */
+function generateFinalNameFromParents(
+  parentItems: { parentSku: string }[],
+  getParent: (sku: string) => { finalName?: string; plant?: string } | undefined,
+  size?: number,
+  type?: string,
+  setQuantity: number = 1
+): string {
+  const parentNames = parentItems
+    .map((item) => parentNameBeforeIn(getParent(item.parentSku) ?? null))
+    .filter(Boolean);
+  if (parentNames.length === 0) return '';
+  const parts = [parentNames.join(' & ')];
+  if (size) parts.push(`in ${size} inch`);
+  if (type) parts.push(type);
+  const base = parts.join(' ');
+  if (setQuantity > 1) return `Set of ${setQuantity} ${base}`;
+  return base;
+}
+
+// Helper function to generate final name (legacy: from plant/variety/colour etc.)
 function generateFinalName(data: {
   plant: string;
   otherNames?: string;
@@ -462,6 +561,7 @@ function generateFinalName(data: {
   
   return parts.filter(Boolean).join(' ');
 }
+
 
 // Helper function to get auto categories based on rules
 async function getAutoCategoriesForProduct(product: {
@@ -566,16 +666,33 @@ function evaluateCondition(condition: any, product: any): boolean {
 async function updateParentQuantitiesAfterCreation(listingProducts: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'>[]): Promise<void> {
   const parentUpdates = new Map<string, { section: ListingSection; quantityToDeduct: number }>();
   
-  // Group updates by parent SKU
+  // Group updates by parent SKU.
+  // New semantics:
+  // - For each listing product, we deduct:
+  //     inventory_quantity * parentItem.quantity
+  //   units from each parent used in the composition.
   for (const listingProduct of listingProducts) {
-    for (const parentSku of listingProduct.parentSkus) {
-      const existing = parentUpdates.get(parentSku);
+    const items: ListingParentItem[] =
+      (listingProduct.parentItems && listingProduct.parentItems.length > 0)
+        ? listingProduct.parentItems
+        : (listingProduct.parentSkus ?? []).map((sku) => ({
+            parentSku: sku,
+            quantity: listingProduct.quantity,
+            unitPrice: 0,
+          }));
+
+    for (const item of items) {
+      const key = item.parentSku;
+      const totalUnitsToDeduct = (listingProduct.inventory_quantity || 0) * (item.quantity || 0);
+      if (totalUnitsToDeduct <= 0) continue;
+
+      const existing = parentUpdates.get(key);
       if (existing) {
-        existing.quantityToDeduct += listingProduct.quantity;
+        existing.quantityToDeduct += totalUnitsToDeduct;
       } else {
-        parentUpdates.set(parentSku, {
+        parentUpdates.set(key, {
           section: listingProduct.section,
-          quantityToDeduct: listingProduct.quantity,
+          quantityToDeduct: totalUnitsToDeduct,
         });
       }
     }

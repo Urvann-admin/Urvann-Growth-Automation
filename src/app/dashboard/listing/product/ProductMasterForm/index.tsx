@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Check, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Save, Download, Upload } from 'lucide-react';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
 import type { CollectionMaster } from '@/models/collectionMaster';
@@ -39,7 +39,7 @@ function validateStep(stepId: StepId, data: ProductFormData): Record<string, str
       if (isDescriptionEmpty(data.description)) err.description = 'Description is required';
       break;
     case 'pricing':
-      if (!data.price || data.price <= 0) err.price = 'Price must be greater than 0';
+      if (data.price !== '' && typeof data.price === 'number' && data.price < 0) err.price = 'Price cannot be negative';
       break;
     case 'categories-images':
       if (data.categories.length === 0) err.categories = 'Select at least one category';
@@ -71,7 +71,7 @@ export function ProductMasterForm() {
   });
   const [formData, setFormData] = useState<ProductFormData>(() => {
     const saved = getPersistedForm<{ formData: ProductFormData; stepIndex: number }>(FORM_STORAGE_KEY);
-    return saved?.formData ?? initialFormData;
+    return saved?.formData ? { ...initialFormData, ...saved.formData } : initialFormData;
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -82,7 +82,9 @@ export function ProductMasterForm() {
   const [sellers, setSellers] = useState<ProcurementSellerMaster[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [skuPreview, setSkuPreview] = useState<string>('');
+  const [bulkImporting, setBulkImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bulkImportInputRef = useRef<HTMLInputElement>(null);
   const createButtonClickedRef = useRef(false);
 
   const currentStep = STEPS[stepIndex];
@@ -298,8 +300,9 @@ export function ProductMasterForm() {
         finalName: finalName || undefined,
         categories: formData.categories,
         collectionIds: formData.collectionIds.length > 0 ? formData.collectionIds : undefined,
-        price: Number(formData.price),
-        images: allImageUrls,
+        price: formData.price !== '' && typeof formData.price === 'number' ? formData.price : undefined,
+        inventory_quantity: formData.inventory_quantity !== '' && typeof formData.inventory_quantity === 'number' ? formData.inventory_quantity : undefined,
+        images: allImageUrls.length > 0 ? allImageUrls : undefined,
         hub: formData.hub?.trim() || undefined,
       };
 
@@ -341,6 +344,54 @@ export function ProductMasterForm() {
     () => [{ value: '', label: 'Select Hub' }, ...HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub }))],
     []
   );
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/parent-master/template');
+      if (!res.ok) throw new Error('Failed to download template');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'parent-master-template.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Template download error:', err);
+      setMessage({ type: 'error', text: 'Failed to download template.' });
+    }
+  };
+
+  const handleBulkImportClick = () => {
+    bulkImportInputRef.current?.click();
+  };
+
+  const handleBulkImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setMessage(null);
+    setBulkImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/parent-master/bulk-import', { method: 'POST', body: formData });
+      const result = await res.json();
+      if (result.success) {
+        setMessage({
+          type: 'success',
+          text: result.message || `Imported ${result.insertedCount} product(s).`,
+        });
+      } else {
+        setMessage({ type: 'error', text: result.message || 'Bulk import failed.' });
+      }
+    } catch (err) {
+      console.error('Bulk import error:', err);
+      setMessage({ type: 'error', text: 'Bulk import failed. Please try again.' });
+    } finally {
+      setBulkImporting(false);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -398,6 +449,43 @@ export function ProductMasterForm() {
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         <form onSubmit={handleSubmit} className="p-4 space-y-5">
+          {/* Bulk import & template */}
+          <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-slate-200">
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Download className="w-4 h-4" />
+              Download CSV template
+            </button>
+            <input
+              ref={bulkImportInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={handleBulkImportFile}
+            />
+            <button
+              type="button"
+              onClick={handleBulkImportClick}
+              disabled={bulkImporting}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {bulkImporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-400 border-t-transparent" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Bulk import
+                </>
+              )}
+            </button>
+          </div>
+
           {/* Step content */}
           <div className="min-h-[200px]">
             {currentStep.id === 'product-info' && (

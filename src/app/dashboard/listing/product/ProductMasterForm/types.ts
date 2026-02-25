@@ -14,6 +14,7 @@ export interface ProductFormData {
   categories: string[];
   collectionIds: string[];
   price: number | '';
+  inventory_quantity: number | '';
   images: string[];
   hub: string;
 }
@@ -40,6 +41,7 @@ export const initialFormData: ProductFormData = {
   categories: [],
   collectionIds: [],
   price: '',
+  inventory_quantity: '',
   images: [],
   hub: '',
 };

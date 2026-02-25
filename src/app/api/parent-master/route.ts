@@ -278,8 +278,8 @@ function validateParentMasterData(data: unknown): {
     return { success: false, message: 'plant is required and must be a non-empty string' };
   }
 
-  if (d.price === undefined || d.price === null || typeof d.price !== 'number' || d.price < 0) {
-    return { success: false, message: 'price is required and must be a non-negative number' };
+  if (d.price !== undefined && d.price !== null && (typeof d.price !== 'number' || d.price < 0)) {
+    return { success: false, message: 'price must be a non-negative number when provided' };
   }
 
   // Categories must be an array
@@ -287,9 +287,9 @@ function validateParentMasterData(data: unknown): {
     return { success: false, message: 'categories must be an array' };
   }
 
-  // Images must be an array
-  if (!Array.isArray(d.images)) {
-    return { success: false, message: 'images must be an array' };
+  // Images optional; must be array when provided
+  if (d.images !== undefined && d.images !== null && !Array.isArray(d.images)) {
+    return { success: false, message: 'images must be an array when provided' };
   }
 
   const hub = d.hub ? String(d.hub).trim() : undefined;
@@ -309,8 +309,9 @@ function validateParentMasterData(data: unknown): {
     description: d.description ? String(d.description).trim() : undefined,
     finalName: d.finalName ? String(d.finalName).trim() : undefined,
     categories: (d.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean),
-    price: Number(d.price),
-    images: (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean),
+    price: d.price != null && typeof d.price === 'number' ? Number(d.price) : undefined,
+    images: Array.isArray(d.images) ? (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean) : undefined,
+    inventory_quantity: typeof d.inventory_quantity === 'number' ? d.inventory_quantity : undefined,
     hub: hub || undefined,
     substores: substores.length > 0 ? substores : undefined,
     collectionIds:

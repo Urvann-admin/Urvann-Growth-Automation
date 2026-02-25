@@ -28,12 +28,14 @@ export interface ParentMaster {
   categories: string[];
   /** Array of collection _ids from collectionMaster (stored in DB); sent to StoreHippo as collection aliases */
   collectionIds?: (string | ObjectId)[];
-  /** Price of the product */
-  price: number;
+  /** Price of the product (optional in form; default 0 when omitted) */
+  price?: number;
   /** Listing price: price × procurement seller multiplicationFactor (computed on save) */
   listing_price?: number;
-  /** AWS S3 image URLs */
-  images: string[];
+  /** AWS S3 image URLs (optional in form; default [] when omitted) */
+  images?: string[];
+  /** Inventory quantity (optional; used when syncing with listing/StoreHippo) */
+  inventory_quantity?: number;
   /** StoreHippo product ID (fetched from StoreHippo API after creation) */
   storeHippoId?: string;
   /** StoreHippo product _id - same as storeHippoId, canonical field for API mapping */

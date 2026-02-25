@@ -7,10 +7,30 @@ export type ListingSection = 'listing' | 'revival' | 'growth' | 'consumer';
 /** Status types for listing products */
 export type ListingStatus = 'draft' | 'listed' | 'published';
 
+/**
+ * Snapshot of how a listing line item is composed from parent SKUs.
+ *
+ * - `parentSku` – SKU of the parent in `parentMaster`
+ * - `quantity`  – how many units of this parent are used per ONE set of the
+ *                 final listing product
+ * - `unitPrice` – price of the parent at the time of listing creation
+ */
+export interface ListingParentItem {
+  parentSku: string;
+  quantity: number;
+  unitPrice: number;
+}
+
 export interface ListingProduct {
   _id?: string | ObjectId;
-  /** Array of parent SKUs this child is made from */
-  parentSkus: string[];
+  /**
+   * Detailed breakdown of parent composition for this listing.
+   * Source of truth for parent composition; used for inventory / price calculations.
+   * Only this array is persisted; parentSkus can be derived as parentItems.map(i => i.parentSku).
+   */
+  parentItems: ListingParentItem[];
+  /** @deprecated Legacy: only present on old documents; derive from parentItems when reading. */
+  parentSkus?: string[];
   /** Plant name */
   plant: string;
   /** Other names for the plant */
@@ -23,19 +43,39 @@ export interface ListingProduct {
   height?: number;
   /** Moss Stick type */
   mossStick?: string;
-  /** Size in inches */
+  /** Size in inches (pot size) */
   size?: number;
-  /** Type of the product */
+  /** Type of the product (pot type) */
   type?: string;
   /** Final name: auto-generated from product attributes */
   finalName?: string;
   /** Product description (rich text HTML) */
   description?: string;
-  /** Quantity of this child product to create */
+  /**
+   * Quantity of this child product to create (legacy – kept for compatibility).
+   * For the new line‑item flow, use `setQuantity` instead.
+   */
   quantity: number;
-  /** Calculated price: sum of (parent.price * quantity) for all parents */
+  /**
+   * Number of units in one set for this listing (used for SKU last 2 digits).
+   * Example: a 3‑plant set will have `setQuantity = 3`.
+   */
+  setQuantity?: number;
+  /**
+   * Number of pots used per set for this listing.
+   * Combined with pot size/type to look up pot price.
+   */
+  potQuantity?: number;
+  /**
+   * Calculated price for ONE SET:
+   *   Σ(parent.unitPrice * parent.quantity) + potPrice * potQuantity
+   */
   price: number;
-  /** Calculated inventory quantity: min(parent.typeBreakdown[section] / formQuantity) across all parents */
+  /**
+   * Calculated inventory quantity:
+   *   min( floor(parentAvailableUnits / parentItem.quantity) ) across all parents.
+   * Represents how many sets can be made from parents.
+   */
   inventory_quantity: number;
   /** Combined categories from parent categories + rule-based categories */
   categories: string[];
@@ -64,6 +104,16 @@ export interface ListingProduct {
 }
 
 const COLLECTION_NAME = 'listingProduct';
+
+/** Derive parentSkus from parentItems for API responses (backward compat). */
+export function withDerivedParentSkus<T extends { parentItems?: ListingParentItem[]; parentSkus?: string[] }>(
+  item: T
+): T & { parentSkus: string[] } {
+  const parentSkus = item.parentItems?.length
+    ? item.parentItems.map((i) => i.parentSku)
+    : item.parentSkus ?? [];
+  return { ...item, parentSkus };
+}
 
 export class ListingProductModel {
   static async findAll(query: Record<string, unknown> = {}) {
@@ -97,12 +147,12 @@ export class ListingProductModel {
 
   static async findByParentSku(parentSku: string) {
     const collection = await getCollection(COLLECTION_NAME);
-    return collection.find({ parentSkus: parentSku }).toArray();
+    return collection.find({ 'parentItems.parentSku': parentSku }).toArray();
   }
 
   static async findByParentSkus(parentSkus: string[]) {
     const collection = await getCollection(COLLECTION_NAME);
-    return collection.find({ parentSkus: { $in: parentSkus } }).toArray();
+    return collection.find({ 'parentItems.parentSku': { $in: parentSkus } }).toArray();
   }
 
   static async create(data: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'>) {

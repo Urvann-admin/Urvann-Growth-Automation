@@ -1,11 +1,15 @@
 'use client';
 
 import { useMemo, useState, useEffect, useCallback } from 'react';
-import type { PurchaseMaster } from '@/models/purchaseMaster';
+import { FileText, Plus, Search, Calculator } from 'lucide-react';
+import type { PurchaseMaster, PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { Notification } from '@/components/ui/Notification';
-import { SearchBar, ConfirmDialog } from '../../shared';
+import { ConfirmDialog } from '../../shared';
 import { PurchaseTable } from './PurchaseTable';
 import { EditPurchaseModal, type EditPurchaseForm } from './EditPurchaseModal';
+import { AddInvoiceModal } from './AddInvoiceModal';
+import { ImportInvoiceModal } from './ImportInvoiceModal';
+import { AddOverheadModal } from './AddOverheadModal';
 
 export interface BillAnalytics {
   billNumber: string;
@@ -32,19 +36,19 @@ function computeBillAnalytics(purchases: PurchaseMaster[]): BillAnalytics[] {
     const grandTotalAmount = billTotalAmount + totalOverhead;
     const normalizedFactor = billTotalAmount > 0 ? grandTotalAmount / billTotalAmount : 1;
     const amountListing = rows.reduce(
-      (s, r) => s + ((r.type?.listing ?? 0) * (r.productPrice ?? 0) * normalizedFactor),
+      (s, r) => s + ((r.type?.listing ?? 0) * (r.amount ?? 0) * normalizedFactor),
       0
     );
     const amountRevival = rows.reduce(
-      (s, r) => s + ((r.type?.revival ?? 0) * (r.productPrice ?? 0) * normalizedFactor),
+      (s, r) => s + ((r.type?.revival ?? 0) * (r.amount ?? 0) * normalizedFactor),
       0
     );
     const amountGrowth = rows.reduce(
-      (s, r) => s + ((r.type?.growth ?? 0) * (r.productPrice ?? 0) * normalizedFactor),
+      (s, r) => s + ((r.type?.growth ?? 0) * (r.amount ?? 0) * normalizedFactor),
       0
     );
     const amountConsumers = rows.reduce(
-      (s, r) => s + ((r.type?.consumers ?? 0) * (r.productPrice ?? 0) * normalizedFactor),
+      (s, r) => s + ((r.type?.consumers ?? 0) * (r.amount ?? 0) * normalizedFactor),
       0
     );
     result.push({
@@ -84,6 +88,7 @@ const emptyForm: EditPurchaseForm = {
   billNumber: '',
   productCode: '',
   productName: '',
+  itemType: '',
   quantity: '',
   amount: '',
   parentSku: '',
@@ -104,6 +109,7 @@ function toEditForm(p: PurchaseMaster): EditPurchaseForm {
     billNumber: p.billNumber ?? '',
     productCode: p.productCode ?? '',
     productName: p.productName ?? '',
+    itemType: p.itemType ?? '',
     quantity: String(p.quantity ?? ''),
     amount: String(p.amount ?? ''),
     parentSku: p.parentSku ?? '',
@@ -118,7 +124,6 @@ export function ViewInvoices() {
   const [purchases, setPurchases] = useState<PurchaseMaster[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [billFilter, setBillFilter] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [editing, setEditing] = useState<PurchaseMaster | null>(null);
   const [editForm, setEditForm] = useState<EditPurchaseForm>(emptyForm);
@@ -126,6 +131,13 @@ export function ViewInvoices() {
   const [deleteConfirm, setDeleteConfirm] = useState<PurchaseMaster | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [parents, setParents] = useState<ParentOption[]>([]);
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [overheadModalOpen, setOverheadModalOpen] = useState(false);
+  const [pendingEdits, setPendingEdits] = useState<
+    Record<string, { itemType?: string; type?: PurchaseTypeBreakdown }>
+  >({});
+  const [savingPending, setSavingPending] = useState(false);
 
   const fetchPurchases = useCallback(async () => {
     setLoading(true);
@@ -133,7 +145,6 @@ export function ViewInvoices() {
       const params = new URLSearchParams();
       params.set('limit', '500');
       if (search.trim()) params.set('search', search.trim());
-      if (billFilter.trim()) params.set('billNumber', billFilter.trim());
       const res = await fetch(`/api/purchase-master?${params.toString()}`);
       const json = await res.json();
       if (json?.success && Array.isArray(json.data)) {
@@ -146,7 +157,7 @@ export function ViewInvoices() {
     } finally {
       setLoading(false);
     }
-  }, [search, billFilter]);
+  }, [search]);
 
   const fetchParents = useCallback(async () => {
     try {
@@ -192,6 +203,65 @@ export function ViewInvoices() {
     [billAnalytics]
   );
 
+  const displayPurchases = useMemo(() => {
+    return purchases.map((p) => {
+      const id = String(p._id);
+      const pe = pendingEdits[id];
+      return {
+        ...p,
+        itemType: pe?.itemType !== undefined ? pe.itemType : p.itemType,
+        type: pe?.type !== undefined ? pe.type : p.type,
+      };
+    });
+  }, [purchases, pendingEdits]);
+
+  const pendingCount = Object.keys(pendingEdits).length;
+
+  const handlePendingItemType = useCallback((p: PurchaseMaster, itemType: string) => {
+    const id = String(p._id);
+    setPendingEdits((prev) => ({ ...prev, [id]: { ...prev[id], itemType } }));
+  }, []);
+
+  const handlePendingType = useCallback(
+    (p: PurchaseMaster, type: PurchaseTypeBreakdown | Record<string, never>) => {
+      const id = String(p._id);
+      setPendingEdits((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], type: Object.keys(type).length ? (type as PurchaseTypeBreakdown) : undefined },
+      }));
+    },
+    []
+  );
+
+  const handleSavePending = useCallback(async () => {
+    if (pendingCount === 0) return;
+    setMessage(null);
+    setSavingPending(true);
+    try {
+      for (const id of Object.keys(pendingEdits)) {
+        const pe = pendingEdits[id];
+        const body: { itemType?: string; type?: PurchaseTypeBreakdown } = {};
+        if (pe.itemType !== undefined) body.itemType = pe.itemType;
+        if (pe.type !== undefined) body.type = pe.type;
+        if (Object.keys(body).length === 0) continue;
+        const res = await fetch(`/api/purchase-master/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message ?? 'Failed to update');
+      }
+      setMessage({ type: 'success', text: 'Changes saved successfully.' });
+      setPendingEdits({});
+      fetchPurchases();
+    } catch (e) {
+      setMessage({ type: 'error', text: e instanceof Error ? e.message : 'Failed to save' });
+    } finally {
+      setSavingPending(false);
+    }
+  }, [pendingEdits, pendingCount, fetchPurchases]);
+
   const openEdit = (p: PurchaseMaster) => {
     setEditing(p);
     setEditForm(toEditForm(p));
@@ -209,6 +279,7 @@ export function ViewInvoices() {
       billNumber: editForm.billNumber.trim(),
       productCode: editForm.productCode.trim(),
       productName: editForm.productName.trim() || undefined,
+      itemType: editForm.itemType.trim() || undefined,
       quantity,
       productPrice,
       amount,
@@ -269,33 +340,97 @@ export function ViewInvoices() {
     }
   };
 
+  const handleAddSuccess = useCallback(() => {
+    setAddModalOpen(false);
+    fetchPurchases();
+  }, [fetchPurchases]);
+
+  const handleImportSuccess = useCallback(() => {
+    setImportModalOpen(false);
+    fetchPurchases();
+  }, [fetchPurchases]);
+
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-slate-900">View Invoice</h2>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-900">Purchase Master</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Manage your inventory purchases and invoices efficiently.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setImportModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+          >
+            <FileText className="w-4 h-4" />
+            Import Invoice
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+          >
+            <Plus className="w-4 h-4" />
+            Add Invoice
+          </button>
+          <button
+            type="button"
+            onClick={() => setOverheadModalOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+          >
+            <Calculator className="w-4 h-4" />
+            Add Overhead
+          </button>
+          <button
+            type="button"
+            onClick={handleSavePending}
+            disabled={pendingCount === 0 || savingPending}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {savingPending ? (
+              <>
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Saving...
+              </>
+            ) : (
+              <>Save{pendingCount > 0 ? ` (${pendingCount})` : ''}</>
+            )}
+          </button>
+        </div>
+      </div>
 
       {message && (
         <Notification type={message.type} text={message.text} onDismiss={() => setMessage(null)} />
       )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center gap-4">
-          <input
-            type="text"
-            placeholder="Filter by bill number"
-            value={billFilter}
-            onChange={(e) => setBillFilter(e.target.value)}
-            className="h-10 rounded-lg border border-slate-200 px-3 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-          />
-          <span className="text-sm text-slate-600">{purchases.length} record(s)</span>
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-2">
+            <span className="text-sm font-medium text-slate-600">RECORDS</span>
+            <span className="inline-flex items-center justify-center min-w-8 h-7 rounded-full bg-slate-200 px-2.5 text-sm font-medium text-slate-700">
+              {purchases.length}
+            </span>
+          </span>
+          <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[200px] flex gap-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search bill, product code, parent SKU..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-10 pl-9 pr-4 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 shrink-0"
+            >
+              Search
+            </button>
+          </form>
         </div>
-        <SearchBar
-          value={search}
-          onChange={setSearch}
-          onSubmit={handleSearchSubmit}
-          placeholder="Search bill, product code, parent SKU..."
-          totalCount={purchases.length}
-          entityName="Records"
-        />
 
         {!loading && combinedAnalytics && (
           <div className="mb-6">
@@ -307,27 +442,27 @@ export function ViewInvoices() {
                 {combinedAnalytics.billNumber}
               </span>
               <span className="shrink-0 border-l border-emerald-300 pl-4 text-emerald-800">
-                <span className="text-emerald-700">Bill total</span>{' '}
+                <span className="text-emerald-700">BILL TOTAL</span>{' '}
                 <span className="font-semibold">{formatAmount(combinedAnalytics.billTotalAmount)}</span>
               </span>
               <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">Grand total</span>{' '}
+                <span className="text-emerald-700">GRAND TOTAL</span>{' '}
                 <span className="font-semibold">{formatAmount(combinedAnalytics.grandTotalAmount)}</span>
               </span>
               <span className="shrink-0 border-l border-emerald-300 pl-4 text-emerald-800">
-                <span className="text-emerald-700">Listing</span>{' '}
+                <span className="text-emerald-700">LISTING</span>{' '}
                 <span className="font-semibold">{formatAmount(combinedAnalytics.amountListing)}</span>
               </span>
               <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">Revival</span>{' '}
+                <span className="text-emerald-700">REVIVAL</span>{' '}
                 <span className="font-semibold">{formatAmount(combinedAnalytics.amountRevival)}</span>
               </span>
               <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">Growth</span>{' '}
+                <span className="text-emerald-700">GROWTH</span>{' '}
                 <span className="font-semibold">{formatAmount(combinedAnalytics.amountGrowth)}</span>
               </span>
               <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">Consumers</span>{' '}
+                <span className="text-emerald-700">CONSUMERS</span>{' '}
                 <span className="font-semibold">{formatAmount(combinedAnalytics.amountConsumers)}</span>
               </span>
             </div>
@@ -338,9 +473,11 @@ export function ViewInvoices() {
           <div className="py-12 text-center text-slate-500">Loading...</div>
         ) : (
           <PurchaseTable
-            purchases={purchases}
+            purchases={displayPurchases}
             onEdit={openEdit}
             onDelete={setDeleteConfirm}
+            onPendingItemType={handlePendingItemType}
+            onPendingType={handlePendingType}
           />
         )}
       </div>
@@ -353,6 +490,25 @@ export function ViewInvoices() {
         onClose={() => setEditing(null)}
         onSave={handleSaveEdit}
         onChange={setEditForm}
+      />
+
+      <AddInvoiceModal
+        isOpen={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onSuccess={handleAddSuccess}
+      />
+
+      <ImportInvoiceModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
+
+      <AddOverheadModal
+        isOpen={overheadModalOpen}
+        purchases={purchases}
+        onClose={() => setOverheadModalOpen(false)}
+        onSuccess={handleImportSuccess}
       />
 
       <ConfirmDialog

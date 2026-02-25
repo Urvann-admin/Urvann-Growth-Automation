@@ -5,6 +5,7 @@ export interface DraftPurchaseRow {
   billNumber: string;
   productCode: string;
   productName: string;
+  itemType?: string;
   quantity: number;
   productPrice: number;
   amount: number;

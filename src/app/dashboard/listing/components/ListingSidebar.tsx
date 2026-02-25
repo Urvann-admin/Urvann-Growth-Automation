@@ -287,7 +287,7 @@ function ProductNavSection({
       <button
         type="button"
         onClick={() => !collapsed && onSectionToggle()}
-        title={collapsed ? 'Product Master' : undefined}
+        title={collapsed ? 'Parent Master' : undefined}
         className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
           collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
         } ${
@@ -299,7 +299,7 @@ function ProductNavSection({
         <Package className="w-5 h-5 shrink-0" strokeWidth={2} />
         {!collapsed && (
           <>
-            <span className="truncate flex-1">Product Master</span>
+            <span className="truncate flex-1">Parent Master</span>
             <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
           </>
         )}
@@ -623,11 +623,7 @@ function InvoiceNavSection({
                   : {}
               }
             >
-              {id === 'invoice-add' ? (
-                <Plus className="w-4 h-4 shrink-0" />
-              ) : (
-                <ListIcon className="w-4 h-4 shrink-0" />
-              )}
+              <ListIcon className="w-4 h-4 shrink-0" />
               <span className="truncate">{label}</span>
             </button>
           ))}

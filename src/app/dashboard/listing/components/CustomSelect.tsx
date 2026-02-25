@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search } from 'lucide-react';
 
 export interface SelectOption {
@@ -17,6 +18,8 @@ interface CustomSelectProps {
   error?: string;
   disabled?: boolean;
   searchable?: boolean;
+  /** When true, hides the chevron dropdown indicator when a value is already selected */
+  hideIndicatorWhenSelected?: boolean;
 }
 
 export function CustomSelect({
@@ -28,15 +31,22 @@ export function CustomSelect({
   error,
   disabled = false,
   searchable = true,
+  hideIndicatorWhenSelected = false,
 }: CustomSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const insideTrigger = ref.current?.contains(target);
+      const insideDropdown = dropdownRef.current?.contains(target);
+      if (!insideTrigger && !insideDropdown) {
         setOpen(false);
       }
     };
@@ -45,15 +55,29 @@ export function CustomSelect({
   }, []);
 
   useEffect(() => {
-    if (open && searchable) {
-      queueMicrotask(() => {
-        setSearch('');
-        searchInputRef.current?.focus();
-      });
+    if (open) {
+      // Calculate dropdown position
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        setDropdownPosition({
+          top: rect.bottom + window.scrollY,
+          left: rect.left + window.scrollX,
+          width: rect.width,
+        });
+      }
+      
+      if (searchable) {
+        queueMicrotask(() => {
+          setSearch('');
+          searchInputRef.current?.focus();
+        });
+      }
     }
   }, [open, searchable]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
+  const isReadOnlyWhenSelected = Boolean(hideIndicatorWhenSelected && value && selectedLabel);
+
   const filteredOptions = searchable && search.trim()
     ? options.filter((opt) =>
         opt.label.toLowerCase().includes(search.toLowerCase().trim())
@@ -66,29 +90,41 @@ export function CustomSelect({
         <label className="block text-sm font-medium text-slate-700 mb-2">{label}</label>
       )}
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => !disabled && setOpen((o) => !o)}
+        tabIndex={isReadOnlyWhenSelected ? -1 : 0}
+        onClick={() => !disabled && !isReadOnlyWhenSelected && setOpen((o) => !o)}
         disabled={disabled}
         className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-white text-left transition-colors ${
           error
             ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
             : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
         } ${open ? 'ring-2 ring-blue-500 border-blue-500' : ''} ${
-          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+          disabled ? 'opacity-50 cursor-not-allowed' : isReadOnlyWhenSelected ? 'cursor-default focus:outline-none focus:ring-0' : 'cursor-pointer'
         }`}
       >
         <span className={value && selectedLabel ? 'text-slate-900' : 'text-slate-500'}>
           {value && selectedLabel ? selectedLabel : placeholder}
         </span>
-        <ChevronDown
-          className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ml-2 ${
-            open ? 'rotate-180' : ''
-          }`}
-        />
+        {!isReadOnlyWhenSelected && (
+          <ChevronDown
+            className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ml-2 ${
+              open ? 'rotate-180' : ''
+            }`}
+          />
+        )}
       </button>
 
-      {open && (
-        <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
+          style={{
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`,
+          }}
+        >
           {searchable && (
             <div className="p-2 border-b border-slate-200">
               <div className="relative">
@@ -132,7 +168,8 @@ export function CustomSelect({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}

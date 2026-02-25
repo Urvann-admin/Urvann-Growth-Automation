@@ -38,6 +38,8 @@ export interface PurchaseMaster {
   productCode: string;
   /** Product name */
   productName?: string;
+  /** Item type */
+  itemType?: string;
   /** Quantity */
   quantity: number;
   /** Product price */

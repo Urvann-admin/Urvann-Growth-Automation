@@ -3,8 +3,8 @@ import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
-// Excel upload: these columns. Overhead and type are entered in popups.
-const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'amount', 'quantity'] as const;
+// Excel format: Bill no., Product Code, Product Name, Quantity, Price, Amount
+const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'quantity', 'productPrice', 'amount'] as const;
 const COLUMN_MAP: Record<string, (typeof EXCEL_COLUMNS)[number]> = {
   'bill number': 'billNumber',
   'bill no': 'billNumber',
@@ -12,6 +12,7 @@ const COLUMN_MAP: Record<string, (typeof EXCEL_COLUMNS)[number]> = {
   'product code': 'productCode',
   'product name': 'productName',
   'quantity': 'quantity',
+  'price': 'productPrice',
   'amount': 'amount',
 };
 
@@ -25,9 +26,18 @@ function rowToRecord(row: Record<string, unknown>): Record<string, unknown> {
   for (const [header, value] of Object.entries(row)) {
     const field = normalizeHeader(header);
     if (field == null || value === undefined || value === null || value === '') continue;
-    if (field === 'quantity' || field === 'amount') {
+    if (field === 'quantity' || field === 'amount' || field === 'productPrice') {
       const n = Number(value);
-      out[field] = Number.isFinite(n) ? Math.floor(n) : (field === 'quantity' ? 0 : 0);
+      out[field] =
+        field === 'quantity' || field === 'amount'
+          ? Number.isFinite(n)
+            ? Math.floor(n)
+            : field === 'quantity'
+              ? 0
+              : 0
+          : Number.isFinite(n)
+            ? Math.round(n)
+            : undefined;
     } else {
       out[field] = String(value).trim();
     }
@@ -73,10 +83,13 @@ export async function POST(request: NextRequest) {
     parsed.forEach((row) => {
       const q = Number(row.quantity);
       const amt = Number(row.amount);
+      const priceFromCol = row.productPrice != null ? Number(row.productPrice) : NaN;
       row.productPrice =
-        Number.isFinite(q) && q > 0 && Number.isFinite(amt)
-          ? Math.round(amt / q)
-          : 0;
+        Number.isFinite(priceFromCol) && priceFromCol >= 0
+          ? Math.round(priceFromCol)
+          : Number.isFinite(q) && q > 0 && Number.isFinite(amt)
+            ? Math.round(amt / q)
+            : 0;
     });
 
     return NextResponse.json({ success: true, rows: parsed });

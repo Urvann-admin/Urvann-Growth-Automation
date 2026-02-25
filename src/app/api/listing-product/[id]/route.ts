@@ -1,6 +1,5 @@
-import { ObjectId } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
-import { ListingProductModel } from '@/models/listingProduct';
+import { ListingProductModel, withDerivedParentSkus } from '@/models/listingProduct';
 
 export async function GET(
   request: NextRequest,
@@ -27,7 +26,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: listingProduct,
+      data: withDerivedParentSkus(listingProduct),
     });
   } catch (error) {
     console.error('Error fetching listing product:', error);

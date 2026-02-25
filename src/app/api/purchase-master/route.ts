@@ -92,13 +92,19 @@ export async function POST(request: NextRequest) {
         validated.push(v.data!);
       }
       const result = await PurchaseMasterModel.createMany(validated);
-      // Update parent master typeBreakdown: add this bill's type amounts to existing (same SKU may be in previous bills)
+      // Update parent master typeBreakdown and inventory_quantity (when type is Listing)
       const skuToType = new Map<string, PurchaseTypeBreakdown>();
+      const skuToListingQuantity = new Map<string, number>();
       for (const row of validated) {
         const sku = String(row.parentSku || '').trim();
         if (sku && (row.type?.listing != null || row.type?.revival != null || row.type?.growth != null || row.type?.consumers != null)) {
           const current = skuToType.get(sku);
           skuToType.set(sku, addTypeBreakdown(current, row.type));
+          // Sum quantity for rows with Listing type to add to parent inventory_quantity
+          if (row.type?.listing != null && row.type.listing > 0) {
+            const q = Number(row.quantity) || 0;
+            skuToListingQuantity.set(sku, (skuToListingQuantity.get(sku) ?? 0) + q);
+          }
         }
       }
       for (const [sku, incomingType] of skuToType) {
@@ -106,7 +112,15 @@ export async function POST(request: NextRequest) {
           const parent = await ParentMasterModel.findBySku(sku);
           if (parent?._id) {
             const newTypeBreakdown = addTypeBreakdown(parent.typeBreakdown, incomingType);
-            await ParentMasterModel.update(parent._id, { typeBreakdown: newTypeBreakdown });
+            const listingQtyDelta = skuToListingQuantity.get(sku) ?? 0;
+            const newInventory =
+              listingQtyDelta > 0
+                ? (parent.inventory_quantity ?? 0) + listingQtyDelta
+                : undefined;
+            await ParentMasterModel.update(parent._id, {
+              typeBreakdown: newTypeBreakdown,
+              ...(newInventory !== undefined && { inventory_quantity: newInventory }),
+            });
           }
         } catch (err) {
           console.warn('[purchase-master] Failed to update parent typeBreakdown for sku:', sku, err);
@@ -134,7 +148,13 @@ export async function POST(request: NextRequest) {
         const parent = await ParentMasterModel.findBySku(sku);
         if (parent?._id) {
           const newTypeBreakdown = addTypeBreakdown(parent.typeBreakdown, data.type);
-          await ParentMasterModel.update(parent._id, { typeBreakdown: newTypeBreakdown });
+          const listingQty = data.type?.listing != null && data.type.listing > 0 ? (Number(data.quantity) || 0) : 0;
+          const newInventory =
+            listingQty > 0 ? (parent.inventory_quantity ?? 0) + listingQty : undefined;
+          await ParentMasterModel.update(parent._id, {
+            typeBreakdown: newTypeBreakdown,
+            ...(newInventory !== undefined && { inventory_quantity: newInventory }),
+          });
         }
       } catch (err) {
         console.warn('[purchase-master] Failed to update parent typeBreakdown for sku:', sku, err);
@@ -174,6 +194,10 @@ function validatePurchaseItem(data: unknown): {
     d.productName != null && typeof d.productName === 'string'
       ? String(d.productName).trim()
       : undefined;
+  const itemType =
+    d.itemType != null && typeof d.itemType === 'string'
+      ? String(d.itemType).trim()
+      : undefined;
   const quantity = Number(d.quantity);
   if (d.quantity == null || !Number.isInteger(quantity) || quantity < 0) {
     return { success: false, message: 'quantity must be a non-negative integer' };
@@ -199,6 +223,7 @@ function validatePurchaseItem(data: unknown): {
       billNumber: String(d.billNumber).trim(),
       productCode: String(d.productCode).trim(),
       ...(productName !== undefined && productName !== '' && { productName }),
+      ...(itemType !== undefined && itemType !== '' && { itemType }),
       quantity: q,
       productPrice,
       amount: amt,

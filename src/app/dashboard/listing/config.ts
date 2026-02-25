@@ -37,7 +37,6 @@ export const SELLER_SUB_TABS: { id: ListingTab; label: string }[] = [
 ];
 
 export const INVOICE_SUB_TABS: { id: ListingTab; label: string }[] = [
-  { id: 'invoice-add', label: 'Add Invoice' },
   { id: 'invoice-view', label: 'View Invoice' },
 ];
 
@@ -55,7 +54,6 @@ export const TAB_CONFIG: ListingTabConfig[] = [
   { id: 'product-view-parent', label: 'View Parent', subtitle: 'View parent products', icon: ListIcon },
   { id: 'seller-add', label: 'Add Seller', subtitle: 'Create a new seller', icon: Plus },
   { id: 'seller-view', label: 'View Seller', subtitle: 'View and edit sellers', icon: ListIcon },
-  { id: 'invoice-add', label: 'Add Invoice', subtitle: 'Record invoice from Excel or form', icon: Plus },
   { id: 'invoice-view', label: 'View Invoice', subtitle: 'View and edit purchase records', icon: ListIcon },
   { id: 'listing', label: 'Listing', subtitle: 'Listing rules and status', icon: List },
   { id: 'image-upload', label: 'Add Image', subtitle: 'Bulk upload images', icon: Upload },

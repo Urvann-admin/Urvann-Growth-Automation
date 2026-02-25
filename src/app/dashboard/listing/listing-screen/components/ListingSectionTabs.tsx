@@ -3,7 +3,7 @@
 import {
   LISTING_SECTION_TABS,
   type ListingSectionTab,
-} from '../config';
+} from '../../config';
 
 const TAB_GREEN = '#166534'; // emerald-800
 const TAB_GREEN_BORDER = '#14532d'; // emerald-900

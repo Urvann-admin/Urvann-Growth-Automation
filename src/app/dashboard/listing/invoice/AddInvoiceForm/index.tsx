@@ -26,17 +26,29 @@ function toDraftRow(parsed: Record<string, unknown>): DraftPurchaseRow {
   const amt = Number(parsed.amount);
   const quantity = Number.isFinite(q) ? Math.floor(q) : 0;
   const amount = Number.isFinite(amt) ? Math.floor(amt) : 0;
-  const productPrice = quantity > 0 ? Math.round(amount / quantity) : 0;
+  const priceFromSheet = parsed.productPrice != null ? Number(parsed.productPrice) : NaN;
+  const productPrice =
+    Number.isFinite(priceFromSheet) && priceFromSheet >= 0
+      ? Math.round(priceFromSheet)
+      : quantity > 0
+        ? Math.round(amount / quantity)
+        : 0;
   return {
     billNumber: String(parsed.billNumber ?? '').trim(),
     productCode: String(parsed.productCode ?? '').trim(),
     productName: String(parsed.productName ?? '').trim(),
+    itemType: String(parsed.itemType ?? '').trim() || undefined,
     quantity,
     productPrice,
     amount,
     parentSku: String(parsed.parentSku ?? '').trim(),
     type: {
-      listing: parsed.listing != null && parsed.listing !== '' ? Number(parsed.listing) : undefined,
+      listing:
+        parsed.listing != null && parsed.listing !== ''
+          ? Number(parsed.listing)
+          : parsed.revival == null && parsed.growth == null && parsed.consumers == null
+            ? quantity
+            : undefined,
       revival: parsed.revival != null && parsed.revival !== '' ? Number(parsed.revival) : undefined,
       growth: parsed.growth != null && parsed.growth !== '' ? Number(parsed.growth) : undefined,
       consumers: parsed.consumers != null && parsed.consumers !== '' ? Number(parsed.consumers) : undefined,
@@ -50,7 +62,14 @@ interface PersistedInvoiceState {
   manualAmounts: number[];
 }
 
-export function AddInvoiceForm() {
+export interface AddInvoiceFormProps {
+  onSuccess?: () => void;
+  onClose?: () => void;
+  /** When true, hide the page title (e.g. when embedded in a modal) */
+  embedded?: boolean;
+}
+
+export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormProps = {}) {
   const [rows, setRows] = useState<DraftPurchaseRow[]>(() => {
     clearFormStorageOnReload(FORM_STORAGE_KEY);
     const saved = getPersistedForm<PersistedInvoiceState>(FORM_STORAGE_KEY);
@@ -132,7 +151,17 @@ export function AddInvoiceForm() {
   const updateRow = (index: number, patch: Partial<DraftPurchaseRow>) => {
     setRows((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], ...patch };
+      const current = next[index];
+      const merged = { ...current, ...patch };
+      if (patch.quantity !== undefined) {
+        const t = merged.type ?? {};
+        const hasAnyType =
+          (t.listing ?? 0) > 0 || (t.revival ?? 0) > 0 || (t.growth ?? 0) > 0 || (t.consumers ?? 0) > 0;
+        if (!hasAnyType) {
+          merged.type = { ...t, listing: merged.quantity };
+        }
+      }
+      next[index] = merged;
       return next;
     });
   };
@@ -239,11 +268,12 @@ export function AddInvoiceForm() {
     try {
       const XLSX = await import('xlsx');
       const headers = [
-        'Bill Number',
+        'Bill no.',
         'Product Code',
         'Product Name',
-        'Amount',
         'Quantity',
+        'Price',
+        'Amount',
       ];
       const ws = XLSX.utils.aoa_to_sheet([headers]);
       const wb = XLSX.utils.book_new();
@@ -273,6 +303,18 @@ export function AddInvoiceForm() {
       return;
     }
 
+    const typeMismatchIndex = rows.findIndex((r) => {
+      const listing = Number(r.type?.listing ?? 0) || 0;
+      const revival = Number(r.type?.revival ?? 0) || 0;
+      const growth = Number(r.type?.growth ?? 0) || 0;
+      const consumers = Number(r.type?.consumers ?? 0) || 0;
+      return listing + revival + growth + consumers !== r.quantity;
+    });
+    if (typeMismatchIndex !== -1) {
+      setMessage({ type: 'error', text: `Row ${typeMismatchIndex + 1}: Type split must equal Quantity.` });
+      return;
+    }
+
     setMessage(null);
     setSaving(true);
     try {
@@ -284,12 +326,13 @@ export function AddInvoiceForm() {
           billNumber: r.billNumber,
           productCode: r.productCode,
           productName: r.productName?.trim() || undefined,
+          itemType: r.itemType?.trim() || undefined,
           quantity,
           productPrice,
           amount,
-        parentSku: r.parentSku,
-        type: r.type,
-        overhead: r.overhead
+          parentSku: r.parentSku,
+          type: r.type,
+          overhead: r.overhead
           ? {
               overheadAmount: r.overhead.overheadAmount,
               overheadNature: r.overhead.overheadNature,
@@ -320,6 +363,8 @@ export function AddInvoiceForm() {
           : 'Invoice recorded successfully.',
       });
       setRows([]);
+      onSuccess?.();
+      onClose?.();
     } catch {
       setMessage({ type: 'error', text: 'Network error. Please try again.' });
     } finally {
@@ -332,7 +377,9 @@ export function AddInvoiceForm() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-slate-900">Add Invoice</h2>
+      {!embedded && (
+        <h2 className="text-xl font-semibold text-slate-900">Add Invoice</h2>
+      )}
 
       {message && (
         <Notification type={message.type} text={message.text} onDismiss={() => setMessage(null)} />
@@ -381,6 +428,7 @@ export function AddInvoiceForm() {
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Bill no.</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Product code</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Product name</th>
+                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Item Type</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Qty</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Amount</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Price (amt ÷ qty)</th>
@@ -419,6 +467,17 @@ export function AddInvoiceForm() {
                           className={inputClass}
                           placeholder="Product name"
                         />
+                      </td>
+                      <td className="py-1 px-2 min-w-[100px]">
+                        <select
+                          value={row.itemType ?? ''}
+                          onChange={(e) => updateRow(i, { itemType: e.target.value || undefined })}
+                          className={inputClass}
+                        >
+                          <option value="">Select</option>
+                          <option value="Product">Product</option>
+                          <option value="Consumable">Consumable</option>
+                        </select>
                       </td>
                       <td className="py-1 px-2">
                         <input
@@ -556,7 +615,7 @@ export function AddInvoiceForm() {
         {rows.length === 0 && !parsing && (
           <p className="text-sm text-slate-500 py-4 mt-4">
             Upload an Excel file (.xlsx or .xls) with columns:{' '}
-            <strong>Bill Number, Product Code, Product Name, Amount, Quantity</strong>. Then add overhead (optional) and type details in the table, and save.
+            <strong>Bill no., Product Code, Product Name, Quantity, Price, Amount</strong>. Then choose item type, parent, and type in the table, add overhead (optional), and save.
           </p>
         )}
       </div>

@@ -17,6 +17,8 @@ export default function ListingPage() {
     setActiveTab,
     listingSectionTab,
     setListingSectionTab,
+    listingViewMode,
+    setListingViewMode,
     categorySectionOpen,
     setCategorySectionOpen,
     productSectionOpen,
@@ -88,11 +90,17 @@ export default function ListingPage() {
           onSidebarCollapsedToggle={onSidebarCollapsedToggle}
         />
         <div className="flex-1 flex flex-col min-w-0">
-          <ListingTopBar activeTab={activeTab} />
+          <ListingTopBar
+            activeTab={activeTab}
+            listingSectionTab={listingSectionTab}
+            listingViewMode={listingViewMode}
+            onListingViewModeChange={setListingViewMode}
+          />
           <ListingContent
             activeTab={activeTab}
             listingSectionTab={listingSectionTab}
             onListingSectionTabChange={setListingSectionTab}
+            listingViewMode={listingViewMode}
           />
         </div>
       </div>
