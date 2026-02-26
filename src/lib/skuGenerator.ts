@@ -56,19 +56,6 @@ function getQtyCode(quantity: number): string {
   return quantity.toString().padStart(2, '0');
 }
 
-function calculateChecksum(sku: string): string {
-  let sum = 0;
-  for (let i = 0; i < sku.length; i++) {
-    const char = sku[i];
-    if (char >= '0' && char <= '9') {
-      sum += parseInt(char, 10) * (i + 1);
-    } else {
-      sum += char.charCodeAt(0) * (i + 1);
-    }
-  }
-  return (sum % 10).toString();
-}
-
 export async function generateSKU(
   hub: string,
   productName: string,
@@ -76,15 +63,10 @@ export async function generateSKU(
 ): Promise<string> {
   const hubCode = getHubCode(hub);
   const productCode = getProductCode(productName);
-  
   const counter = await SkuCounterModel.getNextCounter(hub);
   const sequence = getPaddedSequence(counter);
   const qtyCode = getQtyCode(quantity);
-  
-  const baseSku = `${hubCode}${productCode}${sequence}${qtyCode}`;
-  const checksum = calculateChecksum(baseSku);
-  
-  return `${baseSku}${checksum}`;
+  return `${hubCode}${productCode}${sequence}${qtyCode}`;
 }
 
 /** Parent products are always single unit; qty code in SKU is always "01" (not set/case). */
@@ -115,6 +97,24 @@ export async function previewParentSKU(
   const nextCounter = currentCounter + 1;
   const sequence = getPaddedSequence(nextCounter);
   return `${hubCode}${productCode}${sequence}${PARENT_QTY_CODE}`;
+}
+
+/**
+ * Returns what the next listing SKU would be, without incrementing the counter.
+ * For UI preview only (hub, plant, setQuantity).
+ */
+export async function previewListingSKU(
+  hub: string,
+  productName: string,
+  quantity: number = 1
+): Promise<string> {
+  const hubCode = getHubCode(hub);
+  const productCode = getProductCode(productName);
+  const currentCounter = await getCurrentCounterForHub(hub);
+  const nextCounter = currentCounter + 1;
+  const sequence = getPaddedSequence(nextCounter);
+  const qtyCode = getQtyCode(quantity);
+  return `${hubCode}${productCode}${sequence}${qtyCode}`;
 }
 
 export function validateHub(hub: string): boolean {

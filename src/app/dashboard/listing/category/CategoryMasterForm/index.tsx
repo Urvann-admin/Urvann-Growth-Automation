@@ -6,12 +6,20 @@ import type { Rule, Category } from '@/models/category';
 import { HUB_MAPPINGS, getSubstoresByHub, getSelectedHubsFromSubstores } from '@/shared/constants/hubs';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import {
+  clearFormStorageOnReload,
+  getPersistedForm,
+  setPersistedForm,
+  removePersistedForm,
+} from '../../hooks/useFormPersistence';
+import {
   STEPS,
   initialFormData,
   type StepId,
   type CategoryFormData,
 } from './types';
 import { Notification } from '@/components/ui/Notification';
+
+const FORM_STORAGE_KEY = 'listing_form_category';
 import {
   StepBasics,
   StepHierarchy,
@@ -71,8 +79,15 @@ function validateStep(stepId: StepId, data: CategoryFormData): Record<string, st
 
 export function CategoryMasterForm() {
   const router = useRouter();
-  const [stepIndex, setStepIndex] = useState(0);
-  const [data, setData] = useState<CategoryFormData>(initialFormData);
+  const [stepIndex, setStepIndex] = useState(() => {
+    clearFormStorageOnReload(FORM_STORAGE_KEY);
+    const saved = getPersistedForm<{ data: CategoryFormData; stepIndex: number }>(FORM_STORAGE_KEY);
+    return saved?.stepIndex ?? 0;
+  });
+  const [data, setData] = useState<CategoryFormData>(() => {
+    const saved = getPersistedForm<{ data: CategoryFormData; stepIndex: number }>(FORM_STORAGE_KEY);
+    return saved?.data ?? initialFormData;
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -93,6 +108,10 @@ export function CategoryMasterForm() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setPersistedForm(FORM_STORAGE_KEY, { data, stepIndex });
+  }, [data, stepIndex]);
 
   useEffect(() => {
     fetchCategories();
@@ -243,6 +262,7 @@ export function CategoryMasterForm() {
         return;
       }
 
+      removePersistedForm(FORM_STORAGE_KEY);
       setMessage({ type: 'success', text: 'Category created successfully.' });
       setData(initialFormData);
       setErrors({});

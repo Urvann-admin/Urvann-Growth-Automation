@@ -9,7 +9,6 @@ export interface StepDetailsProps {
   type: string;
   seller: string;
   description: string;
-  sort_order: number | '';
   sellerOptions: { value: string; label: string }[];
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
@@ -21,7 +20,6 @@ export function StepDetails({
   type,
   seller,
   description,
-  sort_order,
   sellerOptions,
   errors,
   onFieldChange,
@@ -48,24 +46,12 @@ export function StepDetails({
           placeholder="Select Type"
         />
         <CustomSelect
-          label="Seller Name"
+          label="Procurement Seller"
           value={seller}
           onChange={(v) => onFieldChange('seller', v)}
           options={sellerOptions}
-          placeholder="Select Seller"
+          placeholder="Select Procurement Seller"
         />
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Sort Order</label>
-          <input
-            type="number"
-            min={0}
-            value={sort_order}
-            onChange={(e) => onFieldChange('sort_order', e.target.value ? parseInt(e.target.value, 10) : '')}
-            className={`${inputBase} ${inputNormal}`}
-            placeholder="Optional"
-          />
-          <p className="text-xs text-slate-500 mt-1">Display order (optional, can leave empty)</p>
-        </div>
       </div>
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-2">Description *</label>

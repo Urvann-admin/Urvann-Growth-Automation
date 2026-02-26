@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { getCollection } from '@/lib/mongodb';
+import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 
 export interface ParentMaster {
   _id?: string | ObjectId;
@@ -25,29 +26,21 @@ export interface ParentMaster {
   description?: string;
   /** Array of category aliases (e.g. indoor-plants, outdoor-plants) */
   categories: string[];
-  /** Price of the product */
-  price: number;
-  /** Compare price (strikethrough/original price) */
-  compare_price?: number;
-  /** Sort order for display */
-  sort_order?: number;
-  /** Publish status */
-  publish: string;
-  /** Inventory quantity */
-  inventoryQuantity: number;
-  /** Inventory management: 'automatic' | 'none' */
-  inventory_management?: string;
-  /** Inventory management level: 'product' or empty */
-  inventory_management_level?: string;
-  /** Quantity allowed when out of stock (amount user can purchase) */
-  inventory_allow_out_of_stock?: number;
-  /** AWS S3 image URLs */
-  images: string[];
+  /** Array of collection _ids from collectionMaster (stored in DB); sent to StoreHippo as collection aliases */
+  collectionIds?: (string | ObjectId)[];
+  /** Price of the product (optional in form; default 0 when omitted) */
+  price?: number;
+  /** Listing price: price × procurement seller multiplicationFactor (computed on save) */
+  listing_price?: number;
+  /** AWS S3 image URLs (optional in form; default [] when omitted) */
+  images?: string[];
+  /** Inventory quantity (optional; used when syncing with listing/StoreHippo) */
+  inventory_quantity?: number;
   /** StoreHippo product ID (fetched from StoreHippo API after creation) */
   storeHippoId?: string;
   /** StoreHippo product _id - same as storeHippoId, canonical field for API mapping */
   product_id?: string;
-  /** Seller ID from sellerMaster */
+  /** Procurement seller _id from procurement_seller_master */
   seller?: string;
   /** Hub name (e.g. Whitefield, HSR) for inventory/listing scope */
   hub?: string;
@@ -55,6 +48,8 @@ export interface ParentMaster {
   substores?: string[];
   /** SKU generated for this product (format: [HUB][PRODUCT][SEQUENCE][QTY][CHECKSUM]) */
   sku?: string;
+  /** Type breakdown from purchase (Listing, Revival, Growth, Consumers) – updated when saving purchase master. Stored as object "type" in DB. */
+  typeBreakdown?: PurchaseTypeBreakdown;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -79,6 +74,11 @@ export class ParentMasterModel {
   static async findByPlant(plant: string) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.findOne({ plant });
+  }
+
+  static async findBySku(sku: string) {
+    const collection = await getCollection(COLLECTION_NAME);
+    return collection.findOne({ sku: String(sku).trim() });
   }
 
   static async create(data: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>) {
@@ -137,11 +137,6 @@ export class ParentMasterModel {
   static async findByCategory(category: string) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.find({ categories: category }).toArray();
-  }
-
-  static async findPublished() {
-    const collection = await getCollection(COLLECTION_NAME);
-    return collection.find({ publish: 'published' }).toArray();
   }
 
   static async search(searchTerm: string) {

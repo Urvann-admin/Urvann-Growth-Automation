@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, X, Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import type { ParentMaster } from '@/models/parentMaster';
 
 interface ParentTableProps {
@@ -19,8 +19,7 @@ export function ParentTable({ items, onEdit, onDelete }: ParentTableProps) {
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Plant</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Final name</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Price</th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">Inventory</th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">Publish</th>
+            <th className="text-left py-3 px-3 font-semibold text-slate-700">Listing price</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Categories</th>
             <th className="text-right py-3 px-3 font-semibold text-slate-700">Actions</th>
           </tr>
@@ -34,14 +33,7 @@ export function ParentTable({ items, onEdit, onDelete }: ParentTableProps) {
                 {row.finalName ?? '—'}
               </td>
               <td className="py-3 px-3 text-slate-600">{row.price ?? '—'}</td>
-              <td className="py-3 px-3 text-slate-600">{row.inventoryQuantity ?? '—'}</td>
-              <td className="py-3 px-3">
-                {row.publish === 'published' ? (
-                  <Check className="w-5 h-5 text-emerald-600" strokeWidth={2.5} aria-label="Published" />
-                ) : (
-                  <X className="w-5 h-5 text-slate-400" strokeWidth={2.5} aria-label="Draft" />
-                )}
-              </td>
+              <td className="py-3 px-3 text-slate-600">{row.listing_price ?? '—'}</td>
               <td className="py-3 px-3 text-slate-600">
                 {Array.isArray(row.categories) ? row.categories.length : 0}
               </td>

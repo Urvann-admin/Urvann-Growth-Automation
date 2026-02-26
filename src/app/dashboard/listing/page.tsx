@@ -15,12 +15,22 @@ export default function ListingPage() {
     loading,
     activeTab,
     setActiveTab,
+    listingSectionTab,
+    setListingSectionTab,
+    listingViewMode,
+    setListingViewMode,
     categorySectionOpen,
     setCategorySectionOpen,
     productSectionOpen,
     setProductSectionOpen,
+    listingSectionOpen,
+    setListingSectionOpen,
     imageSectionOpen,
     setImageSectionOpen,
+    sellerSectionOpen,
+    setSellerSectionOpen,
+    invoiceSectionOpen,
+    setInvoiceSectionOpen,
     sidebarCollapsed,
     setSidebarCollapsed,
   } = useListingState();
@@ -29,7 +39,10 @@ export default function ListingPage() {
 
   const onCategorySectionToggle = useCallback(() => setCategorySectionOpen((o) => !o), []);
   const onProductSectionToggle = useCallback(() => setProductSectionOpen((o) => !o), []);
+  const onListingSectionToggle = useCallback(() => setListingSectionOpen((o) => !o), []);
   const onImageSectionToggle = useCallback(() => setImageSectionOpen((o) => !o), []);
+  const onSellerSectionToggle = useCallback(() => setSellerSectionOpen((o) => !o), []);
+  const onInvoiceSectionToggle = useCallback(() => setInvoiceSectionOpen((o) => !o), []);
   const onSidebarCollapsedToggle = useCallback(() => setSidebarCollapsed((c) => !c), []);
 
   // Show loading while auth is resolving
@@ -59,18 +72,36 @@ export default function ListingPage() {
         <ListingSidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          listingSectionTab={listingSectionTab}
+          onListingSectionChange={setListingSectionTab}
+          listingSectionOpen={listingSectionOpen}
+          onListingSectionToggle={onListingSectionToggle}
           categorySectionOpen={categorySectionOpen}
           onCategorySectionToggle={onCategorySectionToggle}
           productSectionOpen={productSectionOpen}
           onProductSectionToggle={onProductSectionToggle}
           imageSectionOpen={imageSectionOpen}
           onImageSectionToggle={onImageSectionToggle}
+          sellerSectionOpen={sellerSectionOpen}
+          onSellerSectionToggle={onSellerSectionToggle}
+          invoiceSectionOpen={invoiceSectionOpen}
+          onInvoiceSectionToggle={onInvoiceSectionToggle}
           sidebarCollapsed={sidebarCollapsed}
           onSidebarCollapsedToggle={onSidebarCollapsedToggle}
         />
         <div className="flex-1 flex flex-col min-w-0">
-          <ListingTopBar activeTab={activeTab} />
-          <ListingContent activeTab={activeTab} />
+          <ListingTopBar
+            activeTab={activeTab}
+            listingSectionTab={listingSectionTab}
+            listingViewMode={listingViewMode}
+            onListingViewModeChange={setListingViewMode}
+          />
+          <ListingContent
+            activeTab={activeTab}
+            listingSectionTab={listingSectionTab}
+            onListingSectionTabChange={setListingSectionTab}
+            listingViewMode={listingViewMode}
+          />
         </div>
       </div>
     </ChristmasTheme>

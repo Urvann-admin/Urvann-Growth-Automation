@@ -1,10 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, FolderOpen, FileArchive, X, CheckCircle2, AlertCircle, Loader2, Image as ImageIcon } from 'lucide-react';
+import {
+  clearFormStorageOnReload,
+  getPersistedForm,
+  setPersistedForm,
+  removePersistedForm,
+} from '../../hooks/useFormPersistence';
 import { UploadProgress } from './UploadProgress';
 import { UploadResult } from './UploadResult';
 import { formatBytes } from '../utils/validation';
+
+const FORM_STORAGE_KEY = 'listing_form_image';
 
 type UploadMode = 'zip' | 'folder' | 'files';
 
@@ -26,12 +34,23 @@ interface UploadResponse {
 }
 
 export function ImageUploader() {
-  const [uploadMode, setUploadMode] = useState<UploadMode>('files');
-  const [collectionName, setCollectionName] = useState('');
+  const [uploadMode, setUploadMode] = useState<UploadMode>(() => {
+    clearFormStorageOnReload(FORM_STORAGE_KEY);
+    const saved = getPersistedForm<{ uploadMode: UploadMode; collectionName: string }>(FORM_STORAGE_KEY);
+    return saved?.uploadMode ?? 'files';
+  });
+  const [collectionName, setCollectionName] = useState(() => {
+    const saved = getPersistedForm<{ uploadMode: UploadMode; collectionName: string }>(FORM_STORAGE_KEY);
+    return saved?.collectionName ?? '';
+  });
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
+
+  useEffect(() => {
+    setPersistedForm(FORM_STORAGE_KEY, { uploadMode, collectionName });
+  }, [uploadMode, collectionName]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -95,7 +114,7 @@ export function ImageUploader() {
       setUploadResult(result);
 
       if (result.success) {
-        // Clear form on success
+        removePersistedForm(FORM_STORAGE_KEY);
         setSelectedFiles([]);
         setCollectionName('');
       }

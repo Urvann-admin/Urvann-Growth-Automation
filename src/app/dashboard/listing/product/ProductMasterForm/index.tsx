@@ -1,12 +1,19 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Check, Save } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, Save, Download, Upload } from 'lucide-react';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
-import type { SellerMaster } from '@/models/sellerMaster';
+import type { CollectionMaster } from '@/models/collectionMaster';
+import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { Notification } from '@/components/ui/Notification';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
+import {
+  clearFormStorageOnReload,
+  getPersistedForm,
+  setPersistedForm,
+  removePersistedForm,
+} from '../../hooks/useFormPersistence';
 import {
   STEPS,
   initialFormData,
@@ -14,6 +21,8 @@ import {
   type ProductFormData,
 } from './types';
 import { StepProductInfo, StepDetails, StepPricing, StepCategoriesAndImages, StepReview } from './steps';
+
+const FORM_STORAGE_KEY = 'listing_form_product';
 
 function isDescriptionEmpty(html: string): boolean {
   const stripped = html.replace(/<[^>]*>/g, '').trim();
@@ -30,18 +39,7 @@ function validateStep(stepId: StepId, data: ProductFormData): Record<string, str
       if (isDescriptionEmpty(data.description)) err.description = 'Description is required';
       break;
     case 'pricing':
-      if (!data.price || data.price <= 0) err.price = 'Price must be greater than 0';
-      if (data.inventoryQuantity === '' || data.inventoryQuantity < 0) {
-        err.inventoryQuantity = 'Inventory quantity must be 0 or greater';
-      }
-      if (
-        typeof data.compare_price === 'number' &&
-        typeof data.price === 'number' &&
-        data.compare_price > 0 &&
-        data.compare_price < data.price
-      ) {
-        err.compare_price = 'Compare price must be greater than or equal to Price (original price ≥ sale price)';
-      }
+      if (data.price !== '' && typeof data.price === 'number' && data.price < 0) err.price = 'Price cannot be negative';
       break;
     case 'categories-images':
       if (data.categories.length === 0) err.categories = 'Select at least one category';
@@ -66,17 +64,27 @@ function computeFinalName(data: ProductFormData): string {
 }
 
 export function ProductMasterForm() {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [formData, setFormData] = useState<ProductFormData>(initialFormData);
+  const [stepIndex, setStepIndex] = useState(() => {
+    clearFormStorageOnReload(FORM_STORAGE_KEY);
+    const saved = getPersistedForm<{ formData: ProductFormData; stepIndex: number }>(FORM_STORAGE_KEY);
+    return saved?.stepIndex ?? 0;
+  });
+  const [formData, setFormData] = useState<ProductFormData>(() => {
+    const saved = getPersistedForm<{ formData: ProductFormData; stepIndex: number }>(FORM_STORAGE_KEY);
+    return saved?.formData ? { ...initialFormData, ...saved.formData } : initialFormData;
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [sellers, setSellers] = useState<SellerMaster[]>([]);
+  const [collections, setCollections] = useState<CollectionMaster[]>([]);
+  const [sellers, setSellers] = useState<ProcurementSellerMaster[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [skuPreview, setSkuPreview] = useState<string>('');
+  const [bulkImporting, setBulkImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bulkImportInputRef = useRef<HTMLInputElement>(null);
   const createButtonClickedRef = useRef(false);
 
   const currentStep = STEPS[stepIndex];
@@ -94,16 +102,29 @@ export function ProductMasterForm() {
   }, []);
 
   useEffect(() => {
+    setPersistedForm(FORM_STORAGE_KEY, { formData, stepIndex });
+  }, [formData, stepIndex]);
+
+  useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
 
   useEffect(() => {
-    fetch('/api/sellers')
+    fetch('/api/collection-master?limit=100')
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.success && Array.isArray(json.data)) setCollections(json.data);
+      })
+      .catch((e) => console.error('Error fetching collections:', e));
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/procurement-seller-master?limit=500')
       .then((res) => res.json())
       .then((json) => {
         if (json?.success && Array.isArray(json.data)) setSellers(json.data);
       })
-      .catch((e) => console.error('Error fetching sellers:', e));
+      .catch((e) => console.error('Error fetching procurement sellers:', e));
   }, []);
 
   useEffect(() => {
@@ -155,6 +176,22 @@ export function ProductMasterForm() {
     setFormData((prev) => ({
       ...prev,
       categories: prev.categories.filter((id) => id !== categoryId),
+    }));
+  };
+
+  const handleCollectionToggle = (collectionId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      collectionIds: prev.collectionIds.includes(collectionId)
+        ? prev.collectionIds.filter((id) => id !== collectionId)
+        : [...prev.collectionIds, collectionId],
+    }));
+  };
+
+  const handleRemoveCollection = (collectionId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      collectionIds: prev.collectionIds.filter((id) => id !== collectionId),
     }));
   };
 
@@ -260,18 +297,12 @@ export function ProductMasterForm() {
         type: formData.type || undefined,
         seller: formData.seller || undefined,
         description: formData.description.trim() || undefined,
-        sort_order: typeof formData.sort_order === 'number' ? formData.sort_order : undefined,
         finalName: finalName || undefined,
         categories: formData.categories,
-        price: Number(formData.price),
-        compare_price: typeof formData.compare_price === 'number' ? formData.compare_price : undefined,
-        publish: formData.publish,
-        inventoryQuantity: Number(formData.inventoryQuantity),
-        inventory_management: formData.inventory_management || undefined,
-        inventory_management_level: formData.inventory_management_level || undefined,
-        inventory_allow_out_of_stock:
-          typeof formData.inventory_allow_out_of_stock === 'number' ? formData.inventory_allow_out_of_stock : undefined,
-        images: allImageUrls,
+        collectionIds: formData.collectionIds.length > 0 ? formData.collectionIds : undefined,
+        price: formData.price !== '' && typeof formData.price === 'number' ? formData.price : undefined,
+        inventory_quantity: formData.inventory_quantity !== '' && typeof formData.inventory_quantity === 'number' ? formData.inventory_quantity : undefined,
+        images: allImageUrls.length > 0 ? allImageUrls : undefined,
         hub: formData.hub?.trim() || undefined,
       };
 
@@ -283,6 +314,7 @@ export function ProductMasterForm() {
       const result = await response.json();
 
       if (result.success) {
+        removePersistedForm(FORM_STORAGE_KEY);
         setMessage({
           type: 'success',
           text: result.warning ? `Product created with warning: ${result.warning}` : 'Product created successfully!',
@@ -304,7 +336,7 @@ export function ProductMasterForm() {
   };
 
   const sellerOptions = useMemo(
-    () => [{ value: '', label: 'Select Seller' }, ...sellers.map((s) => ({ value: s.seller_id, label: s.seller_name }))],
+    () => [{ value: '', label: 'Select Procurement Seller' }, ...sellers.map((s) => ({ value: String(s._id), label: s.seller_name }))],
     [sellers]
   );
 
@@ -312,6 +344,54 @@ export function ProductMasterForm() {
     () => [{ value: '', label: 'Select Hub' }, ...HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub }))],
     []
   );
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch('/api/parent-master/template');
+      if (!res.ok) throw new Error('Failed to download template');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'parent-master-template.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Template download error:', err);
+      setMessage({ type: 'error', text: 'Failed to download template.' });
+    }
+  };
+
+  const handleBulkImportClick = () => {
+    bulkImportInputRef.current?.click();
+  };
+
+  const handleBulkImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setMessage(null);
+    setBulkImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/parent-master/bulk-import', { method: 'POST', body: formData });
+      const result = await res.json();
+      if (result.success) {
+        setMessage({
+          type: 'success',
+          text: result.message || `Imported ${result.insertedCount} product(s).`,
+        });
+      } else {
+        setMessage({ type: 'error', text: result.message || 'Bulk import failed.' });
+      }
+    } catch (err) {
+      console.error('Bulk import error:', err);
+      setMessage({ type: 'error', text: 'Bulk import failed. Please try again.' });
+    } finally {
+      setBulkImporting(false);
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
@@ -355,7 +435,7 @@ export function ProductMasterForm() {
                   {isCompleted ? <Check className="w-5 h-5" strokeWidth={2.5} /> : i + 1}
                 </div>
                 <span
-                  className={`text-xs font-medium mt-1.5 text-center truncate w-full max-w-[4.5rem] sm:max-w-none ${
+                  className={`text-xs font-medium mt-1.5 text-center truncate w-full max-w-18 sm:max-w-none ${
                     isCurrent ? 'text-slate-900' : isCompleted ? 'text-slate-700' : 'text-slate-400'
                   }`}
                 >
@@ -369,6 +449,43 @@ export function ProductMasterForm() {
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         <form onSubmit={handleSubmit} className="p-4 space-y-5">
+          {/* Bulk import & template */}
+          <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-slate-200">
+            <button
+              type="button"
+              onClick={handleDownloadTemplate}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Download className="w-4 h-4" />
+              Download CSV template
+            </button>
+            <input
+              ref={bulkImportInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={handleBulkImportFile}
+            />
+            <button
+              type="button"
+              onClick={handleBulkImportClick}
+              disabled={bulkImporting}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {bulkImporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-slate-400 border-t-transparent" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Bulk import
+                </>
+              )}
+            </button>
+          </div>
+
           {/* Step content */}
           <div className="min-h-[200px]">
             {currentStep.id === 'product-info' && (
@@ -391,7 +508,6 @@ export function ProductMasterForm() {
                 type={formData.type}
                 seller={formData.seller}
                 description={formData.description}
-                sort_order={formData.sort_order}
                 sellerOptions={sellerOptions}
                 errors={errors}
                 onFieldChange={handleFieldChange}
@@ -401,12 +517,6 @@ export function ProductMasterForm() {
             {currentStep.id === 'pricing' && (
               <StepPricing
                 price={formData.price}
-                compare_price={formData.compare_price}
-                inventoryQuantity={formData.inventoryQuantity}
-                inventory_management={formData.inventory_management}
-                inventory_management_level={formData.inventory_management_level}
-                inventory_allow_out_of_stock={formData.inventory_allow_out_of_stock}
-                publish={formData.publish}
                 hub={formData.hub}
                 hubOptions={hubOptions}
                 skuPreview={skuPreview}
@@ -418,13 +528,17 @@ export function ProductMasterForm() {
             {currentStep.id === 'categories-images' && (
               <StepCategoriesAndImages
                 categories={categories}
+                collections={collections}
                 selectedCategoryIds={formData.categories}
+                selectedCollectionIds={formData.collectionIds}
                 selectedImages={selectedImages}
                 uploadedImageUrls={formData.images}
                 errors={errors}
                 fileInputRef={fileInputRef}
                 onCategoryToggle={handleCategoryToggle}
                 onRemoveCategory={handleRemoveCategory}
+                onCollectionToggle={handleCollectionToggle}
+                onRemoveCollection={handleRemoveCollection}
                 onImageSelect={handleImageSelect}
                 onRemoveSelectedImage={removeSelectedImage}
                 onRemoveUploadedImage={removeUploadedImage}
@@ -436,8 +550,10 @@ export function ProductMasterForm() {
                 data={formData}
                 finalName={finalName}
                 categories={categories}
+                collections={collections}
                 skuPreview={skuPreview}
                 selectedImageCount={selectedImages.length}
+                procurementSellers={sellers}
               />
             )}
           </div>

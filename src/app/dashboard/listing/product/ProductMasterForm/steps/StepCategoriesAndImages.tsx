@@ -3,17 +3,22 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Search, ChevronDown, Check, Image as ImageIcon, Upload, ZoomIn } from 'lucide-react';
 import type { Category } from '@/models/category';
+import type { CollectionMaster } from '@/models/collectionMaster';
 import { ImagePreviewModal } from '../../../shared';
 
 export interface StepCategoriesAndImagesProps {
   categories: Category[];
+  collections: CollectionMaster[];
   selectedCategoryIds: string[];
+  selectedCollectionIds: string[];
   selectedImages: File[];
   uploadedImageUrls: string[];
   errors: Record<string, string>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onCategoryToggle: (categoryId: string) => void;
   onRemoveCategory: (categoryId: string) => void;
+  onCollectionToggle: (collectionId: string) => void;
+  onRemoveCollection: (collectionId: string) => void;
   onImageSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveSelectedImage: (index: number) => void;
   onRemoveUploadedImage: (index: number) => void;
@@ -27,30 +32,40 @@ function getCategoryName(categories: Category[], categoryAlias: string): string 
 
 export function StepCategoriesAndImages({
   categories,
+  collections,
   selectedCategoryIds,
+  selectedCollectionIds,
   selectedImages,
   uploadedImageUrls,
   errors,
   fileInputRef,
   onCategoryToggle,
   onRemoveCategory,
+  onCollectionToggle,
+  onRemoveCollection,
   onImageSelect,
   onRemoveSelectedImage,
   onRemoveUploadedImage,
   onClearError,
 }: StepCategoriesAndImagesProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [collectionDropdownOpen, setCollectionDropdownOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [collectionSearch, setCollectionSearch] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const collectionDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setDropdownOpen(false);
+      }
+      if (collectionDropdownRef.current && !collectionDropdownRef.current.contains(event.target as Node)) {
+        setCollectionDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -62,6 +77,17 @@ export function StepCategoriesAndImages({
       cat.category?.toLowerCase().includes(search.toLowerCase()) ||
       cat.alias?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const filteredCollections = collections.filter(
+    (col) =>
+      col.name?.toLowerCase().includes(collectionSearch.toLowerCase()) ||
+      col.alias?.toLowerCase().includes(collectionSearch.toLowerCase())
+  );
+
+  function getCollectionName(collectionId: string): string {
+    const col = collections.find((c) => String(c._id) === collectionId);
+    return col?.name ?? collectionId;
+  }
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -192,6 +218,85 @@ export function StepCategoriesAndImages({
           )}
         </div>
         {errors.categories && <p className="text-red-500 text-xs mt-1">{errors.categories}</p>}
+      </div>
+
+      {/* Collections */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Collections</label>
+        {selectedCollectionIds.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {selectedCollectionIds.map((collectionId) => (
+              <span
+                key={collectionId}
+                className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 text-sm rounded-full"
+              >
+                {getCollectionName(collectionId)}
+                <button
+                  type="button"
+                  onClick={() => onRemoveCollection(collectionId)}
+                  className="hover:bg-emerald-200 rounded-full p-0.5 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative" ref={collectionDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setCollectionDropdownOpen(!collectionDropdownOpen)}
+            className="w-full flex items-center justify-between px-3 py-2.5 border border-slate-300 rounded-lg bg-white text-left transition-colors focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <span className={selectedCollectionIds.length > 0 ? 'text-slate-900' : 'text-slate-500'}>
+              {selectedCollectionIds.length === 0
+                ? 'Select collections (optional)...'
+                : `${selectedCollectionIds.length} ${selectedCollectionIds.length === 1 ? 'collection' : 'collections'} selected`}
+            </span>
+            <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 ml-2 ${collectionDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {collectionDropdownOpen && (
+            <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+              <div className="p-2 border-b border-slate-200">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={collectionSearch}
+                    onChange={(e) => setCollectionSearch(e.target.value)}
+                    placeholder="Search collections..."
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="max-h-56 overflow-y-auto">
+                {filteredCollections.length === 0 ? (
+                  <p className="text-slate-500 text-sm p-3 text-center">No collections found</p>
+                ) : (
+                  filteredCollections.map((col) => {
+                    const colId = String(col._id);
+                    const isSelected = selectedCollectionIds.includes(colId);
+                    return (
+                      <button
+                        key={colId}
+                        type="button"
+                        onClick={() => {
+                          onCollectionToggle(colId);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
+                          isSelected ? 'bg-indigo-50 text-indigo-700' : 'text-slate-900 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span className="text-sm font-medium">{col.name}</span>
+                        {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Images */}
