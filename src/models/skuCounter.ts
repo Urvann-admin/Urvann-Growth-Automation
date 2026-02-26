@@ -52,6 +52,6 @@ export class SkuCounterModel {
 
   static async getAllCounters(): Promise<SkuCounter[]> {
     const collection = await getCollection(COLLECTION_NAME);
-    return collection.find({}).toArray() as Promise<SkuCounter[]>;
+    return collection.find({}).toArray() as unknown as Promise<SkuCounter[]>;
   }
 }

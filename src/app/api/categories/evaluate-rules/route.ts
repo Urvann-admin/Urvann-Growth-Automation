@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       height: typeof body.height === 'number' ? body.height : undefined,
       size: typeof body.size === 'number' ? body.size : undefined,
       type: body.type ? String(body.type).trim() : undefined,
-      categories: Array.isArray(body.categories) ? body.categories.map(c => String(c)) : undefined,
+      categories: Array.isArray(body.categories) ? body.categories.map((c: unknown) => String(c)) : undefined,
     };
 
     // Validate required fields

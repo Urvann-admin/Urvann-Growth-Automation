@@ -1,7 +1,20 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Trash2, AlertCircle, Check, ChevronDown, Plus } from 'lucide-react';
+import {
+  Trash2,
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Plus,
+  Package,
+  Settings2,
+  Building2,
+  ClipboardCheck,
+  ChevronRight,
+  ChevronLeft,
+  Search,
+} from 'lucide-react';
 import type { ProductRow, ParentItemRow } from './types';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
@@ -18,143 +31,156 @@ interface ProductTableProps {
   isLoading: boolean;
 }
 
-interface EditableFieldProps {
+const STEPS = [
+  { id: 'parent', label: 'Parent', icon: Package },
+  { id: 'details', label: 'Details', icon: Settings2 },
+  { id: 'hub-seller', label: 'Hub & Seller', icon: Building2 },
+  { id: 'review', label: 'Review', icon: ClipboardCheck },
+] as const;
+
+function InlineInput({
+  value,
+  onChange,
+  type = 'text',
+  placeholder,
+  label,
+  error,
+}: {
   value: string | number;
   onChange: (value: string | number) => void;
   type?: 'text' | 'number';
   placeholder?: string;
-  className?: string;
+  label?: string;
   error?: string;
-}
-
-function EditableField({ value, onChange, type = 'text', placeholder, className = '', error }: EditableFieldProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [tempValue, setTempValue] = useState(String(value || ''));
-
-  const handleSave = () => {
-    const newValue = type === 'number' ? (tempValue ? parseFloat(tempValue) : '') : tempValue;
-    onChange(newValue);
-    setIsEditing(false);
-  };
-
-  const handleCancel = () => {
-    setTempValue(String(value || ''));
-    setIsEditing(false);
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSave();
-    } else if (e.key === 'Escape') {
-      handleCancel();
-    }
-  };
-
-  if (isEditing) {
-    return (
-      <div className="relative">
-        <input
-          type={type}
-          value={tempValue}
-          onChange={(e) => setTempValue(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className={`w-full px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${
-            error ? 'border-red-300' : 'border-slate-300'
-          } ${className}`}
-          autoFocus
-        />
-      </div>
-    );
-  }
-
+}) {
   return (
-    <div
-      onClick={() => setIsEditing(true)}
-      className={`px-2 py-1 text-sm cursor-text hover:bg-slate-50 rounded min-h-[28px] flex items-center ${
-        error ? 'text-red-600' : 'text-slate-900'
-      } ${className}`}
-    >
-      {value || <span className="text-slate-400">{placeholder}</span>}
+    <div>
+      {label && (
+        <label className="block text-xs font-medium text-slate-500 mb-1.5">{label}</label>
+      )}
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => {
+          const v = type === 'number' ? (e.target.value ? parseFloat(e.target.value) : '') : e.target.value;
+          onChange(v);
+        }}
+        placeholder={placeholder}
+        className={`w-full px-3 py-2.5 text-sm border rounded-xl bg-white transition-colors focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none ${
+          error ? 'border-red-300' : 'border-slate-200 hover:border-slate-300'
+        }`}
+      />
+      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>
   );
 }
 
-interface ParentSelectProps {
+function ParentSearchSelect({
+  value,
+  onChange,
+  availableParents,
+  error,
+}: {
   value: string;
   onChange: (parentSku: string, parent?: ParentMaster) => void;
   availableParents: ParentMaster[];
-  section: ListingSection;
   error?: string;
-}
-
-function ParentSelect({ value, onChange, availableParents, section, error }: ParentSelectProps) {
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const selectedParent = availableParents.find(p => p.sku === value);
-  
+  const selectedParent = availableParents.find((p) => p.sku === value);
+
   const filteredParents = useMemo(() => {
     if (!searchQuery.trim()) return availableParents;
     const query = searchQuery.toLowerCase();
-    return availableParents.filter(parent => 
-      parent.plant.toLowerCase().includes(query) ||
-      (parent.sku && parent.sku.toLowerCase().includes(query))
+    return availableParents.filter(
+      (parent) =>
+        parent.plant.toLowerCase().includes(query) ||
+        (parent.sku && parent.sku.toLowerCase().includes(query))
     );
   }, [availableParents, searchQuery]);
 
-  const handleSelect = (parent: ParentMaster) => {
-    onChange(parent.sku || '', parent);
-    setIsOpen(false);
-    setSearchQuery('');
-  };
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   return (
-    <div className="relative">
+    <div className="relative flex-1">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-2 py-1 text-sm text-left border rounded hover:bg-slate-50 flex items-center justify-between ${
-          error ? 'border-red-300' : 'border-slate-300'
+        className={`w-full px-3 py-2.5 text-sm text-left border rounded-xl bg-white hover:border-slate-300 transition-colors flex items-center justify-between ${
+          error ? 'border-red-300' : isOpen ? 'border-pink-500 ring-2 ring-pink-500' : 'border-slate-200'
         }`}
       >
-        <span className={selectedParent ? 'text-slate-900' : 'text-slate-400'}>
-          {selectedParent ? selectedParent.plant : 'Select parent...'}
+        <span className={selectedParent ? 'text-slate-900 font-medium' : 'text-slate-400'}>
+          {selectedParent ? selectedParent.plant : 'Parent...'}
         </span>
-        <ChevronDown className="w-4 h-4 text-slate-400" />
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
-          <div className="p-2 border-b border-slate-200">
-            <input
-              type="text"
-              placeholder="Search parents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-            />
+        <div
+          ref={dropdownRef}
+          className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+        >
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search parents..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                autoFocus
+              />
+            </div>
           </div>
-          <div className="max-h-40 overflow-y-auto">
+          <div className="max-h-52 overflow-y-auto">
             {filteredParents.length === 0 ? (
-              <div className="p-2 text-sm text-slate-600">No parents found</div>
+              <div className="p-3 text-sm text-slate-500 text-center">No parents found</div>
             ) : (
-              filteredParents.map(parent => (
-                <button
-                  key={parent.sku}
-                  type="button"
-                  onClick={() => handleSelect(parent)}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between"
-                >
-                  <div>
-                    <div className="font-medium">{parent.plant}</div>
-                    <div className="text-xs text-slate-600">
-                      {parent.sku} • ₹{parent.price} • {(parent.inventory_quantity ?? 0)} available
+              filteredParents.map((parent) => {
+                const isSelected = parent.sku === value;
+                return (
+                  <button
+                    key={parent.sku}
+                    type="button"
+                    onClick={() => {
+                      onChange(parent.sku || '', parent);
+                      setIsOpen(false);
+                      setSearchQuery('');
+                    }}
+                    className={`w-full px-3 py-2.5 text-left text-sm transition-colors flex items-center justify-between ${
+                      isSelected ? 'bg-pink-50 text-[#E6007A]' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-medium">{parent.plant}</div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {parent.sku} · ₹{parent.price} · {parent.inventory_quantity ?? 0} available
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))
+                    {isSelected && <Check className="w-4 h-4 text-[#E6007A] shrink-0" />}
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
@@ -163,50 +189,57 @@ function ParentSelect({ value, onChange, availableParents, section, error }: Par
   );
 }
 
-export function ProductTable({ 
-  productRows, 
-  availableParents, 
-  onUpdateRow, 
-  onRemoveRow, 
+export function ProductTable({
+  productRows,
+  availableParents,
+  onUpdateRow,
+  onRemoveRow,
   section,
-  isLoading 
+  isLoading,
 }: ProductTableProps) {
-  const hubOptions = useMemo(() => 
-    HUB_MAPPINGS.map(mapping => ({ value: mapping.hub, label: mapping.hub })),
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const [stepByRow, setStepByRow] = useState<Record<string, number>>({});
+
+  const hubOptions = useMemo(
+    () => HUB_MAPPINGS.map((mapping) => ({ value: mapping.hub, label: mapping.hub })),
     []
   );
 
   const potTypeOptions = useMemo(() => {
     const seen = new Set<string>();
-    return POT_TYPES_WITH_PRICING.filter(c => {
+    return POT_TYPES_WITH_PRICING.filter((c) => {
       if (seen.has(c.value)) return false;
       seen.add(c.value);
       return true;
-    }).map(c => ({ value: c.value, label: c.value }));
+    }).map((c) => ({ value: c.value, label: c.value }));
   }, []);
 
   const [sellerOptions, setSellerOptions] = useState<{ value: string; label: string }[]>([]);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/procurement-seller-master?limit=500')
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         if (cancelled || !data.success || !Array.isArray(data.data)) return;
-        setSellerOptions(data.data.map((s: { _id: string; seller_name: string }) => ({
-          value: String(s._id),
-          label: s.seller_name || String(s._id),
-        })));
+        setSellerOptions(
+          data.data.map((s: { _id: string; seller_name: string }) => ({
+            value: String(s._id),
+            label: s.seller_name || String(s._id),
+          }))
+        );
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const [collectionNames, setCollectionNames] = useState<Record<string, string>>({});
   useEffect(() => {
     let cancelled = false;
     fetch('/api/collection-master?limit=500')
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         if (cancelled || !data.success || !Array.isArray(data.data)) return;
         const map: Record<string, string> = {};
         data.data.forEach((c: { _id: string; name?: string }) => {
@@ -215,10 +248,11 @@ export function ProductTable({
         setCollectionNames(map);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // SKU preview: key = hub|plant|setQuantity, value = sku or 'loading'
   const [skuPreviews, setSkuPreviews] = useState<Record<string, string>>({});
   const skuRequestedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
@@ -227,7 +261,11 @@ export function ProductTable({
       const key = `${row.hub}|${row.plant}|${row.setQuantity ?? 1}`;
       if (skuRequestedRef.current.has(key)) return;
       skuRequestedRef.current.add(key);
-      const params = new URLSearchParams({ hub: row.hub, plant: row.plant, setQuantity: String(row.setQuantity ?? 1) });
+      const params = new URLSearchParams({
+        hub: row.hub,
+        plant: row.plant,
+        setQuantity: String(row.setQuantity ?? 1),
+      });
       fetch(`/api/listing-product/preview-sku?${params}`)
         .then((r) => r.json())
         .then((data) => {
@@ -237,7 +275,23 @@ export function ProductTable({
     });
   }, [productRows]);
 
-  /** Name: when setQty=1: parent1 & parent2 in size inch type; when setQty>1: Set of N parent1 & parent2 in size inch type */
+  useEffect(() => {
+    if (productRows.length > 0 && !activeRowId) {
+      setActiveRowId(productRows[0].id);
+    }
+    if (activeRowId && !productRows.find((r) => r.id === activeRowId)) {
+      setActiveRowId(productRows[0]?.id ?? null);
+    }
+  }, [productRows, activeRowId]);
+
+  const activeRow = productRows.find((r) => r.id === activeRowId) ?? null;
+  const currentStep = activeRow ? (stepByRow[activeRow.id] ?? 0) : 0;
+
+  const setStep = (step: number) => {
+    if (!activeRow) return;
+    setStepByRow((prev) => ({ ...prev, [activeRow.id]: step }));
+  };
+
   const getFinalName = (row: ProductRow): string => {
     const parentNames = row.parentItems
       .filter((item) => item.parent)
@@ -272,10 +326,8 @@ export function ProductTable({
     row.parentItems.forEach((item) => {
       const parent = item.parent;
       if (!parent || !item.quantity) return;
-
       const unitPrice = item.unitPrice || parent.price || 0;
       totalPrice += unitPrice * item.quantity;
-
       const availableUnits = parent.inventory_quantity ?? 0;
       const possibleSets = Math.floor(availableUnits / item.quantity);
       minInventory = Math.min(minInventory, possibleSets);
@@ -292,18 +344,12 @@ export function ProductTable({
     };
   };
 
-  const handleParentItemChange = (
-    row: ProductRow,
-    itemIndex: number,
-    updates: Partial<ParentItemRow>
-  ) => {
+  const handleParentItemChange = (row: ProductRow, itemIndex: number, updates: Partial<ParentItemRow>) => {
     const updatedItems = row.parentItems.map((item, index) =>
       index === itemIndex ? { ...item, ...updates } : item
     );
-
     const cleanedItems = updatedItems.filter((item) => item.parentSku && item.quantity > 0);
     const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: cleanedItems });
-
     onUpdateRow(row.id, {
       parentItems: cleanedItems,
       parentSkus: cleanedItems.map((i) => i.parentSku),
@@ -319,11 +365,54 @@ export function ProductTable({
       quantity: 1,
       unitPrice: 0,
     };
-
     const updatedItems = [...row.parentItems, newItem];
     onUpdateRow(row.id, {
       parentItems: updatedItems,
       parentSkus: updatedItems.map((i) => i.parentSku).filter(Boolean),
+    });
+  };
+
+  /** When row has no parent items yet, add the selected parent in a single update (avoids race with placeholder). */
+  const handleSelectFirstParent = (row: ProductRow, parent: ParentMaster) => {
+    const newItem: ParentItemRow = {
+      id: `parent_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      parentSku: parent.sku || '',
+      quantity: 1,
+      unitPrice: parent.price || 0,
+      parent,
+    };
+    const updatedItems = [newItem];
+    const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: updatedItems });
+    onUpdateRow(row.id, {
+      parentItems: updatedItems,
+      parentSkus: [parent.sku || ''],
+      plant: parent.plant || row.plant,
+      otherNames: parent.otherNames || row.otherNames,
+      variety: parent.variety || row.variety,
+      colour: parent.colour || row.colour,
+      height: parent.height ?? row.height,
+      hub: row.hub || parent.hub || '',
+      seller: row.seller || parent.seller || '',
+      categories: Array.from(new Set([...(row.categories || []), ...(parent.categories || [])])),
+      collectionIds: Array.from(
+        new Set([
+          ...(row.collectionIds || []),
+          ...(parent.collectionIds?.map((id) => String(id)) || []),
+        ])
+      ),
+      price,
+      inventory_quantity: inventory,
+    });
+  };
+
+  const handleRemoveParentItem = (row: ProductRow, itemIndex: number) => {
+    const updatedItems = row.parentItems.filter((_, i) => i !== itemIndex);
+    const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: updatedItems });
+    onUpdateRow(row.id, {
+      parentItems: updatedItems,
+      parentSkus: updatedItems.map((i) => i.parentSku),
+      price,
+      inventory_quantity: inventory,
     });
   };
 
@@ -339,8 +428,6 @@ export function ProductTable({
         unitPrice: parent.price || 0,
         parent,
       };
-
-      // Auto-populate from first parent only (excluding pot info – user fills manually)
       const baseUpdates: Partial<ProductRow> =
         itemIndex === 0
           ? {
@@ -368,9 +455,7 @@ export function ProductTable({
         ),
         ...baseUpdates,
       };
-
       const { price, inventory } = recalculatePriceAndInventory(tempRow);
-
       onUpdateRow(row.id, {
         ...baseUpdates,
         parentItems: tempRow.parentItems,
@@ -386,275 +471,487 @@ export function ProductTable({
   if (productRows.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
+        <div className="text-center px-6">
+          <div className="w-16 h-16 bg-pink-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Package className="w-8 h-8 text-pink-400" />
           </div>
-          <h3 className="text-sm font-medium text-slate-900 mb-2">No line items yet</h3>
-          <p className="text-sm text-slate-600">
-            Click "Add Row" to create line items for your listings
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">No products yet</h3>
+          <p className="text-sm text-slate-500">
+            Click &ldquo;+ Add Row&rdquo; to start creating products
           </p>
         </div>
       </div>
     );
   }
 
+  if (!activeRow) return null;
+
+  const stepComplete = (row: ProductRow, step: number): boolean => {
+    switch (step) {
+      case 0:
+        return row.parentItems.length > 0 && row.parentItems.some((i) => i.parentSku);
+      case 1:
+        return Boolean(row.type);
+      case 2:
+        return Boolean(row.hub);
+      case 3:
+        return row.isValid;
+      default:
+        return false;
+    }
+  };
+
   return (
-    <div className="overflow-auto h-full">
-      <table className="w-full text-sm" style={{ minWidth: '1560px' }}>
-        <thead className="bg-slate-50 border-b-2 border-slate-200 sticky top-0 z-10">
-          <tr>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700 w-10">#</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700" style={{ minWidth: '200px' }}>Parents</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700" style={{ minWidth: '150px' }}>Pot Type</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700 w-24">Pot Size</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700 w-24">Pot Qty</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700 w-24">Set Qty</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700 w-28">Price</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700" style={{ minWidth: '120px' }}>Hub</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700" style={{ minWidth: '160px' }}>Seller</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700" style={{ minWidth: '140px' }}>Categories</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700" style={{ minWidth: '120px' }}>Collections</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700 w-24">Inventory</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700 w-24">Status</th>
-            <th className="text-right py-3.5 px-4 font-semibold text-slate-700 w-16">Actions</th>
-            <th className="text-left py-3.5 px-4 font-semibold text-slate-700" style={{ minWidth: '220px' }}>Name & SKU</th>
-          </tr>
-        </thead>
-        <tbody>
-          {productRows.map((row) => (
-            <tr 
-              key={row.id} 
-              className={`border-b border-slate-100 hover:bg-slate-50/50 ${
-                !row.isValid ? 'bg-red-50/30' : row.isSaved ? 'bg-green-50/30' : ''
+    <div className="flex flex-col h-full bg-slate-50/50">
+      {/* Row tabs */}
+      <div className="flex items-center gap-1.5 px-4 pt-3 pb-2 overflow-x-auto shrink-0">
+        {productRows.map((row, idx) => {
+          const isActive = row.id === activeRowId;
+          const plantLabel = row.plant ? row.plant.slice(0, 16) : `Product ${idx + 1}`;
+          return (
+            <button
+              key={row.id}
+              onClick={() => setActiveRowId(row.id)}
+              className={`group relative flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+                isActive
+                  ? 'text-white shadow-md shadow-pink-200'
+                  : 'bg-white text-slate-600 hover:bg-pink-50 border border-slate-200 hover:border-pink-200'
               }`}
+              style={isActive ? { backgroundColor: '#E6007A' } : undefined}
             >
-              {/* Serial */}
-              <td className="py-3 px-4 text-sm text-slate-700 whitespace-nowrap">
-                {row.serial}
-              </td>
-
-              {/* Parents composition */}
-              <td className="py-3 px-4 align-top">
-                <div className="space-y-1">
-                  {row.parentItems.map((item, index) => (
-                    <div key={item.id} className="flex items-center gap-2">
-                      <div className="flex-1">
-                        <ParentSelect
-                          value={item.parentSku}
-                          onChange={(parentSku, parent) =>
-                            handleParentChange(row, index, parentSku, parent)
-                          }
-                          availableParents={availableParents}
-                          section={section}
-                          error={row.validationErrors.parent}
-                        />
-                      </div>
-                      <div className="w-16">
-                        <EditableField
-                          value={item.quantity}
-                          onChange={(value) =>
-                            handleParentItemChange(row, index, {
-                              quantity: Number(value) || 1,
-                            })
-                          }
-                          type="number"
-                          placeholder="Qty"
-                        />
-                      </div>
-                      <div className="w-20 text-xs text-slate-600">
-                        ₹{(item.unitPrice || 0) * (item.quantity || 0)}
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => handleAddParentItem(row)}
-                    className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900 mt-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add parent
-                  </button>
-                </div>
-              </td>
-
-              {/* Pot Type */}
-              <td className="py-3 px-4 min-w-[140px]">
-                <CustomSelect
-                  value={row.type ?? ''}
-                  onChange={(value) => {
-                    const updatedRow = { ...row, type: value };
-                    const { price, inventory } = recalculatePriceAndInventory(updatedRow);
-                    onUpdateRow(row.id, { type: value, price, inventory_quantity: inventory });
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+              }`}>
+                {idx + 1}
+              </span>
+              <span className="max-w-[100px] truncate">{plantLabel}</span>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                row.isSaved ? 'bg-green-400' : row.isValid ? 'bg-emerald-400' : 'bg-amber-400'
+              } ${isActive ? '' : ''}`} />
+              {productRows.length > 1 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveRow(row.id);
                   }}
-                  options={potTypeOptions}
-                  placeholder="Select pot type"
-                  searchable={true}
-                />
-              </td>
+                  className={`ml-0.5 p-0.5 rounded-full transition-opacity ${
+                    isActive
+                      ? 'text-white/60 hover:text-white hover:bg-white/20'
+                      : 'text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100'
+                  }`}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-              {/* Pot Size */}
-              <td className="py-3 px-4 min-w-[80px] whitespace-nowrap">
-                <EditableField
-                  value={row.size}
+      {/* Stepper */}
+      <div className="px-4 py-3 shrink-0">
+        <div className="flex items-center">
+          {STEPS.map((step, idx) => {
+            const isActive = currentStep === idx;
+            const isCompleted = stepComplete(activeRow, idx);
+            const StepIcon = step.icon;
+            return (
+              <div key={step.id} className="flex items-center flex-1">
+                <button
+                  onClick={() => setStep(idx)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-pink-100 text-[#E6007A]'
+                      : isCompleted
+                      ? 'text-[#E6007A] hover:bg-pink-50'
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                      isActive
+                        ? 'text-white'
+                        : isCompleted
+                        ? 'bg-pink-100 text-[#E6007A]'
+                        : 'bg-slate-100 text-slate-400'
+                    }`}
+                    style={isActive ? { backgroundColor: '#E6007A' } : undefined}
+                  >
+                    {isCompleted && !isActive ? (
+                      <Check className="w-3.5 h-3.5" />
+                    ) : (
+                      <StepIcon className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                  <span className="hidden sm:inline">{step.label}</span>
+                </button>
+                {idx < STEPS.length - 1 && (
+                  <div className={`flex-1 h-px mx-1 ${
+                    stepComplete(activeRow, idx) ? 'bg-pink-200' : 'bg-slate-200'
+                  }`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Step content - fills remaining space */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden px-4 pb-4">
+        <div className="flex-1 min-h-0 overflow-auto bg-white rounded-2xl border border-slate-200 p-5">
+          {/* Step 0: Parent Selection */}
+          {currentStep === 0 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Parent Products</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Add parent products and specify quantities</p>
+              </div>
+
+              <div className="space-y-3">
+                {(activeRow.parentItems.length === 0
+                  ? [{ id: 'empty_0', parentSku: '', quantity: 1, unitPrice: 0 } as ParentItemRow]
+                  : activeRow.parentItems
+                ).map((item, index) => (
+                  <div key={item.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="flex-1 min-w-0">
+                      <ParentSearchSelect
+                        value={item.parentSku}
+                        onChange={(parentSku, parent) =>
+                          activeRow.parentItems.length === 0 && index === 0 && parent
+                            ? handleSelectFirstParent(activeRow, parent)
+                            : handleParentChange(activeRow, index, parentSku, parent)
+                        }
+                        availableParents={availableParents}
+                        error={index === 0 ? activeRow.validationErrors.parent : undefined}
+                      />
+                    </div>
+                    <div className="w-[1px] self-stretch min-h-6 bg-slate-200 shrink-0" aria-hidden />
+                    <div className="min-w-[140px] shrink-0 text-xs text-slate-500 flex items-center gap-2">
+                      {item.parent ? (
+                        <>
+                          <span className="font-mono text-slate-700 truncate" title={item.parentSku}>{item.parentSku}</span>
+                          <span className="text-slate-400">·</span>
+                          <span>{item.parent.inventory_quantity ?? 0} in stock</span>
+                          {((item.unitPrice || 0) * (item.quantity || 0)) > 0 && (
+                            <>
+                              <span className="text-slate-400">·</span>
+                              <span className="text-slate-700 font-medium">
+                                ₹{((item.unitPrice || 0) * (item.quantity || 0)).toLocaleString()}
+                              </span>
+                            </>
+                          )}
+                        </>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Qty</span>
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          handleParentItemChange(activeRow, index, {
+                            quantity: Number(e.target.value) || 1,
+                          })
+                        }
+                        className="w-16 px-2 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                        min={1}
+                      />
+                    </div>
+                    {activeRow.parentItems.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveParentItem(activeRow, index)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors shrink-0"
+                        title="Remove parent"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleAddParentItem(activeRow)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-[#E6007A] hover:bg-pink-50 px-3 py-2 rounded-lg transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add another parent
+              </button>
+            </div>
+          )}
+
+          {/* Step 1: Pot & Pricing Details */}
+          {currentStep === 1 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Pot & Pricing</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Configure pot details and pricing</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Pot Type</label>
+                  <CustomSelect
+                    value={activeRow.type ?? ''}
+                    onChange={(value) => {
+                      const updatedRow = { ...activeRow, type: value };
+                      const { price, inventory } = recalculatePriceAndInventory(updatedRow);
+                      onUpdateRow(activeRow.id, { type: value, price, inventory_quantity: inventory });
+                    }}
+                    options={potTypeOptions}
+                    placeholder="Pot type"
+                    searchable={true}
+                  />
+                </div>
+                <InlineInput
+                  value={activeRow.size}
                   onChange={(value) => {
                     const sizeVal = value === '' ? '' : Number(value);
-                    const updatedRow = { ...row, size: sizeVal };
+                    const updatedRow = { ...activeRow, size: sizeVal } as ProductRow;
                     const { price, inventory } = recalculatePriceAndInventory(updatedRow);
-                    onUpdateRow(row.id, { size: sizeVal, price, inventory_quantity: inventory });
+                    onUpdateRow(activeRow.id, { size: sizeVal, price, inventory_quantity: inventory });
                   }}
                   type="number"
-                  placeholder="Size"
+                  placeholder="Inches"
+                  label="Pot Size"
                 />
-              </td>
-
-              {/* Pot Quantity */}
-              <td className="py-3 px-4 min-w-[72px] whitespace-nowrap">
-                <EditableField
-                  value={row.potQuantity}
+                <InlineInput
+                  value={activeRow.potQuantity}
                   onChange={(value) => {
                     const potQty = Number(value) || 0;
-                    const updatedRow = { ...row, potQuantity: potQty };
+                    const updatedRow = { ...activeRow, potQuantity: potQty };
                     const { price, inventory } = recalculatePriceAndInventory(updatedRow);
-                    onUpdateRow(row.id, { potQuantity: potQty, price, inventory_quantity: inventory });
+                    onUpdateRow(activeRow.id, { potQuantity: potQty, price, inventory_quantity: inventory });
                   }}
                   type="number"
                   placeholder="0"
+                  label="Pot Quantity"
                 />
-              </td>
-
-              {/* Set Quantity */}
-              <td className="py-3 px-4 whitespace-nowrap">
-                <EditableField
-                  value={row.setQuantity}
+                <InlineInput
+                  value={activeRow.setQuantity}
                   onChange={(value) => {
                     const setQty = Number(value) || 1;
-                    onUpdateRow(row.id, { setQuantity: setQty, quantity: setQty });
+                    onUpdateRow(activeRow.id, { setQuantity: setQty, quantity: setQty });
                   }}
                   type="number"
                   placeholder="1"
-                  error={row.validationErrors.quantity}
+                  label="Set Quantity"
+                  error={activeRow.validationErrors.quantity}
                 />
-              </td>
+              </div>
 
-              {/* Price */}
-              <td className="py-3 px-4 whitespace-nowrap">
-                <EditableField
-                  value={row.price}
-                  onChange={(value) => onUpdateRow(row.id, { price: Number(value) || 0 })}
-                  type="number"
-                  placeholder="Price"
-                />
-              </td>
+              <div className="mt-2 p-4 bg-pink-50 rounded-xl border border-pink-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-[#E6007A]">Calculated Price</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl font-bold text-[#330033]">
+                      ₹{activeRow.price.toLocaleString()}
+                    </span>
+                    <input
+                      type="number"
+                      value={activeRow.price || ''}
+                      onChange={(e) => onUpdateRow(activeRow.id, { price: Number(e.target.value) || 0 })}
+                      className="w-24 px-2 py-1 text-sm border border-pink-200 rounded-lg bg-white text-right focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                      placeholder="Override"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-              {/* Hub */}
-              <td className="py-3 px-4 min-w-[120px]">
-                <CustomSelect
-                  value={row.hub ?? ''}
-                  onChange={(value) => onUpdateRow(row.id, { hub: value })}
-                  options={hubOptions}
-                  placeholder="Select hub"
-                  error={row.validationErrors.hub}
-                  searchable={true}
-                />
-              </td>
+          {/* Step 2: Hub & Seller */}
+          {currentStep === 2 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Hub & Seller</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Assign hub and seller for this product</p>
+              </div>
 
-              {/* Seller */}
-              <td className="py-3 px-4 min-w-[160px]">
-                <CustomSelect
-                  value={row.seller ?? ''}
-                  onChange={(value) => onUpdateRow(row.id, { seller: value })}
-                  options={sellerOptions}
-                  placeholder="Select seller"
-                  searchable={true}
-                />
-              </td>
+              <div className="grid grid-cols-1 gap-4 max-w-md">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Hub</label>
+                  <CustomSelect
+                    value={activeRow.hub ?? ''}
+                    onChange={(value) => onUpdateRow(activeRow.id, { hub: value })}
+                    options={hubOptions}
+                    placeholder="Hub"
+                    error={activeRow.validationErrors.hub}
+                    searchable={true}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Seller</label>
+                  <CustomSelect
+                    value={activeRow.seller ?? ''}
+                    onChange={(value) => onUpdateRow(activeRow.id, { seller: value })}
+                    options={sellerOptions}
+                    placeholder="Seller"
+                    searchable={true}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
-              {/* Categories */}
-              <td className="py-3 px-4 text-sm text-slate-700 min-w-[140px]">
-                {(row.categories?.length ?? 0) > 0
-                  ? (row.categories || []).join(', ')
-                  : '—'}
-              </td>
+          {/* Step 3: Review */}
+          {currentStep === 3 && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Review</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Verify all details before saving</p>
+              </div>
 
-              {/* Collections */}
-              <td className="py-3 px-4 text-sm text-slate-700 min-w-[120px]">
-                {(row.collectionIds?.length ?? 0) > 0 ? (
-                  <span className="flex flex-wrap gap-1">
-                    {(row.collectionIds || []).map((id) => {
-                      const fullName = collectionNames[String(id)] ?? String(id);
-                      const firstWord = fullName.trim().split(/\s+/)[0] || fullName;
-                      return (
-                        <span
-                          key={id}
-                          title={fullName}
-                          className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 cursor-help"
-                        >
-                          {firstWord}
-                        </span>
-                      );
-                    })}
+              {/* Status badge */}
+              <div className="flex items-center gap-2">
+                {activeRow.isSaved ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
+                    <Check className="w-3.5 h-3.5" /> Saved
+                  </span>
+                ) : activeRow.isValid ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pink-50 text-[#E6007A] text-xs font-medium">
+                    <Check className="w-3.5 h-3.5" /> Ready to save
                   </span>
                 ) : (
-                  '—'
-                )}
-              </td>
-
-              {/* Inventory */}
-              <td className="py-3 px-4 text-sm text-slate-700 whitespace-nowrap">
-                {row.inventory_quantity}
-              </td>
-
-              {/* Status */}
-              <td className="py-3 px-4 whitespace-nowrap">
-                <div className="flex items-center gap-1">
-                  {row.isSaved ? (
-                    <div className="flex items-center gap-1 text-green-600">
-                      <Check className="w-4 h-4" />
-                      <span className="text-xs">Saved</span>
-                    </div>
-                  ) : row.isValid ? (
-                    <div className="flex items-center gap-1 text-emerald-600">
-                      <Check className="w-4 h-4" />
-                      <span className="text-xs">Valid</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-red-600">
-                      <AlertCircle className="w-4 h-4" />
-                      <span className="text-xs">Invalid</span>
-                    </div>
-                  )}
-                </div>
-              </td>
-
-              {/* Actions */}
-              <td className="py-3 px-4 text-right whitespace-nowrap">
-                <button
-                  onClick={() => onRemoveRow(row.id)}
-                  className="p-1 text-slate-400 hover:text-red-600 rounded"
-                  title="Remove row"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </td>
-
-              {/* Name & SKU (last column) */}
-              <td className="py-3 px-4 text-sm min-w-[220px] align-top">
-                <div className="flex flex-col gap-1">
-                  <span className="font-medium text-slate-900">{getFinalName(row)}</span>
-                  <span className="text-slate-600 font-mono text-xs">
-                    {row.sku || (row.hub?.trim() && row.plant?.trim()
-                      ? skuPreviews[`${row.hub}|${row.plant}|${row.setQuantity ?? 1}`] ?? '…'
-                      : '—')}
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 text-red-600 text-xs font-medium">
+                    <AlertCircle className="w-3.5 h-3.5" /> Incomplete
                   </span>
+                )}
+              </div>
+
+              {/* Summary grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <ReviewField label="Product Name" value={getFinalName(activeRow)} />
+                <ReviewField
+                  label="SKU"
+                  value={
+                    activeRow.sku ||
+                    (activeRow.hub?.trim() && activeRow.plant?.trim()
+                      ? skuPreviews[`${activeRow.hub}|${activeRow.plant}|${activeRow.setQuantity ?? 1}`] ?? 'Generating...'
+                      : '—')
+                  }
+                  mono
+                />
+                <ReviewField
+                  label="Parents"
+                  value={
+                    activeRow.parentItems.length > 0
+                      ? activeRow.parentItems
+                          .filter((i) => i.parent)
+                          .map((i) => `${i.parent!.plant} ×${i.quantity}`)
+                          .join(', ') || '—'
+                      : '—'
+                  }
+                />
+                <ReviewField
+                  label="Pot"
+                  value={
+                    activeRow.type
+                      ? `${activeRow.type}${activeRow.size ? ` · ${activeRow.size}"` : ''}${activeRow.potQuantity ? ` · ×${activeRow.potQuantity}` : ''}`
+                      : '—'
+                  }
+                />
+                <ReviewField label="Hub" value={activeRow.hub || '—'} />
+                <ReviewField
+                  label="Seller"
+                  value={sellerOptions.find((s) => s.value === activeRow.seller)?.label || activeRow.seller || '—'}
+                />
+                <ReviewField
+                  label="Categories"
+                  value={activeRow.categories?.length ? activeRow.categories.join(', ') : '—'}
+                />
+                <ReviewField
+                  label="Collections"
+                  value={
+                    activeRow.collectionIds?.length
+                      ? activeRow.collectionIds.map((id) => collectionNames[String(id)] ?? id).join(', ')
+                      : '—'
+                  }
+                />
+                <ReviewField label="Price" value={`₹${activeRow.price.toLocaleString()}`} highlight />
+                <ReviewField label="Inventory" value={String(activeRow.inventory_quantity)} highlight />
+              </div>
+
+              {/* Validation errors */}
+              {Object.keys(activeRow.validationErrors).length > 0 && !activeRow.isValid && (
+                <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+                  <p className="text-xs font-medium text-red-700 mb-1">Missing fields:</p>
+                  <ul className="space-y-0.5">
+                    {Object.entries(activeRow.validationErrors).map(([key, msg]) => (
+                      <li key={key} className="text-xs text-red-600 flex items-center gap-1">
+                        <span className="w-1 h-1 rounded-full bg-red-400 shrink-0" />
+                        {msg}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </td>
-            </tr>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <div className="px-4 py-3 border-t border-slate-200 bg-white shrink-0 flex items-center justify-between">
+        <button
+          onClick={() => setStep(Math.max(0, currentStep - 1))}
+          disabled={currentStep === 0}
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <ChevronLeft className="w-4 h-4" />
+          Back
+        </button>
+
+        <div className="flex items-center gap-1">
+          {STEPS.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setStep(idx)}
+              className={`w-2 h-2 rounded-full transition-all ${
+                idx === currentStep ? 'w-6' : 'bg-slate-300 hover:bg-slate-400'
+              }`}
+              style={idx === currentStep ? { backgroundColor: '#E6007A' } : undefined}
+            />
           ))}
-        </tbody>
-      </table>
+        </div>
+
+        <button
+          onClick={() => setStep(Math.min(STEPS.length - 1, currentStep + 1))}
+          disabled={currentStep === STEPS.length - 1}
+          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          style={{ backgroundColor: '#E6007A' }}
+        >
+          Next
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReviewField({
+  label,
+  value,
+  mono,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="p-3 bg-slate-50 rounded-xl">
+      <div className="text-xs text-slate-500 mb-1">{label}</div>
+      <div
+        className={`text-sm ${highlight ? 'font-semibold text-[#E6007A]' : 'text-slate-800'} ${
+          mono ? 'font-mono text-xs' : ''
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }

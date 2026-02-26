@@ -89,7 +89,7 @@ export function StepParentSelection({
                 {selectedParents.map(parent => (
                   <li key={parent.sku} className="flex justify-between">
                     <span className="text-emerald-600">{parent.plant} ({parent.sku})</span>
-                    <span className="font-medium">{parent.typeBreakdown?.[section] || 0}</span>
+                    <span className="font-medium">{parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] || 0}</span>
                   </li>
                 ))}
               </ul>
@@ -175,7 +175,7 @@ function SingleParentSelection({
         >
           <option value="">Select a parent...</option>
           {parents.map((parent) => {
-            const available = parent.typeBreakdown?.[section] ?? 0;
+            const available = parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] ?? 0;
             return (
               <option key={parent.sku} value={parent.sku || ''}>
                 {parent.plant}
@@ -203,7 +203,7 @@ function SingleParentSelection({
             <span className="text-emerald-600">SKU: {selectedParent.sku}</span>
           </div>
           <div className="mt-2 text-sm text-emerald-700">
-            Price: ₹{selectedParent.price} · Available in {section}: {selectedParent.typeBreakdown?.[section] ?? 0}
+            Price: ₹{selectedParent.price} · Available in {section}: {selectedParent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] ?? 0}
           </div>
         </div>
       )}

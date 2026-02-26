@@ -176,12 +176,12 @@ export function ViewSellers() {
       {message && (
         <Notification
           type={message.type}
-          message={message.text}
-          onClose={() => setMessage(null)}
+          text={message.text}
+          onDismiss={() => setMessage(null)}
         />
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm">
         <SearchBar
           value={search}
           onChange={setSearch}
@@ -192,8 +192,9 @@ export function ViewSellers() {
         />
 
         {loading ? (
-          <div className="py-12 text-center text-slate-500">
-            Loading sellers...
+          <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-500">
+            <span className="inline-block w-8 h-8 border-2 border-[#E6007A] border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm">Loading sellers...</span>
           </div>
         ) : (
           <SellerTable

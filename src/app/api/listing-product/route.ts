@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: result.items.map(withDerivedParentSkus),
+      data: result.items.map((item) => withDerivedParentSkus(item as ListingProduct)),
       pagination: {
         total: result.total,
         page: result.page,
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     console.log('Listing product saved to DB:', created._id);
     return NextResponse.json({
       success: true,
-      data: withDerivedParentSkus(created),
+      data: withDerivedParentSkus(created as ListingProduct),
     });
   } catch (error) {
     console.error('Error creating listing product:', error);
@@ -156,7 +156,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Validate the update data (partial validation)
-    const sanitized = await sanitizeUpdateData(updateData, existing);
+    const sanitized = await sanitizeUpdateData(updateData, existing as ListingProduct);
     if (!sanitized.success) {
       return NextResponse.json(
         { success: false, message: sanitized.message },
@@ -347,12 +347,12 @@ async function validateListingProductData(data: unknown): Promise<{
 
     // Combine categories
     if (parent.categories) {
-      parent.categories.forEach((cat) => combinedCategories.add(cat));
+      parent.categories.forEach((cat: string) => combinedCategories.add(cat));
     }
 
     // Combine collection IDs
     if (parent.collectionIds) {
-      parent.collectionIds.forEach((id) => combinedCollectionIds.add(String(id)));
+      parent.collectionIds.forEach((id: string) => combinedCollectionIds.add(String(id)));
     }
   }
 
@@ -417,7 +417,12 @@ async function validateListingProductData(data: unknown): Promise<{
     type: potType,
     finalName: (() => {
       const setQty = setQuantity > 0 ? setQuantity : 1;
-      const fromParents = generateFinalNameFromParents(parentItems, getParentForSku, potSize, potType, setQty);
+      const getParent = (sku: string): { finalName?: string; plant?: string } | undefined => {
+        const p = getParentForSku(sku);
+        if (!p) return undefined;
+        return { finalName: (p as { finalName?: string; plant?: string }).finalName, plant: (p as { finalName?: string; plant?: string }).plant };
+      };
+      const fromParents = generateFinalNameFromParents(parentItems, getParent, potSize, potType, setQty);
       return fromParents || generateFinalName({
         plant: String(d.plant).trim(),
         otherNames: d.otherNames ? String(d.otherNames).trim() : undefined,

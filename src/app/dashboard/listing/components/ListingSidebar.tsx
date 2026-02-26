@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from 'lucide-react';
 import { LayoutList, FolderTree, Package, Store, FileText, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon, Image as ImageIcon, ScrollText, Upload, List } from 'lucide-react';
-import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
+import { THEME_CONFIG, CHRISTMAS_COLORS, LISTING_SIDEBAR_THEME } from '@/config/theme';
 import {
   CATEGORY_SUB_TABS,
   PRODUCT_SUB_TABS,
@@ -397,11 +397,13 @@ function ListingNavSection({
                       ? 'bg-slate-100 text-slate-900 font-medium'
                       : 'bg-[#E6007A] text-white font-medium'
                     : isChristmasTheme
-                      ? 'text-slate-600 hover:bg-slate-50'
-                      : 'text-white/90 hover:bg-white/10'
+                      ? 'text-slate-600 hover:bg-slate-50 bg-transparent'
+                      : 'text-white/90 bg-transparent hover:bg-white/10'
                 }`}
                 style={
-                  isActive && isChristmasTheme
+                  isActive && !isChristmasTheme
+                    ? { backgroundColor: '#E6007A', color: '#fff' }
+                    : isActive && isChristmasTheme
                     ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
                     : {}
                 }
@@ -463,22 +465,27 @@ function ImageNavSection({
         <div className="ml-4 mt-0.5 space-y-0.5 pl-2">
           {IMAGE_SUB_TABS.map(({ id, label }) => {
             const Icon = subIcons[id] ?? ListIcon;
+            const isActive = activeTab === id;
             return (
               <button
                 key={id}
                 onClick={() => onTabChange(id)}
                 className={`w-full flex items-center gap-2 rounded-md py-2 px-2 text-left text-sm transition-all focus:outline-none focus-visible:ring-0 ${
-                  activeTab === id
+                  isActive
                     ? isChristmasTheme
                       ? 'bg-slate-100 text-slate-900 font-medium'
-                      : 'bg-[#E6007A] text-white font-medium'
+                      : 'font-medium'
                     : isChristmasTheme
                       ? 'text-slate-600 hover:bg-slate-50'
-                      : 'text-white/90 hover:bg-white/10'
+                      : 'hover:bg-white/10'
                 }`}
                 style={
-                  activeTab === id && isChristmasTheme
+                  isActive && isChristmasTheme
                     ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
+                    : isActive && !isChristmasTheme
+                    ? { backgroundColor: LISTING_SIDEBAR_THEME.accent, color: '#fff' }
+                    : !isChristmasTheme
+                    ? { color: LISTING_SIDEBAR_THEME.text }
                     : {}
                 }
               >
@@ -531,34 +538,43 @@ function SellerNavSection({
         )}
       </button>
       {!collapsed && sectionOpen && (
-        <div className="ml-4 mt-0.5 space-y-0.5 pl-2">
-          {SELLER_SUB_TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => onTabChange(id)}
-              className={`w-full flex items-center gap-2 rounded-md py-2 px-2 text-left text-sm transition-all focus:outline-none focus-visible:ring-0 ${
-                activeTab === id
-                  ? isChristmasTheme
-                    ? 'bg-slate-100 text-slate-900 font-medium'
-                    : 'bg-[#E6007A] text-white font-medium'
-                  : isChristmasTheme
-                    ? 'text-slate-600 hover:bg-slate-50'
-                    : 'text-white/90 hover:bg-white/10'
-              }`}
-              style={
-                activeTab === id && isChristmasTheme
-                  ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
-                  : {}
-              }
-            >
-              {id === 'seller-add' ? (
-                <Plus className="w-4 h-4 shrink-0" />
-              ) : (
-                <ListIcon className="w-4 h-4 shrink-0" />
-              )}
-              <span className="truncate">{label}</span>
-            </button>
-          ))}
+        <div className="ml-3 mt-1 space-y-1 pr-2">
+          {SELLER_SUB_TABS.map(({ id, label }) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => onTabChange(id)}
+                className={`w-full flex items-center gap-2.5 rounded-lg py-2.5 px-3 text-left text-sm font-medium transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-[#330033] ${
+                  isActive
+                    ? isChristmasTheme
+                      ? 'bg-slate-100 text-slate-900 shadow-sm'
+                      : 'text-white shadow-md'
+                    : isChristmasTheme
+                      ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      : 'text-white/85 hover:bg-white/10 hover:text-white'
+                }`}
+                style={
+                  isActive && isChristmasTheme
+                    ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
+                    : isActive && !isChristmasTheme
+                    ? {
+                        background: LISTING_SIDEBAR_THEME.accent,
+                        borderLeft: '3px solid rgba(255,255,255,0.35)',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      }
+                    : {}
+                }
+              >
+                {id === 'seller-add' ? (
+                  <Plus className="w-4 h-4 shrink-0" strokeWidth={2} />
+                ) : (
+                  <ListIcon className="w-4 h-4 shrink-0" strokeWidth={2} />
+                )}
+                <span className="truncate">{label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

@@ -28,7 +28,8 @@ export function ModalFooter({
         type="button"
         onClick={onSave}
         disabled={saving}
-        className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+        className="rounded-xl px-5 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+        style={{ backgroundColor: '#E6007A' }}
       >
         {saving ? (
           <span className="flex items-center gap-2">

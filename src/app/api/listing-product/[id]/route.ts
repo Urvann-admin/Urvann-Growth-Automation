@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ListingProductModel, withDerivedParentSkus } from '@/models/listingProduct';
+import { ListingProductModel, withDerivedParentSkus, type ListingProduct } from '@/models/listingProduct';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!id) {
       return NextResponse.json(
@@ -26,7 +26,7 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: withDerivedParentSkus(listingProduct),
+      data: withDerivedParentSkus(listingProduct as ListingProduct),
     });
   } catch (error) {
     console.error('Error fetching listing product:', error);
@@ -39,10 +39,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     
     if (!id) {
@@ -88,10 +88,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!id) {
       return NextResponse.json(

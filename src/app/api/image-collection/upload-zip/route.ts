@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       'zip',
       collectionName || undefined,
       undefined,
-      request.headers.get('x-forwarded-for') || request.ip || undefined
+      request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? undefined
     );
 
     // Validate ZIP file presence

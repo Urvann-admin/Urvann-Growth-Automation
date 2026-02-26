@@ -105,7 +105,7 @@ export function StepReview({
               <div className="text-right">
                 <div className="font-medium text-gray-900">₹{parent.price}</div>
                 <div className="text-sm text-gray-600">
-                  Available: {parent.typeBreakdown?.[section] || 0}
+                  Available: {parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] || 0}
                 </div>
               </div>
             </div>

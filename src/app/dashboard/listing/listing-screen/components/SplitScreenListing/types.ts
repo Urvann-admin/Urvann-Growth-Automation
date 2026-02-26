@@ -148,4 +148,6 @@ export interface ImageCollection {
 export interface SplitScreenListingProps {
   section: ListingSection;
   onSuccess?: (products: any[]) => void;
+  /** When true, sidebar is collapsed (72px); when false, open (240px). Used to position floating Save button. */
+  sidebarCollapsed?: boolean;
 }

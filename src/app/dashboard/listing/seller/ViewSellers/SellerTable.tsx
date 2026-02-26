@@ -17,57 +17,57 @@ export function SellerTable({
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead>
+        <thead className="bg-slate-50/80">
           <tr className="border-b border-slate-200">
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">
+            <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Seller name
             </th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">
+            <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Place
             </th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">
+            <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Multiplication factor
             </th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">
+            <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Bill no.
             </th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">
+            <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Phone number
             </th>
-            <th className="text-right py-3 px-3 font-semibold text-slate-700">
+            <th className="text-right py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Actions
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-slate-100">
           {sellers.map((seller) => (
             <tr
               key={String(seller._id)}
-              className="border-b border-slate-100 hover:bg-slate-50/50"
+              className="hover:bg-pink-50/30 transition-colors"
             >
-              <td className="py-3 px-3 text-slate-900">
+              <td className="py-3.5 px-4 font-medium text-slate-900">
                 {seller.seller_name ?? '—'}
               </td>
-              <td className="py-3 px-3 text-slate-600">
+              <td className="py-3.5 px-4 text-slate-600">
                 {seller.place ?? '—'}
               </td>
-              <td className="py-3 px-3 text-slate-600">
+              <td className="py-3.5 px-4 text-slate-600">
                 {seller.multiplicationFactor != null
                   ? seller.multiplicationFactor
                   : '—'}
               </td>
-              <td className="py-3 px-3 text-slate-600 font-mono text-xs">
+              <td className="py-3.5 px-4 text-slate-600 font-mono text-xs">
                 {seller.billNo ?? '—'}
               </td>
-              <td className="py-3 px-3 text-slate-600">
+              <td className="py-3.5 px-4 text-slate-600">
                 {seller.phoneNumber ?? '—'}
               </td>
-              <td className="py-3 px-3 text-right">
+              <td className="py-3.5 px-4 text-right">
                 <div className="flex items-center justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => onEdit(seller)}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-emerald-600 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-pink-50 hover:text-[#E6007A] transition-colors focus:outline-none focus:ring-2 focus:ring-pink-500/30"
                     aria-label="Edit seller"
                   >
                     <Pencil className="w-4 h-4" /> Edit
@@ -75,7 +75,7 @@ export function SellerTable({
                   <button
                     type="button"
                     onClick={() => onDelete(seller)}
-                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/30"
                     aria-label="Delete seller"
                   >
                     <Trash2 className="w-4 h-4" />

@@ -22,9 +22,9 @@ export function SearchBar({
   return (
     <div className="flex flex-wrap items-center gap-3 mb-4">
       {totalCount !== undefined && (
-        <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
           <span className="text-sm font-medium text-slate-700">{entityName}</span>
-          <span className="inline-flex items-center justify-center min-w-[1.75rem] h-6 rounded-md bg-slate-100 text-xs font-medium text-slate-600">
+          <span className="inline-flex items-center justify-center min-w-[1.75rem] h-6 rounded-lg bg-pink-50 text-xs font-medium text-[#E6007A]">
             {totalCount}
           </span>
         </div>
@@ -36,11 +36,12 @@ export function SearchBar({
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full h-10 pl-9 pr-4 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+          className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-shadow"
         />
         <button
           type="submit"
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+          className="rounded-xl px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: '#E6007A' }}
         >
           Search
         </button>

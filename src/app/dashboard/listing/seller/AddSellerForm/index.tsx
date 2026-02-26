@@ -101,7 +101,7 @@ export function AddSellerForm() {
   };
 
   const inputClass =
-    'w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow';
+    'w-full h-11 rounded-xl border border-slate-200 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-shadow';
 
   return (
     <div className="space-y-6">
@@ -110,16 +110,16 @@ export function AddSellerForm() {
       {message && (
         <Notification
           type={message.type}
-          message={message.text}
-          onClose={() => setMessage(null)}
+          text={message.text}
+          onDismiss={() => setMessage(null)}
         />
       )}
 
       <form
         onSubmit={handleSubmit}
-        className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-6"
+        className="rounded-xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm space-y-6"
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <label className="block sm:col-span-2">
             <span className="block text-sm font-medium text-slate-700 mb-1.5">
               Seller name
@@ -185,14 +185,15 @@ export function AddSellerForm() {
           </label>
         </div>
 
-        <div className="flex justify-end gap-3 pt-2">
+        <div className="flex justify-end pt-2 border-t border-slate-100">
           <button
             type="submit"
             disabled={saving}
-            className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="rounded-xl px-6 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-70 disabled:cursor-not-allowed transition-all min-w-[120px]"
+            style={{ backgroundColor: '#E6007A' }}
           >
             {saving ? (
-              <span className="flex items-center gap-2">
+              <span className="flex items-center justify-center gap-2">
                 <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 Saving...
               </span>

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
+import type { ImageItem } from '@/models/imageCollection';
 import type { 
   SplitScreenState, 
   SelectedImage, 
@@ -58,15 +59,15 @@ export function useSplitScreenState(section: ListingSection) {
         const flatImages: SelectedImage[] = [];
         let serialCounter = 1;
         collectionsWithImages.forEach(collection => {
-          collection.images.forEach(image => {
+          collection.images.forEach((image: ImageItem) => {
             flatImages.push({
               url: image.url,
               filename: image.filename,
               collectionId: collection._id,
               collectionName: collection.name,
               isTagged: false,
-              size: image.size,
-              uploadedAt: new Date(image.uploadedAt),
+              size: image.size ?? 0,
+              uploadedAt: image.uploadedAt ? new Date(image.uploadedAt) : new Date(),
               serial: serialCounter++,
             });
           });

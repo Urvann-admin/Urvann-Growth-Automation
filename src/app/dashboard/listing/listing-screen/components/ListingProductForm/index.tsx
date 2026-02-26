@@ -118,7 +118,8 @@ export function ListingProductForm({
         // Calculate minimum inventory quantity
         let minInventoryQuantity = Infinity;
         for (const parent of selectedParents) {
-          const availableQuantity = parent.typeBreakdown?.[section] || 0;
+          const breakdownKey = section === 'consumer' ? 'consumers' : section;
+          const availableQuantity = parent.typeBreakdown?.[breakdownKey] || 0;
           const inventoryForThisParent = Math.floor(availableQuantity / quantity);
           minInventoryQuantity = Math.min(minInventoryQuantity, inventoryForThisParent);
         }

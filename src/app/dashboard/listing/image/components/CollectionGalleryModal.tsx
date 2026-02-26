@@ -183,7 +183,7 @@ export function CollectionGalleryModal({ collectionId, onClose }: CollectionGall
           )}
           <img
             src={selectedUrl ? proxyUrl(selectedUrl) : ''}
-            alt={images[selectedIndex]?.filename ?? 'Image'}
+            alt={selectedIndex != null ? images[selectedIndex]?.filename ?? 'Image' : 'Image'}
             className="max-w-full max-h-[85vh] object-contain"
             onClick={(e) => e.stopPropagation()}
             referrerPolicy="no-referrer"

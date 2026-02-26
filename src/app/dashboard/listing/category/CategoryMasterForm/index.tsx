@@ -401,7 +401,7 @@ export function CategoryMasterForm() {
           <StepTypeAndRule
             type={data.type}
             ruleOperator={data.ruleOperator}
-            conditions={data.conditions}
+            conditions={data.conditions.map((c) => ({ field: c.field, value: String(c.value) }))}
             errors={errors}
             onTypeChange={(v) => setField('type', v)}
             onRuleOperatorChange={(v) => setField('ruleOperator', v)}

@@ -20,7 +20,7 @@ export function ParentQuantityDisplay({
 }: ParentQuantityDisplayProps) {
   const quantityAnalysis = useMemo(() => {
     const analysis = parents.map(parent => {
-      const availableQuantity = parent.typeBreakdown?.[section] || 0;
+      const availableQuantity = parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] || 0;
       const isValid = availableQuantity >= requiredQuantity;
       const maxPossible = Math.floor(availableQuantity / requiredQuantity);
       

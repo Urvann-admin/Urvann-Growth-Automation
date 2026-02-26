@@ -60,7 +60,7 @@ function convertToStoreHippoFormat(
   const payload: StoreHippoProductPayload = {
     name: displayName,
     alias: alias,
-    price: product.price,
+    price: product.price ?? 0,
     publish: '0',
     categories: product.categories,
     images: (product.images || []).map((url) => ({ image: url })),

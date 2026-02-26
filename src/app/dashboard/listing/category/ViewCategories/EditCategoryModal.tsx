@@ -117,9 +117,9 @@ export function EditCategoryModal({
               </label>
             </div>
             <SubstoreMultiPicker
-              selectedSubstores={editForm.substores}
-              hubOptions={hubOptions}
-              onSubstoresChange={(substores) => onChange({ ...editForm, substores })}
+              value={editForm.substores}
+              options={hubOptions}
+              onChange={(substores) => onChange({ ...editForm, substores })}
             />
           </ModalSection>
         </div>

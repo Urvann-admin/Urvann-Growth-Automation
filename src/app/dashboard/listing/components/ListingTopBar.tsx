@@ -43,7 +43,7 @@ export function ListingTopBar({
           : {}
       }
     >
-      <div className="px-6 py-3">
+      <div className="px-4 py-2">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button
@@ -55,22 +55,22 @@ export function ListingTopBar({
             </button>
             <div className="flex items-center gap-3">
               <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md ${isChristmasTheme ? '' : 'bg-[#E6007A]'}`}
+                className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md`}
                 style={
                   isChristmasTheme
                     ? {
                         background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.primary} 0%, ${CHRISTMAS_COLORS.secondary} 100%)`,
                       }
-                    : {}
+                    : { background: 'linear-gradient(135deg, #E6007A 0%, #330033 100%)' }
                 }
               >
                 <Icon className="w-6 h-6 text-white" strokeWidth={1.5} />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-slate-900">
+                <h1 className="text-base font-semibold text-slate-900">
                   {tab?.label ?? 'Listing'}
                 </h1>
-                <p className={`text-xs ${isChristmasTheme ? 'text-slate-600' : 'text-slate-500'}`}>
+                <p className={`text-[11px] ${isChristmasTheme ? 'text-slate-600' : 'text-slate-500'}`}>
                   {tab?.subtitle ?? 'Category Master, Parent Master & Listing'}
                 </p>
               </div>
@@ -78,29 +78,29 @@ export function ListingTopBar({
           </div>
 
           {showListingSubTabs && (
-            <div className="flex rounded-lg border border-slate-200 overflow-hidden bg-slate-50/80 p-0.5">
+            <div className="flex rounded-xl border border-pink-200 overflow-hidden bg-pink-50/50 p-0.5">
               <button
                 type="button"
                 onClick={() => onListingViewModeChange('create')}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                   listingViewMode === 'create'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-[#E6007A] shadow-sm'
+                    : 'text-slate-500 hover:text-[#E6007A]'
                 }`}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 Create listing
               </button>
               <button
                 type="button"
                 onClick={() => onListingViewModeChange('view-all')}
-                className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                   listingViewMode === 'view-all'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-white text-[#E6007A] shadow-sm'
+                    : 'text-slate-500 hover:text-[#E6007A]'
                 }`}
               >
-                <List className="w-4 h-4" />
+                <List className="w-3.5 h-3.5" />
                 All listed products
               </button>
             </div>

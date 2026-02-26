@@ -228,8 +228,8 @@ export function ViewParents() {
       {message && (
         <Notification
           type={message.type}
-          message={message.text}
-          onClose={() => setMessage(null)}
+          text={message.text}
+          onDismiss={() => setMessage(null)}
         />
       )}
 
