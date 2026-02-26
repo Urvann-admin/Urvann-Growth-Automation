@@ -67,7 +67,7 @@ export function ParentSelector({
   // Filter available parents (those with sufficient quantity)
   const availableParents = useMemo(() => {
     return parents.filter(parent => {
-      const availableQuantity = parent.typeBreakdown?.[section] || 0;
+      const availableQuantity = parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] || 0;
       return availableQuantity >= quantity;
     });
   }, [parents, section, quantity]);
@@ -191,7 +191,7 @@ export function ParentSelector({
                 <div className="py-2">
                   {availableParents.map((parent) => {
                     const isSelected = selectedParentSkus.includes(parent.sku || '');
-                    const availableQuantity = parent.typeBreakdown?.[section] || 0;
+                    const availableQuantity = parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] || 0;
                     
                     return (
                       <button

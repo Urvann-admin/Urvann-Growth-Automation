@@ -22,6 +22,7 @@ export interface ListingContentProps {
   listingSectionTab?: ListingSectionTab;
   onListingSectionTabChange?: (tab: ListingSectionTab) => void;
   listingViewMode?: ListingViewMode;
+  sidebarCollapsed?: boolean;
 }
 
 export function ListingContent({
@@ -29,6 +30,7 @@ export function ListingContent({
   listingSectionTab = 'listing',
   onListingSectionTabChange,
   listingViewMode = 'create',
+  sidebarCollapsed = false,
 }: ListingContentProps) {
   const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
 
@@ -61,6 +63,7 @@ export function ListingContent({
         <ListingSectionContent
           sectionTab={listingSectionTab}
           listingViewMode={listingViewMode}
+          sidebarCollapsed={sidebarCollapsed}
         />
       )}
       {activeTab === 'image-upload' && (
@@ -85,9 +88,11 @@ export function ListingContent({
 function ListingSectionContent({
   sectionTab,
   listingViewMode,
+  sidebarCollapsed = false,
 }: {
   sectionTab: ListingSectionTab;
   listingViewMode: ListingViewMode;
+  sidebarCollapsed?: boolean;
 }) {
   return (
     <div className="h-full">
@@ -98,6 +103,7 @@ function ListingSectionContent({
             console.log('Listing products created:', products);
             // Could add success handling here
           }}
+          sidebarCollapsed={sidebarCollapsed}
         />
       )}
 
@@ -114,21 +120,9 @@ function ListingSectionContent({
 
       {sectionTab !== 'listing' && (
         <div className="space-y-6 p-6">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">
-              {sectionTab === 'revival' && 'Revival Management'}
-              {sectionTab === 'growth' && 'Growth Management'}
-              {sectionTab === 'consumer' && 'Consumer Management'}
-            </h2>
-            <p className="text-slate-600">
-              Manage products allocated to {sectionTab} section.
-            </p>
-          </div>
-          
           <ViewListingProducts
             section={sectionTab}
             onCreateNew={() => {
-              // Could navigate to create form or show modal
               console.log(`Create new ${sectionTab} product`);
             }}
           />

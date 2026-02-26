@@ -307,7 +307,7 @@ export function ImageCollectionDropdown({
                           key={image.url}
                           type="button"
                           onClick={() => handleImageToggle(image)}
-                          disabled={disabled || isAtMaxLimit}
+                          disabled={Boolean(disabled || isAtMaxLimit)}
                           className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                             isSelected 
                               ? 'border-emerald-500 ring-2 ring-emerald-200' 

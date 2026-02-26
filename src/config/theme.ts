@@ -7,6 +7,15 @@ export const THEME_CONFIG = {
   ENABLE_CHRISTMAS_THEME: false, // Set to false to disable Christmas theme
 } as const;
 
+/** Default listing sidebar theme (purple + pink accent) */
+export const LISTING_SIDEBAR_THEME = {
+  sidebarBg: '#330033',
+  accent: '#E6007A',
+  accentHover: '#CC0068',
+  text: 'rgba(255,255,255,0.9)',
+  textHover: 'rgba(255,255,255,1)',
+} as const;
+
 export const CHRISTMAS_COLORS = {
   primary: '#DC2626', // Red-600
   secondary: '#B91C1C', // Red-700

@@ -18,7 +18,6 @@ interface CustomSelectProps {
   error?: string;
   disabled?: boolean;
   searchable?: boolean;
-  /** When true, hides the chevron dropdown indicator when a value is already selected */
   hideIndicatorWhenSelected?: boolean;
 }
 
@@ -26,7 +25,7 @@ export function CustomSelect({
   value,
   onChange,
   options,
-  placeholder = 'Select...',
+  placeholder = 'Choose...',
   label,
   error,
   disabled = false,
@@ -56,7 +55,6 @@ export function CustomSelect({
 
   useEffect(() => {
     if (open) {
-      // Calculate dropdown position
       if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect();
         setDropdownPosition({
@@ -65,7 +63,7 @@ export function CustomSelect({
           width: rect.width,
         });
       }
-      
+
       if (searchable) {
         queueMicrotask(() => {
           setSearch('');
@@ -78,32 +76,33 @@ export function CustomSelect({
   const selectedLabel = options.find((o) => o.value === value)?.label;
   const isReadOnlyWhenSelected = Boolean(hideIndicatorWhenSelected && value && selectedLabel);
 
-  const filteredOptions = searchable && search.trim()
-    ? options.filter((opt) =>
-        opt.label.toLowerCase().includes(search.toLowerCase().trim())
-      )
-    : options;
+  const filteredOptions =
+    searchable && search.trim()
+      ? options.filter((opt) => opt.label.toLowerCase().includes(search.toLowerCase().trim()))
+      : options;
 
   return (
     <div ref={ref} className="relative">
-      {label && (
-        <label className="block text-sm font-medium text-slate-700 mb-2">{label}</label>
-      )}
+      {label && <label className="block text-sm font-medium text-slate-700 mb-2">{label}</label>}
       <button
         ref={buttonRef}
         type="button"
         tabIndex={isReadOnlyWhenSelected ? -1 : 0}
         onClick={() => !disabled && !isReadOnlyWhenSelected && setOpen((o) => !o)}
         disabled={disabled}
-        className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-white text-left transition-colors ${
+        className={`w-full flex items-center justify-between px-3 py-2 text-sm border rounded-xl bg-white text-left transition-colors ${
           error
             ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
-            : 'border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-        } ${open ? 'ring-2 ring-blue-500 border-blue-500' : ''} ${
-          disabled ? 'opacity-50 cursor-not-allowed' : isReadOnlyWhenSelected ? 'cursor-default focus:outline-none focus:ring-0' : 'cursor-pointer'
+            : 'border-slate-200 hover:border-slate-300 focus:ring-2 focus:ring-pink-500 focus:border-pink-500'
+        } ${open ? 'ring-2 ring-pink-500 border-pink-500' : ''} ${
+          disabled
+            ? 'opacity-50 cursor-not-allowed'
+            : isReadOnlyWhenSelected
+            ? 'cursor-default focus:outline-none focus:ring-0'
+            : 'cursor-pointer'
         }`}
       >
-        <span className={value && selectedLabel ? 'text-slate-900' : 'text-slate-500'}>
+        <span className={value && selectedLabel ? 'text-slate-900' : 'text-slate-400'}>
           {value && selectedLabel ? selectedLabel : placeholder}
         </span>
         {!isReadOnlyWhenSelected && (
@@ -115,62 +114,64 @@ export function CustomSelect({
         )}
       </button>
 
-      {open && typeof document !== 'undefined' && createPortal(
-        <div
-          ref={dropdownRef}
-          className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
-          style={{
-            top: `${dropdownPosition.top}px`,
-            left: `${dropdownPosition.left}px`,
-            width: `${dropdownPosition.width}px`,
-          }}
-        >
-          {searchable && (
-            <div className="p-2 border-b border-slate-200">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search..."
-                  className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  onKeyDown={(e) => e.stopPropagation()}
-                />
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+            style={{
+              top: `${dropdownPosition.top}px`,
+              left: `${dropdownPosition.left}px`,
+              width: `${dropdownPosition.width}px`,
+            }}
+          >
+            {searchable && (
+              <div className="p-2 border-b border-slate-100">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search..."
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                    onKeyDown={(e) => e.stopPropagation()}
+                  />
+                </div>
               </div>
-            </div>
-          )}
-          <div className="max-h-56 overflow-y-auto">
-            {filteredOptions.length === 0 ? (
-              <p className="text-slate-500 text-sm p-3 text-center">No options found</p>
-            ) : (
-              filteredOptions.map((opt, index) => {
-                const isSelected = opt.value === value;
-                return (
-                  <button
-                    key={opt.value ? `${opt.value}-${index}` : `option-${index}`}
-                    type="button"
-                    onClick={() => {
-                      onChange(opt.value);
-                      setOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
-                      isSelected
-                        ? 'bg-indigo-50 text-indigo-700'
-                        : 'text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="text-sm font-medium">{opt.label}</span>
-                    {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
-                  </button>
-                );
-              })
             )}
-          </div>
-        </div>,
-        document.body
-      )}
+            <div className="max-h-56 overflow-y-auto">
+              {filteredOptions.length === 0 ? (
+                <p className="text-slate-500 text-sm p-3 text-center">No options found</p>
+              ) : (
+                filteredOptions.map((opt, index) => {
+                  const isSelected = opt.value === value;
+                  return (
+                    <button
+                      key={opt.value ? `${opt.value}-${index}` : `option-${index}`}
+                      type="button"
+                      onClick={() => {
+                        onChange(opt.value);
+                        setOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
+                        isSelected
+                          ? 'bg-pink-50 text-[#E6007A]'
+                          : 'text-slate-900 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="text-sm font-medium">{opt.label}</span>
+                      {isSelected && <Check className="w-4 h-4 text-[#E6007A] shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>,
+          document.body
+        )}
 
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
     </div>

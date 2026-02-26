@@ -152,7 +152,7 @@ export function ImageUploader() {
             }}
             className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
               uploadMode === 'files'
-                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                ? 'border-[#E6007A] bg-pink-50 text-[#E6007A]'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
@@ -167,7 +167,7 @@ export function ImageUploader() {
             }}
             className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
               uploadMode === 'folder'
-                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                ? 'border-[#E6007A] bg-pink-50 text-[#E6007A]'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
@@ -182,7 +182,7 @@ export function ImageUploader() {
             }}
             className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
               uploadMode === 'zip'
-                ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                ? 'border-[#E6007A] bg-pink-50 text-[#E6007A]'
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
             }`}
           >
@@ -204,7 +204,7 @@ export function ImageUploader() {
           onChange={(e) => setCollectionName(e.target.value)}
           placeholder="e.g., Summer 2026 Products"
           disabled={uploading}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-400"
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-transparent disabled:bg-slate-50 disabled:text-slate-400"
         />
       </div>
 
@@ -215,7 +215,7 @@ export function ImageUploader() {
         </h3>
         
         {uploadMode === 'zip' ? (
-          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-emerald-500 hover:bg-emerald-50 transition-all">
+          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-pink-500 hover:bg-pink-50 transition-all">
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <FileArchive className="w-8 h-8 text-slate-400 mb-2" />
               <p className="text-sm text-slate-600">
@@ -232,7 +232,7 @@ export function ImageUploader() {
             />
           </label>
         ) : uploadMode === 'folder' ? (
-          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-emerald-500 hover:bg-emerald-50 transition-all">
+          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-pink-500 hover:bg-pink-50 transition-all">
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <FolderOpen className="w-8 h-8 text-slate-400 mb-2" />
               <p className="text-sm text-slate-600">
@@ -251,7 +251,7 @@ export function ImageUploader() {
             />
           </label>
         ) : (
-          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-emerald-500 hover:bg-emerald-50 transition-all">
+          <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:border-pink-500 hover:bg-pink-50 transition-all">
             <div className="flex flex-col items-center justify-center pt-5 pb-6">
               <Upload className="w-8 h-8 text-slate-400 mb-2" />
               <p className="text-sm text-slate-600">
@@ -310,7 +310,8 @@ export function ImageUploader() {
         type="button"
         onClick={handleUpload}
         disabled={uploading || selectedFiles.length === 0}
-        className="w-full py-3 px-4 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+        className="w-full py-3 px-4 rounded-xl font-semibold text-white hover:opacity-90 disabled:opacity-70 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 bg-slate-300"
+        style={selectedFiles.length > 0 && !uploading ? { backgroundColor: '#E6007A' } : undefined}
       >
         {uploading ? (
           <>

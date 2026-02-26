@@ -181,55 +181,54 @@ export function ViewListingProducts({
     fetchProducts(newPage);
   };
 
-  const sectionTitle = section.charAt(0).toUpperCase() + section.slice(1);
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">
-            {sectionTitle} Products
-          </h2>
-          <p className="text-gray-600 mt-1">
-            Manage listing products in the {section} section
-          </p>
+    <div className="space-y-5">
+      {/* Stats widgets first */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl border border-slate-200 p-3">
+          <div className="text-base font-bold text-slate-900">{pagination.total}</div>
+          <div className="text-[11px] text-slate-600">Total Products</div>
         </div>
-        
-        {onCreateNew && (
-          <button
-            onClick={onCreateNew}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-          >
-            <Plus className="h-4 w-4" />
-            Create New Product
-          </button>
-        )}
+        <div className="bg-white rounded-xl border border-slate-200 p-3">
+          <div className="text-base font-bold text-[#E6007A]">
+            {products.filter(p => p.status === 'published').length}
+          </div>
+          <div className="text-[11px] text-slate-600">Published</div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-3">
+          <div className="text-base font-bold text-[#E6007A]">
+            {products.filter(p => p.status === 'listed').length}
+          </div>
+          <div className="text-[11px] text-slate-600">Listed</div>
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 p-3">
+          <div className="text-base font-bold text-slate-700">
+            {products.filter(p => p.status === 'draft').length}
+          </div>
+          <div className="text-[11px] text-slate-600">Draft</div>
+        </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Search */}
+      {/* Filters bar below widgets */}
+      <div className="bg-white rounded-lg border border-slate-200 p-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search products..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
               />
             </div>
           </div>
-
-          {/* Status Filter */}
-          <div className="sm:w-48">
+          <div className="sm:w-40">
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as ListingStatus | 'all')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
             >
               <option value="all">All Status</option>
               <option value="draft">Draft</option>
@@ -237,58 +236,33 @@ export function ViewListingProducts({
               <option value="published">Published</option>
             </select>
           </div>
-
-          {/* Actions */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap items-center">
             <button
               onClick={() => fetchProducts(pagination.page)}
               disabled={loading}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
-            
             <button
-              onClick={() => {
-                // TODO: Implement export functionality
-                toast.info('Export functionality coming soon');
-              }}
-              className="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              onClick={() => toast('Export functionality coming soon')}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50"
             >
-              <Download className="h-4 w-4" />
+              <Download className="h-3.5 w-3.5" />
               Export
             </button>
+            {onCreateNew && (
+              <button
+                onClick={onCreateNew}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: '#E6007A' }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Create New Product
+              </button>
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-gray-900">{pagination.total}</div>
-          <div className="text-sm text-gray-600">Total Products</div>
-        </div>
-        
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-green-600">
-            {products.filter(p => p.status === 'published').length}
-          </div>
-          <div className="text-sm text-gray-600">Published</div>
-        </div>
-        
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-blue-600">
-            {products.filter(p => p.status === 'listed').length}
-          </div>
-          <div className="text-sm text-gray-600">Listed</div>
-        </div>
-        
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <div className="text-2xl font-bold text-gray-600">
-            {products.filter(p => p.status === 'draft').length}
-          </div>
-          <div className="text-sm text-gray-600">Draft</div>
         </div>
       </div>
 
@@ -303,46 +277,42 @@ export function ViewListingProducts({
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between bg-white px-6 py-3 border border-gray-200 rounded-lg">
-          <div className="text-sm text-gray-700">
+        <div className="flex items-center justify-between bg-white px-4 py-2.5 border border-slate-200 rounded-xl">
+          <div className="text-xs text-slate-700">
             Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
             {Math.min(pagination.page * pagination.limit, pagination.total)} of{' '}
             {pagination.total} results
           </div>
-          
           <div className="flex gap-2">
             <button
               onClick={() => handlePageChange(pagination.page - 1)}
               disabled={pagination.page <= 1}
-              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2.5 py-1 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
-            
-            {/* Page numbers */}
             {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
               const pageNum = pagination.page - 2 + i;
               if (pageNum < 1 || pageNum > pagination.totalPages) return null;
-              
               return (
                 <button
                   key={pageNum}
                   onClick={() => handlePageChange(pageNum)}
-                  className={`px-3 py-1 text-sm border rounded ${
+                  className={`px-2.5 py-1 text-xs border rounded-lg ${
                     pageNum === pagination.page
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'border-gray-300 hover:bg-gray-50'
+                      ? 'text-white border-transparent'
+                      : 'border-slate-200 hover:bg-slate-50'
                   }`}
+                  style={pageNum === pagination.page ? { backgroundColor: '#E6007A' } : undefined}
                 >
                   {pageNum}
                 </button>
               );
             })}
-            
             <button
               onClick={() => handlePageChange(pagination.page + 1)}
               disabled={pagination.page >= pagination.totalPages}
-              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-2.5 py-1 text-xs border border-slate-200 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next
             </button>

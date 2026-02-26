@@ -62,7 +62,7 @@ export function validateListingProductForm(
   const quantity = isParentListing ? 1 : Number(formData.quantity);
 
   if (!isParentListing) {
-    if (!formData.quantity || formData.quantity === '') {
+    if (formData.quantity == null) {
       errors.quantity = 'Quantity is required';
     } else if (isNaN(quantity) || quantity <= 0) {
       errors.quantity = 'Quantity must be a positive number';

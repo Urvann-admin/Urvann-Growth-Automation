@@ -25,7 +25,7 @@ export function ParentSelectionPanel({
   // Filter parents based on search and availability
   const filteredParents = useMemo(() => {
     let filtered = availableParents.filter(parent => {
-      const availableQuantity = parent.typeBreakdown?.[section] || 0;
+      const availableQuantity = parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] || 0;
       return availableQuantity > 0;
     });
 
@@ -51,7 +51,7 @@ export function ParentSelectionPanel({
   };
 
   const getAvailableQuantity = (parent: ParentMaster) => {
-    return parent.typeBreakdown?.[section] || 0;
+    return parent.typeBreakdown?.[section === 'consumer' ? 'consumers' : section] || 0;
   };
 
   if (isLoading) {

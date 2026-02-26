@@ -39,7 +39,7 @@ export function StepReview({ data, finalName, categories, skuPreview = '', selec
   );
   const selectedSeller = data.seller ? procurementSellers.find((s) => String(s._id) === data.seller) : null;
   const listingPrice =
-    selectedSeller && typeof data.price === 'number' && data.price !== ''
+    selectedSeller && typeof data.price === 'number'
       ? data.price * (selectedSeller.multiplicationFactor ?? 1)
       : null;
 

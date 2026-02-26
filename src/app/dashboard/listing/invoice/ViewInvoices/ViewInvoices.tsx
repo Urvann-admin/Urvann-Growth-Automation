@@ -352,122 +352,117 @@ export function ViewInvoices() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900">Purchase Master</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Manage your inventory purchases and invoices efficiently.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setImportModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-          >
-            <FileText className="w-4 h-4" />
-            Import Invoice
-          </button>
-          <button
-            type="button"
-            onClick={() => setAddModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-          >
-            <Plus className="w-4 h-4" />
-            Add Invoice
-          </button>
-          <button
-            type="button"
-            onClick={() => setOverheadModalOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-          >
-            <Calculator className="w-4 h-4" />
-            Add Overhead
-          </button>
-          <button
-            type="button"
-            onClick={handleSavePending}
-            disabled={pendingCount === 0 || savingPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {savingPending ? (
-              <>
-                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Saving...
-              </>
-            ) : (
-              <>Save{pendingCount > 0 ? ` (${pendingCount})` : ''}</>
-            )}
-          </button>
-        </div>
-      </div>
-
       {message && (
         <Notification type={message.type} text={message.text} onDismiss={() => setMessage(null)} />
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      {!loading && combinedAnalytics && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6" aria-label="Combined analytics">
+            <div className="rounded-xl border border-[#330033]/20 bg-[#330033]/5 px-4 py-3 shadow-sm ring-1 ring-[#330033]/10">
+              <p className="text-xs font-medium uppercase tracking-wider text-[#330033]">Bill Total</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[#330033]">
+                {formatAmount(combinedAnalytics.billTotalAmount)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#330033]/20 bg-[#330033]/5 px-4 py-3 shadow-sm ring-1 ring-[#330033]/10">
+              <p className="text-xs font-medium uppercase tracking-wider text-[#330033]">Grand Total</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[#330033]">
+                {formatAmount(combinedAnalytics.grandTotalAmount)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#330033]/20 bg-[#330033]/5 px-4 py-3 shadow-sm ring-1 ring-[#330033]/10">
+              <p className="text-xs font-medium uppercase tracking-wider text-[#330033]">Listing</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[#330033]">
+                {formatAmount(combinedAnalytics.amountListing)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#330033]/20 bg-[#330033]/5 px-4 py-3 shadow-sm ring-1 ring-[#330033]/10">
+              <p className="text-xs font-medium uppercase tracking-wider text-[#330033]">Revival</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[#330033]">
+                {formatAmount(combinedAnalytics.amountRevival)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#330033]/20 bg-[#330033]/5 px-4 py-3 shadow-sm ring-1 ring-[#330033]/10">
+              <p className="text-xs font-medium uppercase tracking-wider text-[#330033]">Growth</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[#330033]">
+                {formatAmount(combinedAnalytics.amountGrowth)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#330033]/20 bg-[#330033]/5 px-4 py-3 shadow-sm ring-1 ring-[#330033]/10">
+              <p className="text-xs font-medium uppercase tracking-wider text-[#330033]">Consumers</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-[#330033]">
+                {formatAmount(combinedAnalytics.amountConsumers)}
+              </p>
+            </div>
+          </div>
+      )}
+
+      <div className="rounded-xl border border-[#330033]/20 bg-white p-4 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-600">RECORDS</span>
-            <span className="inline-flex items-center justify-center min-w-8 h-7 rounded-full bg-slate-200 px-2.5 text-sm font-medium text-slate-700">
+          <div className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#330033]/25 bg-[#330033]/10 px-3">
+            <span className="text-sm font-medium text-[#330033]">RECORDS</span>
+            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-white border border-[#330033]/25 px-2 text-sm font-medium text-[#330033] shadow-sm">
               {purchases.length}
             </span>
-          </span>
-          <form onSubmit={handleSearchSubmit} className="relative flex-1 min-w-[200px] flex gap-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          </div>
+          <form onSubmit={handleSearchSubmit} className="relative flex flex-1 min-w-[200px] h-10 gap-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#330033]/60 pointer-events-none" />
             <input
               type="text"
               placeholder="Search bill, product code, parent SKU..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-10 pl-9 pr-4 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+              className="h-full w-full pl-9 pr-4 rounded-lg border border-[#330033]/25 bg-white text-sm text-slate-900 placeholder:text-[#330033]/50 focus:outline-none focus:ring-2 focus:ring-[#330033]/30 focus:border-[#330033]"
             />
             <button
               type="submit"
-              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 shrink-0"
+              className="h-full rounded-lg bg-[#330033] px-4 text-sm font-medium text-white hover:bg-[#4a004a] focus:outline-none focus:ring-2 focus:ring-[#330033]/40 shrink-0"
             >
               Search
             </button>
           </form>
-        </div>
-
-        {!loading && combinedAnalytics && (
-          <div className="mb-6">
-            <div
-              className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border-2 border-emerald-400 bg-emerald-50 px-4 py-3 text-sm shadow-sm"
-              aria-label="Combined analytics"
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setImportModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#330033] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4a004a] focus:outline-none focus:ring-2 focus:ring-[#330033]/40"
             >
-              <span className="shrink-0 font-bold text-emerald-800">
-                {combinedAnalytics.billNumber}
-              </span>
-              <span className="shrink-0 border-l border-emerald-300 pl-4 text-emerald-800">
-                <span className="text-emerald-700">BILL TOTAL</span>{' '}
-                <span className="font-semibold">{formatAmount(combinedAnalytics.billTotalAmount)}</span>
-              </span>
-              <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">GRAND TOTAL</span>{' '}
-                <span className="font-semibold">{formatAmount(combinedAnalytics.grandTotalAmount)}</span>
-              </span>
-              <span className="shrink-0 border-l border-emerald-300 pl-4 text-emerald-800">
-                <span className="text-emerald-700">LISTING</span>{' '}
-                <span className="font-semibold">{formatAmount(combinedAnalytics.amountListing)}</span>
-              </span>
-              <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">REVIVAL</span>{' '}
-                <span className="font-semibold">{formatAmount(combinedAnalytics.amountRevival)}</span>
-              </span>
-              <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">GROWTH</span>{' '}
-                <span className="font-semibold">{formatAmount(combinedAnalytics.amountGrowth)}</span>
-              </span>
-              <span className="shrink-0 text-emerald-800">
-                <span className="text-emerald-700">CONSUMERS</span>{' '}
-                <span className="font-semibold">{formatAmount(combinedAnalytics.amountConsumers)}</span>
-              </span>
-            </div>
+              <FileText className="w-4 h-4" />
+              Import Invoice
+            </button>
+            <button
+              type="button"
+              onClick={() => setAddModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#E6007A] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#cc0066] focus:outline-none focus:ring-2 focus:ring-[#E6007A]/40"
+            >
+              <Plus className="w-4 h-4" />
+              Add Invoice
+            </button>
+            <button
+              type="button"
+              onClick={() => setOverheadModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-[#330033]/30 bg-white px-4 py-2.5 text-sm font-medium text-[#330033] hover:bg-[#330033]/10 focus:outline-none focus:ring-2 focus:ring-[#330033]/30"
+            >
+              <Calculator className="w-4 h-4" />
+              Add Overhead
+            </button>
+            <button
+              type="button"
+              onClick={handleSavePending}
+              disabled={pendingCount === 0 || savingPending}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#330033] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#4a004a] focus:outline-none focus:ring-2 focus:ring-[#330033]/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {savingPending ? (
+                <>
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Saving...
+                </>
+              ) : (
+                <>Save{pendingCount > 0 ? ` (${pendingCount})` : ''}</>
+              )}
+            </button>
           </div>
-        )}
+        </div>
 
         {loading ? (
           <div className="py-12 text-center text-slate-500">Loading...</div>

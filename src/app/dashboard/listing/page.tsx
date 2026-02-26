@@ -101,6 +101,7 @@ export default function ListingPage() {
             listingSectionTab={listingSectionTab}
             onListingSectionTabChange={setListingSectionTab}
             listingViewMode={listingViewMode}
+            sidebarCollapsed={sidebarCollapsed}
           />
         </div>
       </div>

@@ -54,8 +54,10 @@ export async function GET(request: NextRequest) {
     }
 
     const bytes = await body.transformToByteArray();
+    const copy = new Uint8Array(bytes.length);
+    copy.set(bytes);
 
-    return new NextResponse(bytes, {
+    return new NextResponse(new Blob([copy]), {
       status: 200,
       headers: {
         'Content-Type': contentType,

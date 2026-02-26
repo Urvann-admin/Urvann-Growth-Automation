@@ -127,7 +127,7 @@ export async function getAutoCategoriesForProduct(product: ProductForRuleEvaluat
  */
 export async function getCategoriesMatchingRule(rule: Rule, product: ProductForRuleEvaluation): Promise<Category[]> {
   try {
-    const categories = await CategoryModel.findAll();
+    const categories = await CategoryModel.findAll() as Category[];
     return categories.filter(category => 
       category.rule && JSON.stringify(category.rule) === JSON.stringify(rule)
     );

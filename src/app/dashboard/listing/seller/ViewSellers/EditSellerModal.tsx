@@ -30,7 +30,7 @@ export function EditSellerModal({
   onChange,
 }: EditSellerModalProps) {
   const inputClass =
-    'w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition-shadow';
+    'w-full h-10 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-shadow';
 
   return (
     <ModalContainer isOpen={isOpen} onClose={onClose}>

@@ -108,7 +108,10 @@ export function ViewCategories() {
       editForm.type === 'Automatic' && Array.isArray(conditionsOrItems) && conditionsOrItems?.length
         ? {
             rule_operator: formWithRule.ruleOperator ?? 'AND',
-            items: conditionsOrItems.filter((c: { value?: unknown }) => c && String((c.value ?? '')).trim() !== ''),
+            items: conditionsOrItems.filter((c: unknown) => {
+              const x = c as { value?: unknown };
+              return x != null && String((x.value ?? '')).trim() !== '';
+            }),
           }
         : undefined;
 
@@ -190,8 +193,8 @@ export function ViewCategories() {
       {message && (
         <Notification
           type={message.type}
-          message={message.text}
-          onClose={() => setMessage(null)}
+          text={message.text}
+          onDismiss={() => setMessage(null)}
         />
       )}
 

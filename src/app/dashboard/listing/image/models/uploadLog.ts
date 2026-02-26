@@ -83,7 +83,7 @@ export class UploadLogModel {
       {
         $push: { logs: entry },
         $set: { updatedAt: new Date() },
-      }
+      } as Record<string, unknown>
     );
     return entry;
   }

@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       uploadType,
       collectionName || undefined,
       undefined,
-      request.headers.get('x-forwarded-for') || request.ip || undefined
+      request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip') ?? undefined
     );
 
     // Extract files from FormData

@@ -125,7 +125,7 @@ export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, 
                 <span className="inline-flex items-center gap-1.5">
                   {p.parentSku ?? '—'}
                   {p.parentSku && (
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white" aria-hidden>
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#E6007A] text-white" aria-hidden>
                       <Plus className="w-3 h-3" />
                     </span>
                   )}
@@ -136,7 +136,7 @@ export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, 
                   <button
                     type="button"
                     onClick={() => onEdit(p)}
-                    className="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-emerald-600"
+                    className="inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-[#330033]/10 hover:text-[#330033]"
                     aria-label="Edit"
                     title="Edit"
                   >
