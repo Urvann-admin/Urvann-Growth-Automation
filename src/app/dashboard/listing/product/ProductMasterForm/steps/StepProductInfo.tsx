@@ -1,5 +1,8 @@
 'use client';
 
+import { CustomSelect } from '../../../components/CustomSelect';
+import { COLOUR_OPTIONS } from '../types';
+
 export interface StepProductInfoProps {
   plant: string;
   otherNames: string;
@@ -63,16 +66,13 @@ export function StepProductInfo({
             placeholder="Plant variety"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Colour</label>
-          <input
-            type="text"
-            value={colour}
-            onChange={(e) => onFieldChange('colour', e.target.value)}
-            className={`${inputBase} ${inputNormal}`}
-            placeholder="Plant colour"
-          />
-        </div>
+        <CustomSelect
+          label="Colour"
+          value={colour}
+          onChange={(v) => onFieldChange('colour', v)}
+          options={COLOUR_OPTIONS}
+          placeholder="Select Colour"
+        />
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Height (feet)</label>
           <input
@@ -108,7 +108,7 @@ export function StepProductInfo({
           placeholder="Auto-generated"
         />
         <p className="text-xs text-slate-500 mt-1">
-          Generated from: plant + other names + variety + colour + in + size + inch + type
+          Generated from: plant + other names + variety + colour + in + size + inch + pot type
         </p>
       </div>
     </div>

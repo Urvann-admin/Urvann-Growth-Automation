@@ -8,15 +8,14 @@ const TEMPLATE_HEADERS = [
   'height',
   'mossStick',
   'size',
-  'type',
+  'potType',
   'description',
   'categories',
-  'price',
-  'hub',
+  'sellingPrice',
   'seller',
 ];
 
-/** One example row with placeholder values. categories is comma-separated (use quoted field in CSV). */
+/** One example row. potType: bag or pot. Parent is live in all hubs; SKUs are generated on import. */
 const EXAMPLE_ROW = [
   'Rose',
   'Rosa',
@@ -25,11 +24,10 @@ const EXAMPLE_ROW = [
   '2',
   'No',
   '6',
-  'Nursery Pot',
+  'pot',
   'Beautiful flowering plant',
   'indoor-plants,outdoor-plants',
   '299',
-  'Whitefield',
   '',
 ];
 

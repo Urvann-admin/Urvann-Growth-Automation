@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
+import type { ParentMaster } from '@/models/parentMaster';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
 import { deleteMultipleImagesFromS3 } from '@/lib/s3Upload';
+import { serializeParent } from '../route';
 
 export async function GET(
   request: NextRequest,
@@ -26,7 +28,7 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: product });
+    return NextResponse.json({ success: true, data: serializeParent(product as ParentMaster) });
   } catch (error) {
     console.error('Error fetching product:', error);
     return NextResponse.json(
@@ -64,10 +66,10 @@ export async function PUT(
 
     const existing = await ParentMasterModel.findById(id);
     const updatingSeller = updateData.seller !== undefined;
-    const updatingPrice = updateData.price !== undefined;
+    const updatingPrice = updateData.sellingPrice !== undefined || updateData.price !== undefined;
     if (updatingSeller || updatingPrice) {
       const sellerId = (updateData.seller ?? existing?.seller) != null ? String(updateData.seller ?? existing?.seller).trim() : null;
-      const priceVal = updateData.price != null ? Number(updateData.price) : (existing && 'price' in existing ? Number(existing.price) : null);
+      const priceVal = updateData.sellingPrice != null ? Number(updateData.sellingPrice) : (updateData.price != null ? Number(updateData.price) : (existing && 'sellingPrice' in existing ? Number((existing as ParentMaster).sellingPrice) : null) ?? (existing && 'price' in existing ? Number((existing as ParentMaster).price) : null));
       if (sellerId && priceVal != null && !isNaN(priceVal)) {
         const procurementSeller = await ProcurementSellerMasterModel.findById(sellerId);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
@@ -76,7 +78,7 @@ export async function PUT(
     }
 
     const result = await ParentMasterModel.update(id, updateData);
-    
+
     if (result.matchedCount === 0) {
       return NextResponse.json(
         { success: false, message: 'Product not found' },
@@ -84,13 +86,11 @@ export async function PUT(
       );
     }
 
-    // Fetch the updated product
     const updated = await ParentMasterModel.findById(id);
-    
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       message: 'Product updated successfully',
-      data: updated
+      data: serializeParent(updated as ParentMaster),
     });
   } catch (error) {
     console.error('Error updating product:', error);

@@ -4,13 +4,11 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Check, ChevronDown, Search } from 'lucide-react';
 import type { Category } from '@/models/category';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
-import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { CustomSelect } from '../../components/CustomSelect';
-import { MOSS_STICK_OPTIONS, PLANT_TYPES } from '../ProductMasterForm/types';
+import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, COLOUR_OPTIONS } from '../ProductMasterForm/types';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 
 interface EditParentForm {
-  sku: string;
   plant: string;
   otherNames: string;
   variety: string;
@@ -18,12 +16,11 @@ interface EditParentForm {
   height: number | '';
   mossStick: string;
   size: number | '';
-  type: string;
+  potType: string;
   seller: string;
   categories: string[];
-  price: number | '';
+  sellingPrice: number | '';
   images: string[];
-  hub: string;
 }
 
 interface EditParentModalProps {
@@ -72,10 +69,6 @@ export function EditParentModal({
     { value: '', label: 'Select Procurement Seller' },
     ...sellers.map((s) => ({ value: String(s._id), label: s.seller_name })),
   ];
-  const hubOptions = [
-    { value: '', label: 'Select Hub' },
-    ...HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub })),
-  ];
 
   const filteredCategories = categories.filter((cat) =>
     categorySearch.trim()
@@ -94,16 +87,6 @@ export function EditParentModal({
         <div className="p-6 space-y-6">
           <ModalSection title="Basics">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block sm:col-span-2">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">SKU</span>
-                <input
-                  type="text"
-                  readOnly
-                  value={editForm.sku || '—'}
-                  className={`${inputClass} bg-slate-50 text-slate-600 cursor-default`}
-                  aria-label="SKU (auto-filled)"
-                />
-              </label>
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Plant name</span>
                 <input
@@ -131,15 +114,13 @@ export function EditParentModal({
                   className={inputClass}
                 />
               </label>
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Colour</span>
-                <input
-                  type="text"
-                  value={editForm.colour}
-                  onChange={(e) => onChange({ ...editForm, colour: e.target.value })}
-                  className={inputClass}
-                />
-              </label>
+              <CustomSelect
+                label="Colour"
+                value={editForm.colour}
+                onChange={(v) => onChange({ ...editForm, colour: v })}
+                options={COLOUR_OPTIONS}
+                placeholder="Select Colour"
+              />
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Height (feet)</span>
                 <input
@@ -182,11 +163,11 @@ export function EditParentModal({
                 placeholder="Select Moss Stick"
               />
               <CustomSelect
-                label="Type"
-                value={editForm.type}
-                onChange={(v) => onChange({ ...editForm, type: v })}
-                options={PLANT_TYPES}
-                placeholder="Select Type"
+                label="Pot Type"
+                value={editForm.potType}
+                onChange={(v) => onChange({ ...editForm, potType: v })}
+                options={POT_TYPE_OPTIONS}
+                placeholder="Select Pot Type"
               />
               <CustomSelect
                 label="Procurement Seller"
@@ -195,35 +176,28 @@ export function EditParentModal({
                 options={sellerOptions}
                 placeholder="Select Procurement Seller"
               />
-              <CustomSelect
-                label="Hub"
-                value={editForm.hub}
-                onChange={(v) => onChange({ ...editForm, hub: v })}
-                options={hubOptions}
-                placeholder="Select Hub"
-              />
             </div>
           </ModalSection>
 
           <ModalSection title="Pricing">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Price</span>
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Selling Price</span>
                 <input
                   type="number"
                   min={0}
                   step={0.01}
-                  value={editForm.price}
+                  value={editForm.sellingPrice}
                   onChange={(e) =>
                     onChange({
                       ...editForm,
-                      price: e.target.value ? parseFloat(e.target.value) : '',
+                      sellingPrice: e.target.value ? parseFloat(e.target.value) : '',
                     })
                   }
                   className={inputClass}
                 />
               </label>
-              <p className="text-xs text-slate-500 self-end pb-2.5">Listing price is computed on save (price × procurement seller factor).</p>
+              <p className="text-xs text-slate-500 self-end pb-2.5">Listing price is computed on save (selling price × procurement seller factor).</p>
             </div>
           </ModalSection>
 

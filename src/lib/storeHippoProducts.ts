@@ -45,6 +45,13 @@ export interface StoreHippoSyncOptions {
   collectionAliases?: string[];
 }
 
+function getPrimarySku(product: ParentMaster): string | undefined {
+  return product.sku ?? (product.skuList && product.skuList[0]) ?? (product.skus && Object.values(product.skus)[0]);
+}
+function getPrice(product: ParentMaster): number | undefined {
+  return product.sellingPrice ?? product.price;
+}
+
 // Convert ParentMaster to StoreHippo format (legacy; parent master no longer syncs)
 function convertToStoreHippoFormat(
   product: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>,
@@ -56,11 +63,13 @@ function convertToStoreHippoFormat(
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .substring(0, 50);
+  const primarySku = getPrimarySku(product as ParentMaster);
+  const price = getPrice(product as ParentMaster);
 
   const payload: StoreHippoProductPayload = {
     name: displayName,
     alias: alias,
-    price: product.price ?? 0,
+    price: price ?? 0,
     publish: '0',
     categories: product.categories,
     images: (product.images || []).map((url) => ({ image: url })),
@@ -77,8 +86,8 @@ function convertToStoreHippoFormat(
   if (product.seller) {
     payload.seller = product.seller;
   }
-  if (product.sku) {
-    payload.sku = product.sku;
+  if (primarySku) {
+    payload.sku = primarySku;
   }
   if (product.description) {
     payload.description = product.description;
@@ -178,7 +187,8 @@ export async function updateProductInStoreHippo(
         .substring(0, 50);
     }
     
-    if (product.price !== undefined) payload.price = product.price;
+    const priceVal = getPrice(product as ParentMaster);
+    if (priceVal !== undefined) payload.price = priceVal;
     if (product.categories) payload.categories = product.categories;
     if (options?.collectionAliases && options.collectionAliases.length > 0) {
       payload.collections = options.collectionAliases;
@@ -186,7 +196,8 @@ export async function updateProductInStoreHippo(
     if (product.images) payload.images = product.images.map((url) => ({ image: url }));
     if (product.substores && product.substores.length > 0) payload.substore = product.substores;
     if (product.seller) payload.seller = product.seller;
-    if (product.sku) payload.sku = product.sku;
+    const skuVal = getPrimarySku(product as ParentMaster);
+    if (skuVal) payload.sku = skuVal;
     if (product.description) payload.description = product.description;
 
     console.log(`[StoreHippo] Updating product: ${storeHippoId}`);

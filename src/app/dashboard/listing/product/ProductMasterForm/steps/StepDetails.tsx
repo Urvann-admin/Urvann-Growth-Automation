@@ -1,12 +1,12 @@
 'use client';
 
 import { CustomSelect } from '../../../components/CustomSelect';
-import { MOSS_STICK_OPTIONS, PLANT_TYPES } from '../types';
+import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS } from '../types';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
 
 export interface StepDetailsProps {
   mossStick: string;
-  type: string;
+  potType: string;
   seller: string;
   description: string;
   sellerOptions: { value: string; label: string }[];
@@ -17,7 +17,7 @@ export interface StepDetailsProps {
 
 export function StepDetails({
   mossStick,
-  type,
+  potType,
   seller,
   description,
   sellerOptions,
@@ -39,11 +39,11 @@ export function StepDetails({
           placeholder="Select Moss Stick"
         />
         <CustomSelect
-          label="Type"
-          value={type}
-          onChange={(v) => onFieldChange('type', v)}
-          options={PLANT_TYPES}
-          placeholder="Select Type"
+          label="Pot Type"
+          value={potType}
+          onChange={(v) => onFieldChange('potType', v)}
+          options={POT_TYPE_OPTIONS}
+          placeholder="Select Pot Type"
         />
         <CustomSelect
           label="Procurement Seller"
@@ -54,7 +54,7 @@ export function StepDetails({
         />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Description *</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
         <RichTextEditor
           value={description}
           onChange={(v) => { onFieldChange('description', v); onClearError('description'); }}

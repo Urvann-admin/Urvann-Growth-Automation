@@ -1,10 +1,20 @@
-import { ObjectId } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
-import { getSubstoresByHub } from '@/shared/constants/hubs';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { generateParentSKU } from '@/lib/skuGenerator';
+
+/** Serialize parent for API response: add computed `sku` and `price` for backward compatibility */
+export function serializeParent(doc: ParentMaster | null): (ParentMaster & { sku?: string; price?: number }) | null {
+  if (!doc) return null;
+  const primarySku =
+    (doc.skuList && doc.skuList[0]) ??
+    (doc.skus && Object.values(doc.skus).length > 0 ? Object.values(doc.skus)[0] : undefined) ??
+    doc.sku;
+  const price = doc.sellingPrice ?? doc.price;
+  return { ...doc, sku: primarySku, price };
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,12 +33,15 @@ export async function GET(request: NextRequest) {
     
     if (search) {
       const regex = new RegExp(search, 'i');
+      const trimmed = String(search).trim();
       query.$or = [
         { plant: regex },
         { otherNames: regex },
         { variety: regex },
+        { potType: regex },
         { type: regex },
-        { sku: regex },
+        { skuList: trimmed },
+        { sku: trimmed },
       ];
     }
     
@@ -50,9 +63,11 @@ export async function GET(request: NextRequest) {
       sortOrder as 1 | -1
     );
 
+    const data = (result.items as ParentMaster[]).map((item) => serializeParent(item));
+
     return NextResponse.json({
       success: true,
-      data: result.items,
+      data,
       pagination: {
         total: result.total,
         page: result.page,
@@ -90,13 +105,13 @@ export async function POST(request: NextRequest) {
 
       for (let i = 0; i < validatedItems.length; i++) {
         const item = validatedItems[i];
-        if (item.seller && item.price != null) {
+        if (item.seller && item.sellingPrice != null) {
           const procurementSeller = await ProcurementSellerMasterModel.findById(item.seller);
           const factor = procurementSeller?.multiplicationFactor ?? 1;
-          (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.price) * factor;
+          (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.sellingPrice) * factor;
         }
       }
-      
+
       const result = await ParentMasterModel.createMany(validatedItems);
       return NextResponse.json({
         success: true,
@@ -114,35 +129,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let sku: string | undefined;
-    if (validated.data!.hub && validated.data!.plant) {
-      try {
-        // generateParentSKU calls getNextCounter and increments the hub counter (preview does not)
-        sku = await generateParentSKU(validated.data!.hub, validated.data!.plant);
-        console.log(`Generated SKU: ${sku} for hub: ${validated.data!.hub}, product: ${validated.data!.plant}`);
-      } catch (error) {
-        console.error('SKU generation failed:', error);
-        return NextResponse.json(
-          { success: false, message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
-          { status: 422 }
-        );
+    const plant = validated.data!.plant!;
+    const allHubNames = HUB_MAPPINGS.map((m) => m.hub);
+    const skus: Record<string, string> = {};
+    try {
+      for (const hubName of allHubNames) {
+        const sku = await generateParentSKU(hubName, plant);
+        skus[hubName] = sku;
       }
+    } catch (error) {
+      console.error('SKU generation failed:', error);
+      return NextResponse.json(
+        { success: false, message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` },
+        { status: 422 }
+      );
     }
+    const skuList = Object.values(skus);
 
-    const dataWithSku = {
-      ...validated.data!,
-      ...(sku && { sku }),
-    };
-
-    // Compute listing_price = price * procurement seller multiplicationFactor
     let listing_price: number | undefined;
-    if (dataWithSku.seller && dataWithSku.price != null) {
-      const procurementSeller = await ProcurementSellerMasterModel.findById(dataWithSku.seller);
+    if (validated.data!.seller && validated.data!.sellingPrice != null) {
+      const procurementSeller = await ProcurementSellerMasterModel.findById(validated.data!.seller);
       const factor = procurementSeller?.multiplicationFactor ?? 1;
-      listing_price = Number(dataWithSku.price) * factor;
+      listing_price = Number(validated.data!.sellingPrice) * factor;
     }
-    const dataToSave = {
-      ...dataWithSku,
+
+    const dataToSave: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
+      ...validated.data!,
+      hubs: allHubNames,
+      skus,
+      skuList,
       ...(listing_price !== undefined && { listing_price }),
     };
 
@@ -151,7 +166,7 @@ export async function POST(request: NextRequest) {
     console.log('Product saved to DB:', created._id);
     return NextResponse.json({
       success: true,
-      data: created,
+      data: serializeParent(created as ParentMaster),
     });
   } catch (error) {
     console.error('Error creating parent master product:', error);
@@ -177,13 +192,13 @@ export async function PUT(request: NextRequest) {
     // Validate the update data (partial validation)
     let sanitized = sanitizeUpdateData(updateData);
 
-    // Recompute listing_price when seller or price are updated
+    // Recompute listing_price when seller or sellingPrice are updated
     const updatingSeller = sanitized.seller !== undefined || (updateData.seller != null);
-    const updatingPrice = sanitized.price !== undefined || (updateData.price != null);
+    const updatingPrice = sanitized.sellingPrice !== undefined || (updateData.sellingPrice != null) || (updateData.price != null);
     if (updatingSeller || updatingPrice) {
       const existing = await ParentMasterModel.findById(_id);
       const sellerId = (sanitized.seller ?? existing?.seller ?? (updateData.seller != null ? String(updateData.seller).trim() : null)) ?? null;
-      const priceVal = sanitized.price ?? (existing && 'price' in existing ? Number(existing.price) : null) ?? (updateData.price != null ? Number(updateData.price) : null);
+      const priceVal = sanitized.sellingPrice ?? (existing && 'sellingPrice' in existing ? Number(existing.sellingPrice) : null) ?? (existing && 'price' in existing ? Number(existing.price) : null) ?? (updateData.sellingPrice != null ? Number(updateData.sellingPrice) : null) ?? (updateData.price != null ? Number(updateData.price) : null);
       if (sellerId != null && sellerId !== '' && priceVal != null && !isNaN(priceVal)) {
         const procurementSeller = await ProcurementSellerMasterModel.findById(sellerId);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
@@ -278,8 +293,9 @@ function validateParentMasterData(data: unknown): {
     return { success: false, message: 'plant is required and must be a non-empty string' };
   }
 
-  if (d.price !== undefined && d.price !== null && (typeof d.price !== 'number' || d.price < 0)) {
-    return { success: false, message: 'price must be a non-negative number when provided' };
+  const priceVal = d.sellingPrice ?? d.price;
+  if (priceVal !== undefined && priceVal !== null && (typeof priceVal !== 'number' || priceVal < 0)) {
+    return { success: false, message: 'sellingPrice must be a non-negative number when provided' };
   }
 
   // Categories must be an array
@@ -292,10 +308,11 @@ function validateParentMasterData(data: unknown): {
     return { success: false, message: 'images must be an array when provided' };
   }
 
-  const hub = d.hub ? String(d.hub).trim() : undefined;
-  const substores = hub ? getSubstoresByHub(hub) : [];
+  const sellingPriceNum =
+    d.sellingPrice != null && typeof d.sellingPrice === 'number' ? Number(d.sellingPrice) :
+    d.price != null && typeof d.price === 'number' ? Number(d.price) : undefined;
+  const potTypeVal = d.potType ? String(d.potType).trim() : (d.type ? String(d.type).trim() : undefined);
 
-  // Build validated object
   const validated: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
     plant: String(d.plant).trim(),
     otherNames: d.otherNames ? String(d.otherNames).trim() : undefined,
@@ -304,16 +321,14 @@ function validateParentMasterData(data: unknown): {
     height: typeof d.height === 'number' ? d.height : undefined,
     mossStick: d.mossStick ? String(d.mossStick).trim() : undefined,
     size: typeof d.size === 'number' ? d.size : undefined,
-    type: d.type ? String(d.type).trim() : undefined,
+    potType: potTypeVal || undefined,
     seller: d.seller ? String(d.seller).trim() : undefined,
     description: d.description ? String(d.description).trim() : undefined,
     finalName: d.finalName ? String(d.finalName).trim() : undefined,
     categories: (d.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean),
-    price: d.price != null && typeof d.price === 'number' ? Number(d.price) : undefined,
+    sellingPrice: sellingPriceNum,
     images: Array.isArray(d.images) ? (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean) : undefined,
     inventory_quantity: typeof d.inventory_quantity === 'number' ? d.inventory_quantity : undefined,
-    hub: hub || undefined,
-    substores: substores.length > 0 ? substores : undefined,
     collectionIds:
       Array.isArray(d.collectionIds) ?
         (d.collectionIds as unknown[]).map((c) => String(c).trim()).filter(Boolean) :
@@ -348,6 +363,9 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.size !== undefined) {
     sanitized.size = typeof data.size === 'number' ? data.size : parseFloat(String(data.size)) || undefined;
   }
+  if (data.potType !== undefined) {
+    sanitized.potType = String(data.potType).trim();
+  }
   if (data.type !== undefined) {
     sanitized.type = String(data.type).trim();
   }
@@ -366,6 +384,9 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.collectionIds !== undefined && Array.isArray(data.collectionIds)) {
     sanitized.collectionIds = (data.collectionIds as unknown[]).map((c) => String(c).trim()).filter(Boolean);
   }
+  if (data.sellingPrice !== undefined) {
+    sanitized.sellingPrice = typeof data.sellingPrice === 'number' ? data.sellingPrice : parseFloat(String(data.sellingPrice)) || 0;
+  }
   if (data.price !== undefined) {
     sanitized.price = typeof data.price === 'number' ? data.price : parseFloat(String(data.price)) || 0;
   }
@@ -378,16 +399,18 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.product_id !== undefined) {
     sanitized.product_id = String(data.product_id).trim();
   }
-  if (data.hub !== undefined) {
-    const hub = String(data.hub).trim() || undefined;
-    sanitized.hub = hub;
-    sanitized.substores = hub ? getSubstoresByHub(hub) : [];
+  if (data.hubs !== undefined && Array.isArray(data.hubs)) {
+    sanitized.hubs = (data.hubs as unknown[]).map((s) => String(s).trim()).filter(Boolean);
   }
-  if (data.substores !== undefined && Array.isArray(data.substores)) {
-    sanitized.substores = (data.substores as unknown[]).map((s) => String(s).trim()).filter(Boolean);
+  if (data.skus !== undefined && data.skus !== null && typeof data.skus === 'object' && !Array.isArray(data.skus)) {
+    const skus: Record<string, string> = {};
+    for (const [k, v] of Object.entries(data.skus)) {
+      if (typeof v === 'string' && v.trim()) skus[String(k).trim()] = String(v).trim();
+    }
+    sanitized.skus = Object.keys(skus).length > 0 ? skus : undefined;
   }
-  if (data.sku !== undefined) {
-    sanitized.sku = String(data.sku).trim();
+  if (data.skuList !== undefined && Array.isArray(data.skuList)) {
+    sanitized.skuList = (data.skuList as unknown[]).map((s) => String(s).trim()).filter(Boolean);
   }
 
   return sanitized;

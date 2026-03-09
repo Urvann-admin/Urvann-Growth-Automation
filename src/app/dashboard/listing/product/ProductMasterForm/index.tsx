@@ -7,7 +7,6 @@ import type { Category } from '@/models/category';
 import type { CollectionMaster } from '@/models/collectionMaster';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { Notification } from '@/components/ui/Notification';
-import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import {
   clearFormStorageOnReload,
   getPersistedForm,
@@ -36,10 +35,9 @@ function validateStep(stepId: StepId, data: ProductFormData): Record<string, str
       if (!data.plant.trim()) err.plant = 'Plant name is required';
       break;
     case 'details':
-      if (isDescriptionEmpty(data.description)) err.description = 'Description is required';
       break;
     case 'pricing':
-      if (data.price !== '' && typeof data.price === 'number' && data.price < 0) err.price = 'Price cannot be negative';
+      if (data.sellingPrice !== '' && typeof data.sellingPrice === 'number' && data.sellingPrice < 0) err.sellingPrice = 'Selling price cannot be negative';
       break;
     case 'categories-images':
       if (data.categories.length === 0) err.categories = 'Select at least one category';
@@ -59,7 +57,7 @@ function computeFinalName(data: ProductFormData): string {
   if (data.size !== '' && data.size !== undefined) {
     parts.push('in', String(data.size), 'inch');
   }
-  if (data.type?.trim()) parts.push(data.type.trim());
+  if (data.potType?.trim()) parts.push(data.potType.trim());
   return parts.join(' ');
 }
 
@@ -81,7 +79,6 @@ export function ProductMasterForm() {
   const [collections, setCollections] = useState<CollectionMaster[]>([]);
   const [sellers, setSellers] = useState<ProcurementSellerMaster[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [skuPreview, setSkuPreview] = useState<string>('');
   const [bulkImporting, setBulkImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bulkImportInputRef = useRef<HTMLInputElement>(null);
@@ -126,25 +123,6 @@ export function ProductMasterForm() {
       })
       .catch((e) => console.error('Error fetching procurement sellers:', e));
   }, []);
-
-  useEffect(() => {
-    const hub = formData.hub?.trim();
-    const plant = formData.plant?.trim();
-    if (!hub || !plant) {
-      setSkuPreview('');
-      return;
-    }
-    const controller = new AbortController();
-    const params = new URLSearchParams({ hub, plant });
-    fetch(`/api/parent-master/preview-sku?${params.toString()}`, { signal: controller.signal })
-      .then((res) => res.json())
-      .then((json) => {
-        if (json?.success && typeof json.sku === 'string') setSkuPreview(json.sku);
-        else setSkuPreview('');
-      })
-      .catch(() => setSkuPreview(''));
-    return () => controller.abort();
-  }, [formData.hub, formData.plant]);
 
   const setField = <K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -294,16 +272,15 @@ export function ProductMasterForm() {
         height: typeof formData.height === 'number' ? formData.height : undefined,
         mossStick: formData.mossStick || undefined,
         size: typeof formData.size === 'number' ? formData.size : undefined,
-        type: formData.type || undefined,
+        potType: formData.potType || undefined,
         seller: formData.seller || undefined,
         description: formData.description.trim() || undefined,
         finalName: finalName || undefined,
         categories: formData.categories,
         collectionIds: formData.collectionIds.length > 0 ? formData.collectionIds : undefined,
-        price: formData.price !== '' && typeof formData.price === 'number' ? formData.price : undefined,
+        sellingPrice: formData.sellingPrice !== '' && typeof formData.sellingPrice === 'number' ? formData.sellingPrice : undefined,
         inventory_quantity: formData.inventory_quantity !== '' && typeof formData.inventory_quantity === 'number' ? formData.inventory_quantity : undefined,
         images: allImageUrls.length > 0 ? allImageUrls : undefined,
-        hub: formData.hub?.trim() || undefined,
       };
 
       const response = await fetch('/api/parent-master', {
@@ -338,11 +315,6 @@ export function ProductMasterForm() {
   const sellerOptions = useMemo(
     () => [{ value: '', label: 'Select Procurement Seller' }, ...sellers.map((s) => ({ value: String(s._id), label: s.seller_name }))],
     [sellers]
-  );
-
-  const hubOptions = useMemo(
-    () => [{ value: '', label: 'Select Hub' }, ...HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub }))],
-    []
   );
 
   const handleDownloadTemplate = async () => {
@@ -505,7 +477,7 @@ export function ProductMasterForm() {
             {currentStep.id === 'details' && (
               <StepDetails
                 mossStick={formData.mossStick}
-                type={formData.type}
+                potType={formData.potType}
                 seller={formData.seller}
                 description={formData.description}
                 sellerOptions={sellerOptions}
@@ -516,10 +488,7 @@ export function ProductMasterForm() {
             )}
             {currentStep.id === 'pricing' && (
               <StepPricing
-                price={formData.price}
-                hub={formData.hub}
-                hubOptions={hubOptions}
-                skuPreview={skuPreview}
+                sellingPrice={formData.sellingPrice}
                 errors={errors}
                 onFieldChange={handleFieldChange}
                 onClearError={clearError}
@@ -551,7 +520,6 @@ export function ProductMasterForm() {
                 finalName={finalName}
                 categories={categories}
                 collections={collections}
-                skuPreview={skuPreview}
                 selectedImageCount={selectedImages.length}
                 procurementSellers={sellers}
               />

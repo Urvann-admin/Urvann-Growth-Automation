@@ -333,7 +333,7 @@ async function validateListingProductData(data: unknown): Promise<{
     const parent = getParentForSku(item.parentSku);
     if (!parent) continue;
 
-    const effectiveUnitPrice = parent.price || 0;
+    const effectiveUnitPrice = (parent as any).sellingPrice ?? parent.price ?? 0;
     item.unitPrice = effectiveUnitPrice;
 
     // Price contribution from this parent in ONE set

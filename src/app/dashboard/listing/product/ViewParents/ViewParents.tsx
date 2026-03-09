@@ -128,8 +128,9 @@ export function ViewParents() {
 
   const openEdit = (parent: ParentMaster) => {
     setEditing(parent);
+    const sellingPrice = (parent as any).sellingPrice ?? parent.price;
+    const potType = (parent as any).potType ?? parent.type;
     setEditForm({
-      sku: parent.sku ?? '',
       plant: parent.plant ?? '',
       otherNames: parent.otherNames ?? '',
       variety: parent.variety ?? '',
@@ -137,12 +138,11 @@ export function ViewParents() {
       height: parent.height ?? '',
       mossStick: parent.mossStick ?? '',
       size: parent.size ?? '',
-      type: parent.type ?? '',
+      potType: potType ?? '',
       seller: parent.seller ?? '',
       categories: Array.isArray(parent.categories) ? parent.categories : [],
-      price: parent.price ?? '',
+      sellingPrice: sellingPrice ?? '',
       images: Array.isArray(parent.images) ? parent.images : [],
-      hub: parent.hub ?? '',
     });
   };
 
@@ -160,12 +160,11 @@ export function ViewParents() {
       height: editForm.height !== '' ? Number(editForm.height) : undefined,
       mossStick: editForm.mossStick || undefined,
       size: editForm.size !== '' ? Number(editForm.size) : undefined,
-      type: editForm.type || undefined,
+      potType: editForm.potType || undefined,
       seller: editForm.seller || undefined,
       categories: editForm.categories,
-      price: Number(editForm.price),
+      sellingPrice: editForm.sellingPrice !== '' ? Number(editForm.sellingPrice) : undefined,
       images: editForm.images,
-      hub: editForm.hub?.trim() || undefined,
     };
 
     try {

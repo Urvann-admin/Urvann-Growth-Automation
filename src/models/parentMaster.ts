@@ -18,9 +18,9 @@ export interface ParentMaster {
   mossStick?: string;
   /** Size in inches */
   size?: number;
-  /** Type of the product */
-  type?: string;
-  /** Final name: plant + other names + variety + colour + in + size + inch + type */
+  /** Pot type: bag or pot */
+  potType?: string;
+  /** Final name: plant + other names + variety + colour + in + size + inch + potType */
   finalName?: string;
   /** Product description (rich text HTML) */
   description?: string;
@@ -28,9 +28,9 @@ export interface ParentMaster {
   categories: string[];
   /** Array of collection _ids from collectionMaster (stored in DB); sent to StoreHippo as collection aliases */
   collectionIds?: (string | ObjectId)[];
-  /** Price of the product (optional in form; default 0 when omitted) */
-  price?: number;
-  /** Listing price: price × procurement seller multiplicationFactor (computed on save) */
+  /** Selling price of the product (optional in form; default 0 when omitted) */
+  sellingPrice?: number;
+  /** Listing price: sellingPrice × procurement seller multiplicationFactor (computed on save) */
   listing_price?: number;
   /** AWS S3 image URLs (optional in form; default [] when omitted) */
   images?: string[];
@@ -42,12 +42,22 @@ export interface ParentMaster {
   product_id?: string;
   /** Procurement seller _id from procurement_seller_master */
   seller?: string;
-  /** Hub name (e.g. Whitefield, HSR) for inventory/listing scope */
+  /** All hub names (parent is live in all hubs) */
+  hubs?: string[];
+  /** SKU per hub: { [hubName]: sku } */
+  skus?: Record<string, string>;
+  /** Flat list of all SKUs for querying (findBySku) */
+  skuList?: string[];
+  /** @deprecated Use potType */
+  type?: string;
+  /** @deprecated Use sellingPrice */
+  price?: number;
+  /** @deprecated Use hubs */
   hub?: string;
+  /** @deprecated Use skuList[0] or skus[hub] */
+  sku?: string;
   /** Substores derived from hub mapping (e.g. bgl-e, bgl-e2 for Whitefield) */
   substores?: string[];
-  /** SKU generated for this product (format: [HUB][PRODUCT][SEQUENCE][QTY][CHECKSUM]) */
-  sku?: string;
   /** Type breakdown from purchase (Listing, Revival, Growth, Consumers) – updated when saving purchase master. Stored as object "type" in DB. */
   typeBreakdown?: PurchaseTypeBreakdown;
   createdAt?: Date;
@@ -78,7 +88,13 @@ export class ParentMasterModel {
 
   static async findBySku(sku: string) {
     const collection = await getCollection(COLLECTION_NAME);
-    return collection.findOne({ sku: String(sku).trim() });
+    const trimmed = String(sku).trim();
+    return collection.findOne({
+      $or: [
+        { skuList: trimmed },
+        { sku: trimmed },
+      ],
+    });
   }
 
   static async create(data: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>) {
@@ -147,7 +163,10 @@ export class ParentMasterModel {
         { plant: regex },
         { otherNames: regex },
         { variety: regex },
+        { potType: regex },
         { type: regex },
+        { skuList: String(searchTerm).trim() },
+        { sku: String(searchTerm).trim() },
       ],
     }).toArray();
   }

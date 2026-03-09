@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
-import { getSubstoresByHub } from '@/shared/constants/hubs';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { generateParentSKU } from '@/lib/skuGenerator';
 
 const TEMPLATE_HEADERS = [
@@ -13,11 +13,10 @@ const TEMPLATE_HEADERS = [
   'height',
   'mossStick',
   'size',
-  'type',
+  'potType',
   'description',
   'categories',
-  'price',
-  'hub',
+  'sellingPrice',
   'seller',
 ];
 
@@ -61,7 +60,8 @@ function computeFinalName(row: Record<string, string>): string {
   if (row.size?.trim() && !Number.isNaN(Number(row.size))) {
     parts.push('in', String(row.size).trim(), 'inch');
   }
-  if (row.type?.trim()) parts.push(row.type.trim());
+  const potType = row.potType?.trim() || row.type?.trim();
+  if (potType) parts.push(potType);
   return parts.join(' ');
 }
 
@@ -74,18 +74,17 @@ function rowToParentMaster(
   if (!plant) {
     return { success: false, message: 'plant is required' };
   }
-  const priceStr = get('price');
+  const priceStr = get('sellingPrice') || get('price');
   const priceParsed = priceStr ? parseFloat(priceStr) : NaN;
-  const price = Number.isFinite(priceParsed) && priceParsed >= 0 ? priceParsed : undefined;
+  const sellingPrice = Number.isFinite(priceParsed) && priceParsed >= 0 ? priceParsed : undefined;
   if (priceStr && (Number.isNaN(priceParsed) || priceParsed < 0)) {
-    return { success: false, message: `Invalid price for row (plant: ${plant})` };
+    return { success: false, message: `Invalid sellingPrice for row (plant: ${plant})` };
   }
   const categoriesStr = get('categories');
   const categories = categoriesStr
     ? categoriesStr.split(',').map((c) => c.trim()).filter(Boolean)
     : [];
-  const hub = get('hub') || undefined;
-  const substores = hub ? getSubstoresByHub(hub) : [];
+  const potType = get('potType') || get('type') || undefined;
 
   const heightStr = get('height');
   const sizeStr = get('size');
@@ -97,7 +96,7 @@ function rowToParentMaster(
     height: heightStr && !Number.isNaN(parseFloat(heightStr)) ? parseFloat(heightStr) : undefined,
     mossStick: get('mossStick') || undefined,
     size: sizeStr && !Number.isNaN(parseFloat(sizeStr)) ? parseFloat(sizeStr) : undefined,
-    type: get('type') || undefined,
+    potType: potType || undefined,
     description: get('description') || undefined,
     finalName: computeFinalName({
       plant,
@@ -105,13 +104,12 @@ function rowToParentMaster(
       variety: get('variety'),
       colour: get('colour'),
       size: sizeStr,
+      potType: get('potType'),
       type: get('type'),
     }) || undefined,
     categories,
-    ...(price !== undefined && { price }),
+    ...(sellingPrice !== undefined && { sellingPrice }),
     images: [],
-    hub,
-    substores: substores.length > 0 ? substores : undefined,
     seller: get('seller') || undefined,
   };
   return { success: true, data };
@@ -181,33 +179,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate SKU for each row that has hub + plant
+    const allHubNames = HUB_MAPPINGS.map((m) => m.hub);
+
+    // Generate SKUs for all hubs per row
     for (let i = 0; i < validatedItems.length; i++) {
       const item = validatedItems[i];
-      if (item.hub && item.plant) {
-        try {
-          const sku = await generateParentSKU(item.hub, item.plant);
-          (validatedItems[i] as Record<string, unknown>).sku = sku;
-        } catch (err) {
-          console.error('SKU generation failed for row:', err);
-          return NextResponse.json(
-            {
-              success: false,
-              message: `SKU generation failed for row ${i + 2} (plant: ${item.plant}): ${err instanceof Error ? err.message : 'Unknown error'}`,
-            },
-            { status: 422 }
-          );
+      if (!item.plant) continue;
+      try {
+        const skus: Record<string, string> = {};
+        for (const hubName of allHubNames) {
+          skus[hubName] = await generateParentSKU(hubName, item.plant);
         }
+        (validatedItems[i] as Record<string, unknown>).hubs = allHubNames;
+        (validatedItems[i] as Record<string, unknown>).skus = skus;
+        (validatedItems[i] as Record<string, unknown>).skuList = Object.values(skus);
+      } catch (err) {
+        console.error('SKU generation failed for row:', err);
+        return NextResponse.json(
+          {
+            success: false,
+            message: `SKU generation failed for row ${i + 2} (plant: ${item.plant}): ${err instanceof Error ? err.message : 'Unknown error'}`,
+          },
+          { status: 422 }
+        );
       }
     }
 
-    // listing_price = price * procurement seller multiplicationFactor (only when both seller and price are set)
     for (let i = 0; i < validatedItems.length; i++) {
       const item = validatedItems[i];
-      if (item.seller && item.price != null && item.price >= 0) {
+      if (item.seller && item.sellingPrice != null && item.sellingPrice >= 0) {
         const procurementSeller = await ProcurementSellerMasterModel.findById(item.seller);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
-        (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.price) * factor;
+        (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.sellingPrice) * factor;
       }
     }
 

@@ -9,11 +9,10 @@ export interface StepReviewProps {
   data: ProductFormData;
   finalName: string;
   categories: Category[];
-  skuPreview?: string;
   /** Count of images selected in step 4 (not yet uploaded; uploaded on submit) */
   selectedImageCount?: number;
   collections: CollectionMaster[];
-  /** Procurement sellers (for listing price = price × seller.multiplicationFactor) */
+  /** Procurement sellers (for listing price = sellingPrice × seller.multiplicationFactor) */
   procurementSellers?: ProcurementSellerMaster[];
 }
 
@@ -31,7 +30,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function StepReview({ data, finalName, categories, skuPreview = '', selectedImageCount = 0, collections, procurementSellers = [] }: StepReviewProps) {
+export function StepReview({ data, finalName, categories, selectedImageCount = 0, collections, procurementSellers = [] }: StepReviewProps) {
   const categoryNames = data.categories.map((id) => getCategoryName(categories, id));
   const totalImageCount = data.images.length + selectedImageCount;
   const collectionNames = (data.collectionIds ?? []).map((id) =>
@@ -39,8 +38,8 @@ export function StepReview({ data, finalName, categories, skuPreview = '', selec
   );
   const selectedSeller = data.seller ? procurementSellers.find((s) => String(s._id) === data.seller) : null;
   const listingPrice =
-    selectedSeller && typeof data.price === 'number'
-      ? data.price * (selectedSeller.multiplicationFactor ?? 1)
+    selectedSeller && typeof data.sellingPrice === 'number'
+      ? data.sellingPrice * (selectedSeller.multiplicationFactor ?? 1)
       : null;
 
   return (
@@ -49,7 +48,6 @@ export function StepReview({ data, finalName, categories, skuPreview = '', selec
         Please review your product details below. Click &quot;Create product&quot; to submit.
       </p>
       <dl className="space-y-0">
-        <Row label="SKU" value={skuPreview || '—'} />
         <Row label="Plant name" value={data.plant || '—'} />
         <Row label="Other names" value={data.otherNames || '—'} />
         <Row label="Variety" value={data.variety || '—'} />
@@ -57,12 +55,11 @@ export function StepReview({ data, finalName, categories, skuPreview = '', selec
         <Row label="Height (feet)" value={data.height !== '' ? data.height : '—'} />
         <Row label="Moss stick" value={data.mossStick || '—'} />
         <Row label="Size (inches)" value={data.size !== '' ? data.size : '—'} />
-        <Row label="Type" value={data.type || '—'} />
+        <Row label="Pot Type" value={data.potType || '—'} />
         <Row label="Procurement seller" value={selectedSeller?.seller_name ?? '—'} />
         <Row label="Final name" value={finalName || '—'} />
-        <Row label="Price" value={data.price !== '' ? data.price : '—'} />
+        <Row label="Selling Price" value={data.sellingPrice !== '' ? data.sellingPrice : '—'} />
         <Row label="Listing price" value={listingPrice != null ? listingPrice : '—'} />
-        <Row label="Hub" value={data.hub || '—'} />
         <Row
           label="Categories"
           value={

@@ -15,10 +15,9 @@ export function ParentTable({ items, onEdit, onDelete }: ParentTableProps) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200">
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">SKU</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Plant</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Final name</th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">Price</th>
+            <th className="text-left py-3 px-3 font-semibold text-slate-700">Selling price</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Listing price</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Categories</th>
             <th className="text-right py-3 px-3 font-semibold text-slate-700">Actions</th>
@@ -27,12 +26,11 @@ export function ParentTable({ items, onEdit, onDelete }: ParentTableProps) {
         <tbody>
           {items.map((row) => (
             <tr key={String(row._id)} className="border-b border-slate-100 hover:bg-slate-50/50">
-              <td className="py-3 px-3 font-mono text-xs text-slate-600">{row.sku ?? '—'}</td>
               <td className="py-3 px-3 text-slate-900">{row.plant ?? '—'}</td>
               <td className="py-3 px-3 text-slate-600 max-w-[200px] truncate" title={row.finalName}>
                 {row.finalName ?? '—'}
               </td>
-              <td className="py-3 px-3 text-slate-600">{row.price ?? '—'}</td>
+              <td className="py-3 px-3 text-slate-600">{(row as any).sellingPrice ?? row.price ?? '—'}</td>
               <td className="py-3 px-3 text-slate-600">{row.listing_price ?? '—'}</td>
               <td className="py-3 px-3 text-slate-600">
                 {Array.isArray(row.categories) ? row.categories.length : 0}
