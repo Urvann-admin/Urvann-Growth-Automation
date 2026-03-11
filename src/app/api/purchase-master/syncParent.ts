@@ -22,12 +22,23 @@ export async function syncParentFromPurchases(parentSku: string): Promise<void> 
 
   for (const row of purchases) {
     const t = row.type;
-    if (t?.listing != null) typeBreakdown.listing! += Number(t.listing) || 0;
-    if (t?.revival != null) typeBreakdown.revival! += Number(t.revival) || 0;
-    if (t?.growth != null) typeBreakdown.growth! += Number(t.growth) || 0;
-    if (t?.consumers != null) typeBreakdown.consumers! += Number(t.consumers) || 0;
+    const typeSum = (Number(t?.listing ?? 0) || 0) + (Number(t?.revival ?? 0) || 0) + (Number(t?.growth ?? 0) || 0) + (Number(t?.consumers ?? 0) || 0);
+    const isFlagMode = typeSum <= 1;
+    const rowQty = Number(row.quantity) || 0;
+
     if (t?.listing != null && t.listing > 0) {
-      listingQuantity += Number(row.quantity) || 0;
+      const q = isFlagMode ? rowQty : (Number(t.listing) || 0);
+      typeBreakdown.listing! += q;
+      if (q > 0) listingQuantity += q;
+    }
+    if (t?.revival != null && t.revival > 0) {
+      typeBreakdown.revival! += isFlagMode ? rowQty : (Number(t.revival) || 0);
+    }
+    if (t?.growth != null && t.growth > 0) {
+      typeBreakdown.growth! += isFlagMode ? rowQty : (Number(t.growth) || 0);
+    }
+    if (t?.consumers != null && t.consumers > 0) {
+      typeBreakdown.consumers! += isFlagMode ? rowQty : (Number(t.consumers) || 0);
     }
   }
 

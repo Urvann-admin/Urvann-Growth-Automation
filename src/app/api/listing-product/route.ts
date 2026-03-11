@@ -442,7 +442,9 @@ async function validateListingProductData(data: unknown): Promise<{
     potQuantity: potQuantity > 0 ? potQuantity : undefined,
     price: totalPrice,
     inventory_quantity: finalInventory,
-    tag: (d as any).tag ? String((d as any).tag).trim() : undefined,
+    tags: Array.isArray((d as any).tags)
+      ? (d as any).tags.map((t: unknown) => String(t).trim()).filter(Boolean)
+      : undefined,
     compare_at_price: typeof (d as any).compare_at_price === 'number' ? (d as any).compare_at_price : undefined,
     sort_order: typeof (d as any).sort_order === 'number' ? (d as any).sort_order : 3000,
     publish_status: finalInventory > 0 ? 1 : 0,
@@ -512,8 +514,8 @@ async function sanitizeUpdateData(data: Record<string, unknown>, existing: Listi
     sanitized.hub = hub;
     sanitized.substores = hub ? getSubstoresByHub(hub) : [];
   }
-  if (data.tag !== undefined) {
-    sanitized.tag = data.tag ? String(data.tag).trim() : undefined;
+  if (data.tags !== undefined && Array.isArray(data.tags)) {
+    sanitized.tags = (data.tags as string[]).map((t) => String(t).trim()).filter(Boolean);
   }
   if (data.compare_at_price !== undefined) {
     sanitized.compare_at_price = typeof data.compare_at_price === 'number' ? data.compare_at_price : undefined;

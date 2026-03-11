@@ -30,6 +30,8 @@ export default function ListingLayout({
     setInvoiceSectionOpen,
     listingSectionTab,
     setListingSectionTab,
+    listingViewMode,
+    setListingViewMode,
     sidebarCollapsed,
     setSidebarCollapsed,
   } = useListingState();
@@ -56,8 +58,13 @@ export default function ListingLayout({
   }
 
   const contextValue: ListingLayoutContextValue = {
+    loading,
     activeTab,
     setActiveTab,
+    listingSectionTab,
+    setListingSectionTab,
+    listingViewMode,
+    setListingViewMode,
     categorySectionOpen,
     onCategorySectionToggle,
     productSectionOpen,

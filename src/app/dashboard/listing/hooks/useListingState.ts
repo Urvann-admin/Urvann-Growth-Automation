@@ -34,8 +34,9 @@ function getInitialTab(): ListingTab {
       sessionStorage.removeItem(STORAGE_KEY_SECTION_TAB);
     } catch {}
   }
-  const hash = window.location.hash.slice(1) as ListingTab;
-  if (VALID_HASHES.includes(hash)) return hash;
+  const hash = window.location.hash.slice(1);
+  if (hash.startsWith('listing-')) return 'listing' as ListingTab;
+  if (VALID_HASHES.includes(hash as ListingTab)) return hash as ListingTab;
   try {
     const stored = sessionStorage.getItem(STORAGE_KEY_TAB);
     if (stored && VALID_HASHES.includes(stored as ListingTab)) return stored as ListingTab;
@@ -45,6 +46,11 @@ function getInitialTab(): ListingTab {
 
 function getInitialSectionTab(): ListingSectionTab {
   if (typeof window === 'undefined') return 'listing';
+  const hash = window.location.hash.slice(1);
+  if (hash.startsWith('listing-')) {
+    const section = hash.replace('listing-', '') as ListingSectionTab;
+    if (VALID_SECTION_TABS.includes(section)) return section;
+  }
   try {
     const stored = sessionStorage.getItem(STORAGE_KEY_SECTION_TAB);
     if (stored && VALID_SECTION_TABS.includes(stored as ListingSectionTab)) return stored as ListingSectionTab;
@@ -78,18 +84,24 @@ export function useListingState() {
     setLoading(false);
   }, [user, isLoading, router]);
 
-  // Sync activeTab when hash changes (e.g. browser back/forward)
+  // Sync activeTab and listingSectionTab when hash changes (e.g. browser back/forward)
   useEffect(() => {
     const syncFromHash = () => {
-      const hash = window.location.hash.slice(1) as ListingTab;
-      if (VALID_HASHES.includes(hash)) {
-        setActiveTab(hash);
-        if (hash === 'product-add' || hash === 'product-view-parent') setProductSectionOpen(true);
-        if (hash === 'category-add' || hash === 'category-view') setCategorySectionOpen(true);
-        if (hash === 'listing') setListingSectionOpen(true);
-        if (hash === 'image-upload' || hash === 'image-view' || hash === 'upload-logs') setImageSectionOpen(true);
-        if (hash === 'seller-add' || hash === 'seller-view') setSellerSectionOpen(true);
-        if (hash === 'invoice-view') setInvoiceSectionOpen(true);
+      const hash = window.location.hash.slice(1);
+      const baseTab = hash.startsWith('listing-') ? 'listing' : hash;
+      if (VALID_HASHES.includes(baseTab as ListingTab) || hash.startsWith('listing-')) {
+        setActiveTab(baseTab as ListingTab);
+        if (hash.startsWith('listing-')) {
+          const section = hash.replace('listing-', '') as ListingSectionTab;
+          if (VALID_SECTION_TABS.includes(section)) setListingSectionTab(section);
+          setListingSectionOpen(true);
+        }
+        if (baseTab === 'product-add' || baseTab === 'product-view-parent') setProductSectionOpen(true);
+        if (baseTab === 'category-add' || baseTab === 'category-view') setCategorySectionOpen(true);
+        if (baseTab === 'listing') setListingSectionOpen(true);
+        if (baseTab === 'image-upload' || baseTab === 'image-view' || baseTab === 'upload-logs') setImageSectionOpen(true);
+        if (baseTab === 'seller-add' || baseTab === 'seller-view') setSellerSectionOpen(true);
+        if (baseTab === 'invoice-view') setInvoiceSectionOpen(true);
       }
     };
     window.addEventListener('hashchange', syncFromHash);
@@ -111,6 +123,10 @@ export function useListingState() {
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.setItem(STORAGE_KEY_SECTION_TAB, tab);
+        const newHash = tab === 'listing' ? 'listing' : `listing-${tab}`;
+        if (window.location.hash.slice(1) !== newHash) {
+          window.location.hash = newHash;
+        }
       } catch {}
     }
   }, []);

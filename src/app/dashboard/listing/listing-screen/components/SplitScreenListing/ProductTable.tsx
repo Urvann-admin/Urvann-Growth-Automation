@@ -21,7 +21,6 @@ import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 const TAG_OPTIONS = [
-  { value: '', label: 'No tag' },
   { value: 'Bestseller', label: 'Bestseller' },
   { value: 'New Arrival', label: 'New Arrival' },
   { value: 'Sale', label: 'Sale' },
@@ -428,11 +427,21 @@ export function ProductTable({
 
   const handleRemoveParentItem = (row: ProductRow, itemIndex: number) => {
     const updatedItems = row.parentItems.filter((_, i) => i !== itemIndex);
+    const combinedCategories = new Set<string>();
+    const combinedCollectionIds = new Set<string>();
+    updatedItems.forEach((item) => {
+      if (item.parent) {
+        (item.parent.categories || []).forEach((c) => combinedCategories.add(c));
+        (item.parent.collectionIds || []).map((id) => String(id)).forEach((c) => combinedCollectionIds.add(c));
+      }
+    });
     const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: updatedItems });
     const setQty = calcSetQuantity(updatedItems);
     onUpdateRow(row.id, {
       parentItems: updatedItems,
       parentSkus: updatedItems.map((i) => i.parentSku),
+      categories: Array.from(combinedCategories),
+      collectionIds: Array.from(combinedCollectionIds),
       price,
       inventory_quantity: inventory,
       setQuantity: setQty,
@@ -452,6 +461,19 @@ export function ProductTable({
         unitPrice: parent.price || 0,
         parent,
       };
+      const updatedItems = row.parentItems.map((item, index) =>
+        index === itemIndex ? { ...item, ...updatedItem } : item
+      );
+
+      const combinedCategories = new Set<string>();
+      const combinedCollectionIds = new Set<string>();
+      updatedItems.forEach((item) => {
+        if (item.parent) {
+          (item.parent.categories || []).forEach((c) => combinedCategories.add(c));
+          (item.parent.collectionIds || []).map((id) => String(id)).forEach((c) => combinedCollectionIds.add(c));
+        }
+      });
+
       const baseUpdates: Partial<ProductRow> =
         itemIndex === 0
           ? {
@@ -462,21 +484,17 @@ export function ProductTable({
               height: parent.height ?? row.height,
               hub: row.hub || parent.hub || '',
               seller: row.seller || parent.seller || '',
-              categories: Array.from(new Set([...(row.categories || []), ...(parent.categories || [])])),
-              collectionIds: Array.from(
-                new Set([
-                  ...(row.collectionIds || []),
-                  ...(parent.collectionIds?.map((id) => String(id)) || []),
-                ])
-              ),
+              categories: Array.from(combinedCategories),
+              collectionIds: Array.from(combinedCollectionIds),
             }
-          : {};
+          : {
+              categories: Array.from(combinedCategories),
+              collectionIds: Array.from(combinedCollectionIds),
+            };
 
       const tempRow: ProductRow = {
         ...row,
-        parentItems: row.parentItems.map((item, index) =>
-          index === itemIndex ? { ...item, ...updatedItem } : item
-        ),
+        parentItems: updatedItems,
         ...baseUpdates,
       };
       const { price, inventory } = recalculatePriceAndInventory(tempRow);
@@ -748,12 +766,39 @@ export function ProductTable({
                 />
 
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Tag</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Tags</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(activeRow.tags || []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateRow(activeRow.id, {
+                              tags: (activeRow.tags || []).filter((t) => t !== tag),
+                            })
+                          }
+                          className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+                          aria-label="Remove tag"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                   <CustomSelect
-                    value={activeRow.tag ?? ''}
-                    onChange={(value) => onUpdateRow(activeRow.id, { tag: value || undefined })}
-                    options={TAG_OPTIONS}
-                    placeholder="Select tag"
+                    value=""
+                    onChange={(value) => {
+                      if (!value) return;
+                      const tags = activeRow.tags || [];
+                      if (tags.includes(value)) return;
+                      onUpdateRow(activeRow.id, { tags: [...tags, value] });
+                    }}
+                    options={TAG_OPTIONS.filter((opt) => !(activeRow.tags || []).includes(opt.value))}
+                    placeholder="Add tag..."
                     searchable={false}
                   />
                 </div>
@@ -927,12 +972,39 @@ export function ProductTable({
                   label="Sort Order"
                 />
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Tag</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Tags</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(activeRow.tags || []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateRow(activeRow.id, {
+                              tags: (activeRow.tags || []).filter((t) => t !== tag),
+                            })
+                          }
+                          className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+                          aria-label="Remove tag"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                   <CustomSelect
-                    value={activeRow.tag ?? ''}
-                    onChange={(value) => onUpdateRow(activeRow.id, { tag: value || undefined })}
-                    options={TAG_OPTIONS}
-                    placeholder="Select tag"
+                    value=""
+                    onChange={(value) => {
+                      if (!value) return;
+                      const tags = activeRow.tags || [];
+                      if (tags.includes(value)) return;
+                      onUpdateRow(activeRow.id, { tags: [...tags, value] });
+                    }}
+                    options={TAG_OPTIONS.filter((opt) => !(activeRow.tags || []).includes(opt.value))}
+                    placeholder="Add tag..."
                     searchable={false}
                   />
                 </div>

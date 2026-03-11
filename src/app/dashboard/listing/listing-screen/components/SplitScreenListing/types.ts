@@ -72,8 +72,8 @@ export interface ProductRow {
   finalName?: string;
   /** Generated SKU (set after save) */
   sku?: string;
-  /** Product tag (e.g. Bestseller, New Arrival) */
-  tag?: string;
+  /** Product tags (e.g. Bestseller, New Arrival) - array for multiselect */
+  tags?: string[];
   /** Compare-at price shown as original/strikethrough price */
   compare_at_price?: number;
   /** Display sort order; defaults to 3000 */

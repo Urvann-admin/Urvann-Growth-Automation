@@ -13,6 +13,7 @@ import {
   ListingProductForm,
   ViewListingProducts,
   SplitScreenListing,
+  GrowthProductsView,
 } from '../listing-screen';
 
 export type ListingViewMode = 'create' | 'view-all';
@@ -118,7 +119,13 @@ function ListingSectionContent({
         </div>
       )}
 
-      {sectionTab !== 'listing' && (
+      {sectionTab === 'growth' && (
+        <div className="h-full">
+          <GrowthProductsView />
+        </div>
+      )}
+
+      {sectionTab !== 'listing' && sectionTab !== 'growth' && (
         <div className="space-y-6 p-6">
           <ViewListingProducts
             section={sectionTab}

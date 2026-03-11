@@ -1,6 +1,6 @@
 'use client';
 
-import { useListingState } from './hooks/useListingState';
+import { useListingLayoutContext } from './context/ListingLayoutContext';
 import { ListingTopBar } from './components/ListingTopBar';
 import { ListingContent } from './components/ListingContent';
 
@@ -13,7 +13,7 @@ export default function ListingPage() {
     listingViewMode,
     setListingViewMode,
     sidebarCollapsed,
-  } = useListingState();
+  } = useListingLayoutContext();
 
   if (loading) {
     return null;
