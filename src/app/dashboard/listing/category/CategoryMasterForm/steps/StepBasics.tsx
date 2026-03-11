@@ -76,7 +76,7 @@ export function StepBasics({
             hasError={!!errors.typeOfCategory}
           />
         </Field>
-        <Field label="Description" required error={errors.description} className="sm:col-span-2 lg:col-span-4">
+        <Field label="Description" error={errors.description} className="sm:col-span-2 lg:col-span-4">
           <RichTextEditor
             value={description}
             onChange={(v) => {

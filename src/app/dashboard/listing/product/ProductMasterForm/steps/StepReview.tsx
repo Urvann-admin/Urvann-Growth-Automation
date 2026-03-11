@@ -57,6 +57,8 @@ export function StepReview({ data, finalName, categories, selectedImageCount = 0
         <Row label="Size (inches)" value={data.size !== '' ? data.size : '—'} />
         <Row label="Pot Type" value={data.potType || '—'} />
         <Row label="Procurement seller" value={selectedSeller?.seller_name ?? '—'} />
+        <Row label="Features" value={data.features || '—'} />
+        <Row label="Redirects" value={data.redirects || '—'} />
         <Row label="Final name" value={finalName || '—'} />
         <Row label="Selling Price" value={data.sellingPrice !== '' ? data.sellingPrice : '—'} />
         <Row label="Listing price" value={listingPrice != null ? listingPrice : '—'} />

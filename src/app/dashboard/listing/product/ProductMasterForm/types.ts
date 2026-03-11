@@ -16,6 +16,8 @@ export interface ProductFormData {
   sellingPrice: number | '';
   inventory_quantity: number | '';
   images: string[];
+  features: string;
+  redirects: string;
 }
 
 export const STEPS: { id: StepId; label: string; title: string }[] = [
@@ -42,7 +44,25 @@ export const initialFormData: ProductFormData = {
   sellingPrice: '',
   inventory_quantity: '',
   images: [],
+  features: '',
+  redirects: '',
 };
+
+/** Placeholder options – define exact values later */
+export const FEATURES_OPTIONS = [
+  { value: '', label: 'Select Features' },
+  { value: 'option-a', label: 'Option A' },
+  { value: 'option-b', label: 'Option B' },
+  { value: 'option-c', label: 'Option C' },
+];
+
+/** Placeholder options – define exact values later */
+export const REDIRECTS_OPTIONS = [
+  { value: '', label: 'Select Redirects' },
+  { value: 'redirect-1', label: 'Redirect 1' },
+  { value: 'redirect-2', label: 'Redirect 2' },
+  { value: 'redirect-3', label: 'Redirect 3' },
+];
 
 export const COLOUR_OPTIONS = [
   { value: '', label: 'Select Colour' },

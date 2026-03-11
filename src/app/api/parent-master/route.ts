@@ -2,18 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
-import { HUB_MAPPINGS } from '@/shared/constants/hubs';
-import { generateParentSKU } from '@/lib/skuGenerator';
+import { generateParentSKUGlobal } from '@/lib/skuGenerator';
 
-/** Serialize parent for API response: add computed `sku` and `price` for backward compatibility */
-export function serializeParent(doc: ParentMaster | null): (ParentMaster & { sku?: string; price?: number }) | null {
+/** Serialize parent for API response: add `price` for backward compatibility (sellingPrice → price) */
+export function serializeParent(doc: ParentMaster | null): (ParentMaster & { price?: number }) | null {
   if (!doc) return null;
-  const primarySku =
-    (doc.skuList && doc.skuList[0]) ??
-    (doc.skus && Object.values(doc.skus).length > 0 ? Object.values(doc.skus)[0] : undefined) ??
-    doc.sku;
   const price = doc.sellingPrice ?? doc.price;
-  return { ...doc, sku: primarySku, price };
+  return { ...doc, price };
 }
 
 export async function GET(request: NextRequest) {
@@ -40,8 +35,7 @@ export async function GET(request: NextRequest) {
         { variety: regex },
         { potType: regex },
         { type: regex },
-        { skuList: trimmed },
-        { sku: trimmed },
+        ...(trimmed ? [{ sku: trimmed }] : []),
       ];
     }
     
@@ -130,13 +124,9 @@ export async function POST(request: NextRequest) {
     }
 
     const plant = validated.data!.plant!;
-    const allHubNames = HUB_MAPPINGS.map((m) => m.hub);
-    const skus: Record<string, string> = {};
+    let sku: string;
     try {
-      for (const hubName of allHubNames) {
-        const sku = await generateParentSKU(hubName, plant);
-        skus[hubName] = sku;
-      }
+      sku = await generateParentSKUGlobal(plant);
     } catch (error) {
       console.error('SKU generation failed:', error);
       return NextResponse.json(
@@ -144,7 +134,6 @@ export async function POST(request: NextRequest) {
         { status: 422 }
       );
     }
-    const skuList = Object.values(skus);
 
     let listing_price: number | undefined;
     if (validated.data!.seller && validated.data!.sellingPrice != null) {
@@ -155,9 +144,7 @@ export async function POST(request: NextRequest) {
 
     const dataToSave: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
       ...validated.data!,
-      hubs: allHubNames,
-      skus,
-      skuList,
+      sku,
       ...(listing_price !== undefined && { listing_price }),
     };
 
@@ -323,6 +310,8 @@ function validateParentMasterData(data: unknown): {
     size: typeof d.size === 'number' ? d.size : undefined,
     potType: potTypeVal || undefined,
     seller: d.seller ? String(d.seller).trim() : undefined,
+    features: d.features ? String(d.features).trim() : undefined,
+    redirects: d.redirects ? String(d.redirects).trim() : undefined,
     description: d.description ? String(d.description).trim() : undefined,
     finalName: d.finalName ? String(d.finalName).trim() : undefined,
     categories: (d.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean),
@@ -378,6 +367,12 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.description !== undefined) {
     sanitized.description = String(data.description).trim();
   }
+  if (data.features !== undefined) {
+    sanitized.features = String(data.features).trim() || undefined;
+  }
+  if (data.redirects !== undefined) {
+    sanitized.redirects = String(data.redirects).trim() || undefined;
+  }
   if (data.categories !== undefined && Array.isArray(data.categories)) {
     sanitized.categories = (data.categories as unknown[]).map((c) => String(c).trim()).filter(Boolean);
   }
@@ -399,18 +394,11 @@ function sanitizeUpdateData(data: Record<string, unknown>): Partial<Omit<ParentM
   if (data.product_id !== undefined) {
     sanitized.product_id = String(data.product_id).trim();
   }
-  if (data.hubs !== undefined && Array.isArray(data.hubs)) {
-    sanitized.hubs = (data.hubs as unknown[]).map((s) => String(s).trim()).filter(Boolean);
+  if (data.hub !== undefined) {
+    sanitized.hub = String(data.hub).trim() || undefined;
   }
-  if (data.skus !== undefined && data.skus !== null && typeof data.skus === 'object' && !Array.isArray(data.skus)) {
-    const skus: Record<string, string> = {};
-    for (const [k, v] of Object.entries(data.skus)) {
-      if (typeof v === 'string' && v.trim()) skus[String(k).trim()] = String(v).trim();
-    }
-    sanitized.skus = Object.keys(skus).length > 0 ? skus : undefined;
-  }
-  if (data.skuList !== undefined && Array.isArray(data.skuList)) {
-    sanitized.skuList = (data.skuList as unknown[]).map((s) => String(s).trim()).filter(Boolean);
+  if (data.sku !== undefined) {
+    sanitized.sku = String(data.sku).trim();
   }
 
   return sanitized;

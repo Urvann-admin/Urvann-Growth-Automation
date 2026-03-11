@@ -1,21 +1,35 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Save, RotateCcw, Plus, Loader2, Image as ImageIcon, Box } from 'lucide-react';
 import type { SplitScreenListingProps } from './types';
 import { useSplitScreenState } from './useSplitScreenState';
 import { ImagePanel } from './ImagePanel';
 import { ProductTable } from './ProductTable';
 
-const SIDEBAR_WIDTH_OPEN = 240;   // w-60
-const SIDEBAR_WIDTH_COLLAPSED = 72; // w-[72px]
+const SIDEBAR_WIDTH_OPEN = 240;
+const SIDEBAR_WIDTH_COLLAPSED = 72;
 const FAB_OFFSET = 24;
+const LEFT_PANEL_WIDTH_PERCENT = 28;
 
 export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = false }: SplitScreenListingProps) {
   const { state, allImages, imageCollections, actions } = useSplitScreenState(section);
-  const [leftPanelWidth, setLeftPanelWidth] = useState(38);
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_WIDTH_PERCENT);
   const [isResizing, setIsResizing] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const activeRow = state.productRows.find((r) => r.id === activeRowId) ?? null;
+
+  useEffect(() => {
+    if (state.productRows.length > 0) {
+      if (!activeRowId || !state.productRows.some((r) => r.id === activeRowId)) {
+        setActiveRowId(state.productRows[0].id);
+      }
+    } else {
+      setActiveRowId(null);
+    }
+  }, [state.productRows, activeRowId]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -38,15 +52,6 @@ export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = fals
     document.addEventListener('mouseup', handleMouseUp);
   }, []);
 
-  const handleSaveAll = async () => {
-    const savedRows = await actions.saveAllProducts();
-    if (onSuccess && savedRows && savedRows.length > 0) {
-      onSuccess(savedRows);
-    }
-  };
-
-  const unsavedCount = state.productRows.filter((row) => !row.isSaved).length;
-
   return (
     <div className="h-full flex flex-col bg-slate-50">
       {/* Main content */}
@@ -55,22 +60,24 @@ export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = fals
         className="flex-1 flex min-h-0"
         style={{ cursor: isResizing ? 'col-resize' : 'default' }}
       >
-        {/* Left Panel - Images */}
-        <div className="bg-white flex flex-col" style={{ width: `${leftPanelWidth}%` }}>
-          <div className="h-16 px-4 border-b border-slate-200 flex items-center gap-2 shrink-0">
+        {/* Left Panel - Single photo for current product */}
+        <div className="bg-white flex flex-col border-r border-slate-200" style={{ width: `${leftPanelWidth}%` }}>
+          <div className="h-14 px-4 border-b border-slate-200 flex items-center gap-2 shrink-0">
             <ImageIcon className="w-4 h-4 text-[#E6007A] shrink-0" />
-            <h2 className="text-sm font-medium text-slate-700">Images</h2>
-            <span className="text-xs text-slate-400 ml-auto">
-              {state.selectedImages.length} selected
-            </span>
+            <h2 className="text-sm font-medium text-slate-700">Photo</h2>
+            {activeRow && (
+              <span className="text-xs text-slate-400 ml-auto truncate max-w-[120px]">
+                Product {state.productRows.findIndex((r) => r.id === activeRow.id) + 1}
+              </span>
+            )}
           </div>
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <ImagePanel
+              activeRow={activeRow}
+              productRows={state.productRows}
               collections={imageCollections}
               allImages={allImages}
-              selectedImages={state.selectedImages}
-              onToggleImage={actions.toggleImageSelection}
-              onClearSelection={actions.clearImageSelection}
+              onAssignImage={(rowId, image) => actions.updateProductRow(rowId, { taggedImages: [image] })}
               isLoading={state.isLoading}
             />
           </div>
@@ -118,15 +125,27 @@ export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = fals
               onRemoveRow={actions.removeProductRow}
               section={section}
               isLoading={state.isLoading}
+              activeRowId={activeRowId}
+              onActiveRowChange={setActiveRowId}
             />
           </div>
         </div>
       </div>
 
-      {/* Floating Save All - right of sidebar */}
+      {/* Save & Next: save current product then switch to next */}
       <button
-        onClick={handleSaveAll}
-        disabled={state.productRows.length === 0 || state.isSaving}
+        onClick={async () => {
+          const saved = await actions.saveCurrentProduct(activeRowId);
+          if (saved && state.productRows.length > 1) {
+            const idx = state.productRows.findIndex((r) => r.id === activeRowId);
+            const nextIdx = idx < 0 ? 0 : (idx + 1) % state.productRows.length;
+            setActiveRowId(state.productRows[nextIdx].id);
+          }
+          if (saved && state.productRows.length === 1 && onSuccess) {
+            onSuccess(state.productRows);
+          }
+        }}
+        disabled={state.productRows.length === 0 || state.isSaving || !activeRowId}
         className="fixed bottom-6 z-20 inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
         style={{
           backgroundColor: '#E6007A',
@@ -141,7 +160,7 @@ export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = fals
         ) : (
           <>
             <Save className="w-5 h-5" />
-            Save All ({unsavedCount})
+            Save & Next
           </>
         )}
       </button>

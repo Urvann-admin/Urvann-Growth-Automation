@@ -75,6 +75,25 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** Validate that all parent SKUs exist in parent master; returns error message if any missing */
+async function validateParentSkusExist(
+  items: { parentSku: string }[]
+): Promise<{ success: true } | { success: false; message: string }> {
+  const uniqueSkus = [...new Set(items.map((i) => String(i.parentSku || '').trim()).filter(Boolean))];
+  const missing: string[] = [];
+  for (const sku of uniqueSkus) {
+    const parent = await ParentMasterModel.findBySku(sku);
+    if (!parent) missing.push(sku);
+  }
+  if (missing.length > 0) {
+    return {
+      success: false,
+      message: `The following parent SKUs are not in our system. Please add them in parent master first: ${missing.join(', ')}`,
+    };
+  }
+  return { success: true };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -90,6 +109,13 @@ export async function POST(request: NextRequest) {
           );
         }
         validated.push(v.data!);
+      }
+      const parentCheck = await validateParentSkusExist(validated);
+      if (!parentCheck.success) {
+        return NextResponse.json(
+          { success: false, message: parentCheck.message },
+          { status: 400 }
+        );
       }
       const result = await PurchaseMasterModel.createMany(validated);
       // Update parent master typeBreakdown and inventory_quantity (when type is Listing)
@@ -137,6 +163,13 @@ export async function POST(request: NextRequest) {
     if (!validated.success) {
       return NextResponse.json(
         { success: false, message: validated.message },
+        { status: 400 }
+      );
+    }
+    const parentCheck = await validateParentSkusExist([validated.data!]);
+    if (!parentCheck.success) {
+      return NextResponse.json(
+        { success: false, message: parentCheck.message },
         { status: 400 }
       );
     }
@@ -210,6 +243,11 @@ function validatePurchaseItem(data: unknown): {
     return { success: false, message: 'parentSku is required' };
   }
 
+  const hub =
+    d.hub != null && typeof d.hub === 'string' && String(d.hub).trim()
+      ? String(d.hub).trim()
+      : undefined;
+
   const q = Math.floor(quantity);
   const amt = Math.floor(amount);
   const productPrice = q > 0 ? Math.round(amt / q) : 0;
@@ -229,6 +267,7 @@ function validatePurchaseItem(data: unknown): {
       amount: amt,
       type,
       parentSku: String(d.parentSku).trim(),
+      ...(hub && { hub }),
       ...(overhead && { overhead }),
     },
   };

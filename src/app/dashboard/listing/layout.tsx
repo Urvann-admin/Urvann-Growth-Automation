@@ -20,8 +20,16 @@ export default function ListingLayout({
     setCategorySectionOpen,
     productSectionOpen,
     setProductSectionOpen,
+    listingSectionOpen,
+    setListingSectionOpen,
     imageSectionOpen,
     setImageSectionOpen,
+    sellerSectionOpen,
+    setSellerSectionOpen,
+    invoiceSectionOpen,
+    setInvoiceSectionOpen,
+    listingSectionTab,
+    setListingSectionTab,
     sidebarCollapsed,
     setSidebarCollapsed,
   } = useListingState();
@@ -30,7 +38,10 @@ export default function ListingLayout({
 
   const onCategorySectionToggle = useCallback(() => setCategorySectionOpen((o) => !o), [setCategorySectionOpen]);
   const onProductSectionToggle = useCallback(() => setProductSectionOpen((o) => !o), [setProductSectionOpen]);
+  const onListingSectionToggle = useCallback(() => setListingSectionOpen((o) => !o), [setListingSectionOpen]);
   const onImageSectionToggle = useCallback(() => setImageSectionOpen((o) => !o), [setImageSectionOpen]);
+  const onSellerSectionToggle = useCallback(() => setSellerSectionOpen((o) => !o), [setSellerSectionOpen]);
+  const onInvoiceSectionToggle = useCallback(() => setInvoiceSectionOpen((o) => !o), [setInvoiceSectionOpen]);
   const onSidebarCollapsedToggle = useCallback(() => setSidebarCollapsed((c) => !c), [setSidebarCollapsed]);
 
   if (loading) {
@@ -73,12 +84,20 @@ export default function ListingLayout({
           <ListingSidebar
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            listingSectionTab={listingSectionTab}
+            onListingSectionChange={setListingSectionTab}
+            listingSectionOpen={listingSectionOpen}
+            onListingSectionToggle={onListingSectionToggle}
             categorySectionOpen={categorySectionOpen}
             onCategorySectionToggle={onCategorySectionToggle}
             productSectionOpen={productSectionOpen}
             onProductSectionToggle={onProductSectionToggle}
             imageSectionOpen={imageSectionOpen}
             onImageSectionToggle={onImageSectionToggle}
+            sellerSectionOpen={sellerSectionOpen}
+            onSellerSectionToggle={onSellerSectionToggle}
+            invoiceSectionOpen={invoiceSectionOpen}
+            onInvoiceSectionToggle={onInvoiceSectionToggle}
             sidebarCollapsed={sidebarCollapsed}
             onSidebarCollapsedToggle={onSidebarCollapsedToggle}
           />

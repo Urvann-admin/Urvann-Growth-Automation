@@ -46,7 +46,7 @@ export interface StoreHippoSyncOptions {
 }
 
 function getPrimarySku(product: ParentMaster): string | undefined {
-  return product.sku ?? (product.skuList && product.skuList[0]) ?? (product.skus && Object.values(product.skus)[0]);
+  return product.sku;
 }
 function getPrice(product: ParentMaster): number | undefined {
   return product.sellingPrice ?? product.price;

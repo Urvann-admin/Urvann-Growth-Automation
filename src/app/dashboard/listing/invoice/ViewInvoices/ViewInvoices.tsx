@@ -5,6 +5,7 @@ import { FileText, Plus, Search, Calculator } from 'lucide-react';
 import type { PurchaseMaster, PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { Notification } from '@/components/ui/Notification';
 import { ConfirmDialog } from '../../shared';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { PurchaseTable } from './PurchaseTable';
 import { EditPurchaseModal, type EditPurchaseForm } from './EditPurchaseModal';
 import { AddInvoiceModal } from './AddInvoiceModal';
@@ -92,16 +93,18 @@ const emptyForm: EditPurchaseForm = {
   quantity: '',
   amount: '',
   parentSku: '',
+  hub: '',
   listing: '',
   revival: '',
   growth: '',
   consumers: '',
 };
 
-interface ParentOption {
+interface ParentFromApi {
   _id: string;
   sku?: string;
   plant: string;
+  finalName?: string;
 }
 
 function toEditForm(p: PurchaseMaster): EditPurchaseForm {
@@ -113,6 +116,7 @@ function toEditForm(p: PurchaseMaster): EditPurchaseForm {
     quantity: String(p.quantity ?? ''),
     amount: String(p.amount ?? ''),
     parentSku: p.parentSku ?? '',
+    hub: (p as PurchaseMaster & { hub?: string }).hub ?? '',
     listing: p.type?.listing != null ? String(p.type.listing) : '',
     revival: p.type?.revival != null ? String(p.type.revival) : '',
     growth: p.type?.growth != null ? String(p.type.growth) : '',
@@ -130,7 +134,7 @@ export function ViewInvoices() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<PurchaseMaster | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [parents, setParents] = useState<ParentOption[]>([]);
+  const [parents, setParents] = useState<ParentFromApi[]>([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [overheadModalOpen, setOverheadModalOpen] = useState(false);
@@ -164,7 +168,7 @@ export function ViewInvoices() {
       const res = await fetch('/api/parent-master?limit=500');
       const json = await res.json();
       if (json?.success && Array.isArray(json.data)) {
-        setParents(json.data.filter((p: ParentOption) => p.sku && String(p.sku).trim()));
+        setParents(json.data);
       }
     } catch {
       // non-blocking
@@ -192,10 +196,21 @@ export function ViewInvoices() {
     };
   }, [editing]);
 
-  const parentOptions = parents.map((p) => ({
-    value: p.sku ?? p._id,
-    label: `${p.plant} ${p.sku ? `(${p.sku})` : ''}`,
-  }));
+  /** All unique SKUs from parent master */
+  const parentOptions = useMemo(() => {
+    const set = new Set<string>();
+    parents.forEach((p: ParentFromApi) => {
+      if (p.sku && String(p.sku).trim()) set.add(String(p.sku).trim());
+    });
+    return Array.from(set)
+      .sort()
+      .map((sku) => ({ value: sku, label: sku }));
+  }, [parents]);
+
+  const hubOptions = useMemo(
+    () => HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub })),
+    []
+  );
 
   const billAnalytics = useMemo(() => computeBillAnalytics(purchases), [purchases]);
   const combinedAnalytics = useMemo(
@@ -284,6 +299,7 @@ export function ViewInvoices() {
       productPrice,
       amount,
       parentSku: editForm.parentSku.trim(),
+      ...(editForm.hub.trim() && { hub: editForm.hub.trim() }),
       type: {
         listing: editForm.listing !== '' ? Number(editForm.listing) : undefined,
         revival: editForm.revival !== '' ? Number(editForm.revival) : undefined,
@@ -482,6 +498,7 @@ export function ViewInvoices() {
         editForm={editForm}
         saving={saving}
         parentOptions={parentOptions}
+        hubOptions={hubOptions}
         onClose={() => setEditing(null)}
         onSave={handleSaveEdit}
         onChange={setEditForm}

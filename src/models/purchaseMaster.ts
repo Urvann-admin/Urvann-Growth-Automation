@@ -52,6 +52,8 @@ export interface PurchaseMaster {
   type: PurchaseTypeBreakdown;
   /** Parent SKU */
   parentSku: string;
+  /** Hub (e.g. Whitefield, HSR) */
+  hub?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

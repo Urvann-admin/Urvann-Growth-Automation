@@ -14,12 +14,22 @@ import {
   ChevronRight,
   ChevronLeft,
   Search,
+  X,
 } from 'lucide-react';
 import type { ProductRow, ParentItemRow } from './types';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
-import { POT_TYPES_WITH_PRICING, getPotPrice } from '@/shared/constants/pots';
+const TAG_OPTIONS = [
+  { value: '', label: 'No tag' },
+  { value: 'Bestseller', label: 'Bestseller' },
+  { value: 'New Arrival', label: 'New Arrival' },
+  { value: 'Sale', label: 'Sale' },
+  { value: 'Featured', label: 'Featured' },
+  { value: 'Trending', label: 'Trending' },
+  { value: 'Clearance', label: 'Clearance' },
+  { value: 'Limited Stock', label: 'Limited Stock' },
+];
 import { CustomSelect } from '@/app/dashboard/listing/components/CustomSelect';
 
 interface ProductTableProps {
@@ -29,11 +39,14 @@ interface ProductTableProps {
   onRemoveRow: (rowId: string) => void;
   section: ListingSection;
   isLoading: boolean;
+  /** When provided, active row is controlled by parent (e.g. for Save & Next flow). */
+  activeRowId?: string | null;
+  onActiveRowChange?: (rowId: string | null) => void;
 }
 
 const STEPS = [
   { id: 'parent', label: 'Parent', icon: Package },
-  { id: 'details', label: 'Details', icon: Settings2 },
+  { id: 'pricing', label: 'Pricing', icon: Settings2 },
   { id: 'hub-seller', label: 'Hub & Seller', icon: Building2 },
   { id: 'review', label: 'Review', icon: ClipboardCheck },
 ] as const;
@@ -196,23 +209,18 @@ export function ProductTable({
   onRemoveRow,
   section,
   isLoading,
+  activeRowId: controlledActiveRowId,
+  onActiveRowChange,
 }: ProductTableProps) {
-  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  const [internalActiveRowId, setInternalActiveRowId] = useState<string | null>(null);
+  const activeRowId = controlledActiveRowId !== undefined ? controlledActiveRowId : internalActiveRowId;
+  const setActiveRowId = onActiveRowChange ?? setInternalActiveRowId;
   const [stepByRow, setStepByRow] = useState<Record<string, number>>({});
 
   const hubOptions = useMemo(
     () => HUB_MAPPINGS.map((mapping) => ({ value: mapping.hub, label: mapping.hub })),
     []
   );
-
-  const potTypeOptions = useMemo(() => {
-    const seen = new Set<string>();
-    return POT_TYPES_WITH_PRICING.filter((c) => {
-      if (seen.has(c.value)) return false;
-      seen.add(c.value);
-      return true;
-    }).map((c) => ({ value: c.value, label: c.value }));
-  }, []);
 
   const [sellerOptions, setSellerOptions] = useState<{ value: string; label: string }[]>([]);
   useEffect(() => {
@@ -252,6 +260,15 @@ export function ProductTable({
       cancelled = true;
     };
   }, []);
+
+  const collectionOptions = useMemo(
+    () =>
+      Object.entries(collectionNames).map(([value, label]) => ({
+        value,
+        label: label || value,
+      })),
+    [collectionNames]
+  );
 
   const [skuPreviews, setSkuPreviews] = useState<Record<string, string>>({});
   const skuRequestedRef = useRef<Set<string>>(new Set());
@@ -333,16 +350,14 @@ export function ProductTable({
       minInventory = Math.min(minInventory, possibleSets);
     });
 
-    const potSize = typeof row.size === 'number' ? row.size : Number(row.size) || 0;
-    const potPricePerUnit = getPotPrice(row.type || undefined, potSize || undefined);
-    const potQty = row.potQuantity ?? 0;
-    totalPrice += potPricePerUnit * potQty;
-
     return {
       price: totalPrice,
       inventory: minInventory === Infinity ? 0 : minInventory,
     };
   };
+
+  const calcSetQuantity = (items: ParentItemRow[]): number =>
+    items.reduce((sum, i) => sum + (i.quantity || 0), 0) || 1;
 
   const handleParentItemChange = (row: ProductRow, itemIndex: number, updates: Partial<ParentItemRow>) => {
     const updatedItems = row.parentItems.map((item, index) =>
@@ -350,11 +365,14 @@ export function ProductTable({
     );
     const cleanedItems = updatedItems.filter((item) => item.parentSku && item.quantity > 0);
     const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: cleanedItems });
+    const setQty = calcSetQuantity(cleanedItems);
     onUpdateRow(row.id, {
       parentItems: cleanedItems,
       parentSkus: cleanedItems.map((i) => i.parentSku),
       price,
       inventory_quantity: inventory,
+      setQuantity: setQty,
+      quantity: setQty,
     });
   };
 
@@ -383,6 +401,7 @@ export function ProductTable({
     };
     const updatedItems = [newItem];
     const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: updatedItems });
+    const setQty = calcSetQuantity(updatedItems);
     onUpdateRow(row.id, {
       parentItems: updatedItems,
       parentSkus: [parent.sku || ''],
@@ -402,17 +421,22 @@ export function ProductTable({
       ),
       price,
       inventory_quantity: inventory,
+      setQuantity: setQty,
+      quantity: setQty,
     });
   };
 
   const handleRemoveParentItem = (row: ProductRow, itemIndex: number) => {
     const updatedItems = row.parentItems.filter((_, i) => i !== itemIndex);
     const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: updatedItems });
+    const setQty = calcSetQuantity(updatedItems);
     onUpdateRow(row.id, {
       parentItems: updatedItems,
       parentSkus: updatedItems.map((i) => i.parentSku),
       price,
       inventory_quantity: inventory,
+      setQuantity: setQty,
+      quantity: setQty,
     });
   };
 
@@ -456,12 +480,15 @@ export function ProductTable({
         ...baseUpdates,
       };
       const { price, inventory } = recalculatePriceAndInventory(tempRow);
+      const setQty = calcSetQuantity(tempRow.parentItems);
       onUpdateRow(row.id, {
         ...baseUpdates,
         parentItems: tempRow.parentItems,
         parentSkus: tempRow.parentItems.map((i) => i.parentSku),
         price,
         inventory_quantity: inventory,
+        setQuantity: setQty,
+        quantity: setQty,
       });
     } else {
       handleParentItemChange(row, itemIndex, { parentSku });
@@ -491,7 +518,7 @@ export function ProductTable({
       case 0:
         return row.parentItems.length > 0 && row.parentItems.some((i) => i.parentSku);
       case 1:
-        return Boolean(row.type);
+        return row.price > 0;
       case 2:
         return Boolean(row.hub);
       case 3:
@@ -682,67 +709,16 @@ export function ProductTable({
             </div>
           )}
 
-          {/* Step 1: Pot & Pricing Details */}
+          {/* Step 1: Pricing & Details */}
           {currentStep === 1 && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-semibold text-slate-800">Pot & Pricing</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Configure pot details and pricing</p>
+                <h3 className="text-sm font-semibold text-slate-800">Pricing & Details</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Set pricing and additional product details</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Pot Type</label>
-                  <CustomSelect
-                    value={activeRow.type ?? ''}
-                    onChange={(value) => {
-                      const updatedRow = { ...activeRow, type: value };
-                      const { price, inventory } = recalculatePriceAndInventory(updatedRow);
-                      onUpdateRow(activeRow.id, { type: value, price, inventory_quantity: inventory });
-                    }}
-                    options={potTypeOptions}
-                    placeholder="Pot type"
-                    searchable={true}
-                  />
-                </div>
-                <InlineInput
-                  value={activeRow.size}
-                  onChange={(value) => {
-                    const sizeVal = value === '' ? '' : Number(value);
-                    const updatedRow = { ...activeRow, size: sizeVal } as ProductRow;
-                    const { price, inventory } = recalculatePriceAndInventory(updatedRow);
-                    onUpdateRow(activeRow.id, { size: sizeVal, price, inventory_quantity: inventory });
-                  }}
-                  type="number"
-                  placeholder="Inches"
-                  label="Pot Size"
-                />
-                <InlineInput
-                  value={activeRow.potQuantity}
-                  onChange={(value) => {
-                    const potQty = Number(value) || 0;
-                    const updatedRow = { ...activeRow, potQuantity: potQty };
-                    const { price, inventory } = recalculatePriceAndInventory(updatedRow);
-                    onUpdateRow(activeRow.id, { potQuantity: potQty, price, inventory_quantity: inventory });
-                  }}
-                  type="number"
-                  placeholder="0"
-                  label="Pot Quantity"
-                />
-                <InlineInput
-                  value={activeRow.setQuantity}
-                  onChange={(value) => {
-                    const setQty = Number(value) || 1;
-                    onUpdateRow(activeRow.id, { setQuantity: setQty, quantity: setQty });
-                  }}
-                  type="number"
-                  placeholder="1"
-                  label="Set Quantity"
-                  error={activeRow.validationErrors.quantity}
-                />
-              </div>
-
-              <div className="mt-2 p-4 bg-pink-50 rounded-xl border border-pink-100">
+              {/* Calculated Price */}
+              <div className="p-4 bg-pink-50 rounded-xl border border-pink-100">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-[#E6007A]">Calculated Price</span>
                   <div className="flex items-center gap-2">
@@ -756,6 +732,47 @@ export function ProductTable({
                       className="w-24 px-2 py-1 text-sm border border-pink-200 rounded-lg bg-white text-right focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
                       placeholder="Override"
                     />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <InlineInput
+                  value={activeRow.compare_at_price ?? ''}
+                  onChange={(value) => {
+                    onUpdateRow(activeRow.id, { compare_at_price: value === '' ? undefined : Number(value) });
+                  }}
+                  type="number"
+                  placeholder="Compare at price"
+                  label="Compare at Price (₹)"
+                />
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Tag</label>
+                  <CustomSelect
+                    value={activeRow.tag ?? ''}
+                    onChange={(value) => onUpdateRow(activeRow.id, { tag: value || undefined })}
+                    options={TAG_OPTIONS}
+                    placeholder="Select tag"
+                    searchable={false}
+                  />
+                </div>
+
+                <InlineInput
+                  value={activeRow.sort_order ?? 3000}
+                  onChange={(value) => {
+                    onUpdateRow(activeRow.id, { sort_order: value === '' ? 3000 : Number(value) });
+                  }}
+                  type="number"
+                  placeholder="3000"
+                  label="Sort Order"
+                />
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Set Quantity</label>
+                  <div className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-700 font-medium">
+                    {activeRow.setQuantity ?? 1}
+                    <span className="ml-2 text-xs text-slate-400 font-normal">(auto from parents)</span>
                   </div>
                 </div>
               </div>
@@ -801,7 +818,7 @@ export function ProductTable({
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-slate-800">Review</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Verify all details before saving</p>
+                <p className="text-xs text-slate-500 mt-0.5">Review and edit all details before saving</p>
               </div>
 
               {/* Status badge */}
@@ -821,8 +838,8 @@ export function ProductTable({
                 )}
               </div>
 
-              {/* Summary grid */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* Read-only computed fields */}
+              <div className="grid grid-cols-2 gap-3">
                 <ReviewField label="Product Name" value={getFinalName(activeRow)} />
                 <ReviewField
                   label="SKU"
@@ -845,33 +862,118 @@ export function ProductTable({
                       : '—'
                   }
                 />
-                <ReviewField
-                  label="Pot"
-                  value={
-                    activeRow.type
-                      ? `${activeRow.type}${activeRow.size ? ` · ${activeRow.size}"` : ''}${activeRow.potQuantity ? ` · ×${activeRow.potQuantity}` : ''}`
-                      : '—'
-                  }
-                />
-                <ReviewField label="Hub" value={activeRow.hub || '—'} />
-                <ReviewField
-                  label="Seller"
-                  value={sellerOptions.find((s) => s.value === activeRow.seller)?.label || activeRow.seller || '—'}
-                />
+                <ReviewField label="Set Qty" value={String(activeRow.setQuantity ?? 1)} />
+                <ReviewField label="Inventory" value={String(activeRow.inventory_quantity)} highlight />
                 <ReviewField
                   label="Categories"
                   value={activeRow.categories?.length ? activeRow.categories.join(', ') : '—'}
                 />
-                <ReviewField
-                  label="Collections"
-                  value={
-                    activeRow.collectionIds?.length
-                      ? activeRow.collectionIds.map((id) => collectionNames[String(id)] ?? id).join(', ')
-                      : '—'
-                  }
+              </div>
+
+              {/* Editable fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Hub <span className="text-red-400">*</span></label>
+                  <CustomSelect
+                    value={activeRow.hub ?? ''}
+                    onChange={(value) => onUpdateRow(activeRow.id, { hub: value })}
+                    options={hubOptions}
+                    placeholder="Hub"
+                    error={activeRow.validationErrors.hub}
+                    searchable={true}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Seller</label>
+                  <CustomSelect
+                    value={activeRow.seller ?? ''}
+                    onChange={(value) => onUpdateRow(activeRow.id, { seller: value })}
+                    options={sellerOptions}
+                    placeholder="Seller"
+                    searchable={true}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Price (₹)</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-[#330033]">₹{activeRow.price.toLocaleString()}</span>
+                    <input
+                      type="number"
+                      value={activeRow.price || ''}
+                      onChange={(e) => onUpdateRow(activeRow.id, { price: Number(e.target.value) || 0 })}
+                      className="flex-1 px-2 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                      placeholder="Override"
+                    />
+                  </div>
+                </div>
+                <InlineInput
+                  value={activeRow.compare_at_price ?? ''}
+                  onChange={(value) => {
+                    onUpdateRow(activeRow.id, { compare_at_price: value === '' ? undefined : Number(value) });
+                  }}
+                  type="number"
+                  placeholder="Compare at price"
+                  label="Compare at Price (₹)"
                 />
-                <ReviewField label="Price" value={`₹${activeRow.price.toLocaleString()}`} highlight />
-                <ReviewField label="Inventory" value={String(activeRow.inventory_quantity)} highlight />
+
+                <InlineInput
+                  value={activeRow.sort_order ?? 3000}
+                  onChange={(value) => {
+                    onUpdateRow(activeRow.id, { sort_order: value === '' ? 3000 : Number(value) });
+                  }}
+                  type="number"
+                  placeholder="3000"
+                  label="Sort Order"
+                />
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Tag</label>
+                  <CustomSelect
+                    value={activeRow.tag ?? ''}
+                    onChange={(value) => onUpdateRow(activeRow.id, { tag: value || undefined })}
+                    options={TAG_OPTIONS}
+                    placeholder="Select tag"
+                    searchable={false}
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Collections</label>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {(activeRow.collectionIds || []).map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium"
+                      >
+                        {collectionNames[id] ?? id}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onUpdateRow(activeRow.id, {
+                              collectionIds: (activeRow.collectionIds || []).filter((cid) => cid !== id),
+                            })
+                          }
+                          className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
+                          aria-label="Remove collection"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <CustomSelect
+                    value=""
+                    onChange={(value) => {
+                      if (!value) return;
+                      const ids = activeRow.collectionIds || [];
+                      if (ids.includes(value)) return;
+                      onUpdateRow(activeRow.id, { collectionIds: [...ids, value] });
+                    }}
+                    options={collectionOptions.filter((opt) => !(activeRow.collectionIds || []).includes(opt.value))}
+                    placeholder="Add collection..."
+                    searchable={true}
+                  />
+                </div>
               </div>
 
               {/* Validation errors */}

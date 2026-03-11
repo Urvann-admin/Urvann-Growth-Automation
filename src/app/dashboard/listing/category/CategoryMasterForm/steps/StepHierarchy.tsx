@@ -3,6 +3,7 @@
 import { Field, SearchableSelect } from '../shared';
 
 export interface StepHierarchyProps {
+  typeOfCategory: string;
   l1Parent: string;
   l2Parent: string;
   l3Parent: string;
@@ -15,6 +16,7 @@ export interface StepHierarchyProps {
 }
 
 export function StepHierarchy({
+  typeOfCategory,
   l1Parent,
   l2Parent,
   l3Parent,
@@ -25,6 +27,7 @@ export function StepHierarchy({
   onL2ParentChange,
   onL3ParentChange,
 }: StepHierarchyProps) {
+  const isL2 = String(typeOfCategory || '').toUpperCase() === 'L2';
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -36,22 +39,26 @@ export function StepHierarchy({
             placeholder="Select L1 parent"
           />
         </Field>
-        <Field label="L2 parent">
-          <SearchableSelect
-            value={l2Parent}
-            options={l2Options}
-            onChange={onL2ParentChange}
-            placeholder="Select L2 parent"
-          />
-        </Field>
-        <Field label="L3 parent">
-          <SearchableSelect
-            value={l3Parent}
-            options={l3Options}
-            onChange={onL3ParentChange}
-            placeholder="Select L3 parent"
-          />
-        </Field>
+        {!isL2 && (
+          <>
+            <Field label="L2 parent">
+              <SearchableSelect
+                value={l2Parent}
+                options={l2Options}
+                onChange={onL2ParentChange}
+                placeholder="Select L2 parent"
+              />
+            </Field>
+            <Field label="L3 parent">
+              <SearchableSelect
+                value={l3Parent}
+                options={l3Options}
+                onChange={onL3ParentChange}
+                placeholder="Select L3 parent"
+              />
+            </Field>
+          </>
+        )}
       </div>
     </div>
   );

@@ -7,7 +7,6 @@ import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { CategoryModel } from '@/models/category';
 import { generateSKU } from '@/lib/skuGenerator';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
-import { getPotPrice } from '@/shared/constants/pots';
 import { withDerivedParentSkus } from '@/models/listingProduct';
 
 export async function GET(request: NextRequest) {
@@ -310,18 +309,15 @@ async function validateListingProductData(data: unknown): Promise<{
     if (!parent) {
       return { success: false, message: `Parent with SKU ${parentSkus[i]} not found` };
     }
-    const requiredFromParent = parentItems[i].quantity;
-    const availableQuantity = parent.inventory_quantity ?? 0;
-    if (availableQuantity < requiredFromParent) {
-      return { success: false, message: `Insufficient quantity for parent ${parentSkus[i]}. Available: ${availableQuantity}, Required: ${requiredFromParent}` };
-    }
   }
 
-  // Calculate price and inventory_quantity
+  // Calculate price and inventory_quantity (allow insufficient quantity; inventory will be 0 and publish_status 0)
   let totalPrice = 0;
   let minInventoryQuantity = Infinity;
   const combinedCategories = new Set<string>();
   const combinedCollectionIds = new Set<string>();
+  const combinedRedirects = new Set<string>();
+  const combinedFeatures = new Set<string>();
 
   // Helper: find parentMaster for a given sku
   const getParentForSku = (sku: string) => {
@@ -354,19 +350,25 @@ async function validateListingProductData(data: unknown): Promise<{
     if (parent.collectionIds) {
       parent.collectionIds.forEach((id: string) => combinedCollectionIds.add(String(id)));
     }
+
+    // Combine redirects (parent.redirects may be comma-separated string)
+    const redirectsStr = (parent as any).redirects;
+    if (redirectsStr && typeof redirectsStr === 'string') {
+      redirectsStr.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((r: string) => combinedRedirects.add(r));
+    }
+
+    // Combine features (parent.features may be comma-separated string)
+    const featuresStr = (parent as any).features;
+    if (featuresStr && typeof featuresStr === 'string') {
+      featuresStr.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((f: string) => combinedFeatures.add(f));
+    }
   }
 
-  // Pot based pricing
   const potQuantity = typeof (d as any).potQuantity === 'number'
     ? (d as any).potQuantity
     : Number((d as any).potQuantity || 0);
   const potSize = typeof d.size === 'number' ? d.size : typeof d.size === 'string' ? parseFloat(d.size) : undefined;
   const potType = d.type ? String(d.type).trim() : undefined;
-
-  const potPricePerUnit = getPotPrice(potType, potSize);
-  if (potQuantity > 0 && potPricePerUnit > 0) {
-    totalPrice += potPricePerUnit * potQuantity;
-  }
 
   // Apply category rules to get additional categories
   const autoCategories = await getAutoCategoriesForProduct({
@@ -404,6 +406,8 @@ async function validateListingProductData(data: unknown): Promise<{
   const hub = d.hub ? String(d.hub).trim() : undefined;
   const substores = hub ? getSubstoresByHub(hub) : [];
 
+  const finalInventory = minInventoryQuantity === Infinity ? 0 : minInventoryQuantity;
+
   // Build validated object (only parentItems persisted; parentSkus is derived from parentItems when needed)
   const validated: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'> = {
     parentItems,
@@ -437,9 +441,15 @@ async function validateListingProductData(data: unknown): Promise<{
     setQuantity: setQuantity > 0 ? setQuantity : undefined,
     potQuantity: potQuantity > 0 ? potQuantity : undefined,
     price: totalPrice,
-    inventory_quantity: minInventoryQuantity === Infinity ? 0 : minInventoryQuantity,
+    inventory_quantity: finalInventory,
+    tag: (d as any).tag ? String((d as any).tag).trim() : undefined,
+    compare_at_price: typeof (d as any).compare_at_price === 'number' ? (d as any).compare_at_price : undefined,
+    sort_order: typeof (d as any).sort_order === 'number' ? (d as any).sort_order : 3000,
+    publish_status: finalInventory > 0 ? 1 : 0,
     categories: Array.from(combinedCategories),
     collectionIds: Array.from(combinedCollectionIds),
+    redirects: combinedRedirects.size > 0 ? Array.from(combinedRedirects) : undefined,
+    features: combinedFeatures.size > 0 ? Array.from(combinedFeatures) : undefined,
     images: (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean),
     sku: sku,
     section: d.section as ListingSection,
@@ -501,6 +511,24 @@ async function sanitizeUpdateData(data: Record<string, unknown>, existing: Listi
     const hub = String(data.hub).trim() || undefined;
     sanitized.hub = hub;
     sanitized.substores = hub ? getSubstoresByHub(hub) : [];
+  }
+  if (data.tag !== undefined) {
+    sanitized.tag = data.tag ? String(data.tag).trim() : undefined;
+  }
+  if (data.compare_at_price !== undefined) {
+    sanitized.compare_at_price = typeof data.compare_at_price === 'number' ? data.compare_at_price : undefined;
+  }
+  if (data.sort_order !== undefined) {
+    sanitized.sort_order = typeof data.sort_order === 'number' ? data.sort_order : 3000;
+  }
+  if (data.redirects !== undefined && Array.isArray(data.redirects)) {
+    sanitized.redirects = (data.redirects as string[]).map((r) => String(r).trim()).filter(Boolean);
+  }
+  if (data.features !== undefined && Array.isArray(data.features)) {
+    sanitized.features = (data.features as string[]).map((f) => String(f).trim()).filter(Boolean);
+  }
+  if (data.publish_status !== undefined) {
+    sanitized.publish_status = data.publish_status === 1 ? 1 : 0;
   }
 
   // Regenerate finalName if any relevant fields changed

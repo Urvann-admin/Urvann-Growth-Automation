@@ -22,6 +22,8 @@ interface OverheadModalProps {
   manualAmounts: number[];
   onManualAmountChange: (index: number, value: number) => void;
   manualTotalError: string | null;
+  /** When true, hide the Bill reference field (e.g. when bill is known from context, e.g. import) */
+  hideBillField?: boolean;
 }
 
 export function OverheadModal({
@@ -35,6 +37,7 @@ export function OverheadModal({
   manualAmounts,
   onManualAmountChange,
   manualTotalError,
+  hideBillField = false,
 }: OverheadModalProps) {
   const inputClass =
     'w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500';
@@ -69,16 +72,18 @@ export function OverheadModal({
                 placeholder="e.g. Freight"
               />
             </label>
-            <label className="block">
-              <span className="block text-sm font-medium text-slate-700 mb-1">Bill</span>
-              <input
-                type="text"
-                value={form.bill}
-                onChange={(e) => onChange({ ...form, bill: e.target.value })}
-                className={inputClass}
-                placeholder="Bill reference"
-              />
-            </label>
+            {!hideBillField && (
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-700 mb-1">Bill</span>
+                <input
+                  type="text"
+                  value={form.bill}
+                  onChange={(e) => onChange({ ...form, bill: e.target.value })}
+                  className={inputClass}
+                  placeholder="Bill reference"
+                />
+              </label>
+            )}
             <label className="block">
               <span className="block text-sm font-medium text-slate-700 mb-1">Allocation</span>
               <select

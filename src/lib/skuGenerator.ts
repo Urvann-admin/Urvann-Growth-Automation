@@ -72,6 +72,9 @@ export async function generateSKU(
 /** Parent products are always single unit; qty code in SKU is always "01" (not set/case). */
 const PARENT_QTY_CODE = '01';
 
+/** Counter key for parent products that are live in all hubs (no hub letter in SKU). */
+const PARENT_GLOBAL_HUB_KEY = 'PARENT';
+
 export async function generateParentSKU(
   hub: string,
   productName: string
@@ -81,6 +84,26 @@ export async function generateParentSKU(
   const counter = await SkuCounterModel.getNextCounter(hub);
   const sequence = getPaddedSequence(counter);
   return `${hubCode}${productCode}${sequence}${PARENT_QTY_CODE}`;
+}
+
+/**
+ * Generate a single parent SKU without hub letter (for parents live in all hubs).
+ * Format: [PRODUCT][SEQUENCE][01] e.g. ROS0001001
+ */
+export async function generateParentSKUGlobal(productName: string): Promise<string> {
+  const productCode = getProductCode(productName);
+  const counter = await SkuCounterModel.getNextCounter(PARENT_GLOBAL_HUB_KEY);
+  const sequence = getPaddedSequence(counter);
+  return `${productCode}${sequence}${PARENT_QTY_CODE}`;
+}
+
+/** Preview next global parent SKU without incrementing counter. */
+export async function previewParentSKUGlobal(productName: string): Promise<string> {
+  const productCode = getProductCode(productName);
+  const currentCounter = await SkuCounterModel.getCurrentCounter(PARENT_GLOBAL_HUB_KEY);
+  const nextCounter = currentCounter + 1;
+  const sequence = getPaddedSequence(nextCounter);
+  return `${productCode}${sequence}${PARENT_QTY_CODE}`;
 }
 
 /**

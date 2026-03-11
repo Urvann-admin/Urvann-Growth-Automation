@@ -274,6 +274,8 @@ export function ProductMasterForm() {
         size: typeof formData.size === 'number' ? formData.size : undefined,
         potType: formData.potType || undefined,
         seller: formData.seller || undefined,
+        features: formData.features || undefined,
+        redirects: formData.redirects || undefined,
         description: formData.description.trim() || undefined,
         finalName: finalName || undefined,
         categories: formData.categories,
@@ -479,6 +481,8 @@ export function ProductMasterForm() {
                 mossStick={formData.mossStick}
                 potType={formData.potType}
                 seller={formData.seller}
+                features={formData.features}
+                redirects={formData.redirects}
                 description={formData.description}
                 sellerOptions={sellerOptions}
                 errors={errors}

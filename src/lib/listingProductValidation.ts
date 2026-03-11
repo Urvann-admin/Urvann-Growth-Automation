@@ -73,18 +73,7 @@ export function validateListingProductForm(
     }
   }
 
-  // Check if quantity is available from all parents (for child listing)
-  if (!errors.quantity && selectedParents.length > 0 && !isParentListing) {
-    const insufficientParents = selectedParents.filter(parent => {
-      const availableQuantity = parent.inventory_quantity ?? 0;
-      return availableQuantity < quantity;
-    });
-
-    if (insufficientParents.length > 0) {
-      const parentNames = insufficientParents.map(p => `${p.plant} (${p.sku})`).join(', ');
-      errors.quantity = `Insufficient quantity available from: ${parentNames}`;
-    }
-  }
+  // Allow save even when parent quantity is insufficient; publish_status will be set to 0 by API.
 
   // Hub validation
   if (!formData.hub || !formData.hub.trim()) {
@@ -166,20 +155,6 @@ export function validateParentSelection(
   );
   if (missingParents.length > 0) {
     errors.parentSkus = `Parent data not found for: ${missingParents.join(', ')}`;
-  }
-
-  // Check quantity availability
-  const insufficientParents = selectedParents.filter(parent => {
-    const availableQuantity = parent.inventory_quantity ?? 0;
-    return availableQuantity < requiredQuantity;
-  });
-
-  if (insufficientParents.length > 0) {
-    const details = insufficientParents.map(parent => {
-      const available = parent.inventory_quantity ?? 0;
-      return `${parent.plant} (${parent.sku}): ${available} available, ${requiredQuantity} required`;
-    }).join('; ');
-    errors.quantity = `Insufficient quantities: ${details}`;
   }
 
   return {

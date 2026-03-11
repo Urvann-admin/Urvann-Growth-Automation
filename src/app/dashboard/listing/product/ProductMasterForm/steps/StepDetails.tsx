@@ -1,13 +1,15 @@
 'use client';
 
 import { CustomSelect } from '../../../components/CustomSelect';
-import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS } from '../types';
+import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, FEATURES_OPTIONS, REDIRECTS_OPTIONS } from '../types';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
 
 export interface StepDetailsProps {
   mossStick: string;
   potType: string;
   seller: string;
+  features: string;
+  redirects: string;
   description: string;
   sellerOptions: { value: string; label: string }[];
   errors: Record<string, string>;
@@ -19,6 +21,8 @@ export function StepDetails({
   mossStick,
   potType,
   seller,
+  features,
+  redirects,
   description,
   sellerOptions,
   errors,
@@ -51,6 +55,20 @@ export function StepDetails({
           onChange={(v) => onFieldChange('seller', v)}
           options={sellerOptions}
           placeholder="Select Procurement Seller"
+        />
+        <CustomSelect
+          label="Features"
+          value={features}
+          onChange={(v) => onFieldChange('features', v)}
+          options={FEATURES_OPTIONS}
+          placeholder="Select Features"
+        />
+        <CustomSelect
+          label="Redirects"
+          value={redirects}
+          onChange={(v) => onFieldChange('redirects', v)}
+          options={REDIRECTS_OPTIONS}
+          placeholder="Select Redirects"
         />
       </div>
       <div>

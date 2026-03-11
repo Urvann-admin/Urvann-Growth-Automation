@@ -78,9 +78,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    if (description == null || typeof description !== 'string' || !String(description).trim()) {
+    if (description != null && typeof description !== 'string') {
       return NextResponse.json(
-        { success: false, message: 'description is required' },
+        { success: false, message: 'description must be a string when provided' },
         { status: 400 }
       );
     }
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
       categoryData.categoryId = String(categoryId).trim();
     }
     categoryData.type = String(type).trim();
-    categoryData.description = String(description).trim();
+    categoryData.description = description != null ? String(description).trim() : '';
     if (rule != null && validateRule(rule)) categoryData.rule = normalizeRule(rule as Rule);
     if (Array.isArray(substores)) {
       categoryData.substores = substores.map((s: unknown) => String(s).trim()).filter(Boolean);

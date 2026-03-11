@@ -5,7 +5,7 @@ import { X, Check, ChevronDown, Search } from 'lucide-react';
 import type { Category } from '@/models/category';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { CustomSelect } from '../../components/CustomSelect';
-import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, COLOUR_OPTIONS } from '../ProductMasterForm/types';
+import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, COLOUR_OPTIONS, FEATURES_OPTIONS, REDIRECTS_OPTIONS } from '../ProductMasterForm/types';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 
 interface EditParentForm {
@@ -18,6 +18,8 @@ interface EditParentForm {
   size: number | '';
   potType: string;
   seller: string;
+  features: string;
+  redirects: string;
   categories: string[];
   sellingPrice: number | '';
   images: string[];
@@ -175,6 +177,20 @@ export function EditParentModal({
                 onChange={(v) => onChange({ ...editForm, seller: v })}
                 options={sellerOptions}
                 placeholder="Select Procurement Seller"
+              />
+              <CustomSelect
+                label="Features"
+                value={editForm.features}
+                onChange={(v) => onChange({ ...editForm, features: v })}
+                options={FEATURES_OPTIONS}
+                placeholder="Select Features"
+              />
+              <CustomSelect
+                label="Redirects"
+                value={editForm.redirects}
+                onChange={(v) => onChange({ ...editForm, redirects: v })}
+                options={REDIRECTS_OPTIONS}
+                placeholder="Select Redirects"
               />
             </div>
           </ModalSection>

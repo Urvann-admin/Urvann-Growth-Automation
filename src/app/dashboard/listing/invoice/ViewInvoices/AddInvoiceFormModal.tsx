@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 import { Notification } from '@/components/ui/Notification';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 
-interface ParentOption {
+interface ParentFromApi {
   _id: string;
   sku?: string;
   plant: string;
+  finalName?: string;
 }
 
 export interface AddInvoiceFormState {
@@ -17,6 +19,7 @@ export interface AddInvoiceFormState {
   quantity: string;
   amount: string;
   parentSku: string;
+  hub: string;
   listing: string;
   revival: string;
   growth: string;
@@ -30,6 +33,7 @@ const emptyForm: AddInvoiceFormState = {
   quantity: '',
   amount: '',
   parentSku: '',
+  hub: '',
   listing: '',
   revival: '',
   growth: '',
@@ -44,7 +48,7 @@ interface AddInvoiceFormModalProps {
 
 export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFormModalProps) {
   const [form, setForm] = useState<AddInvoiceFormState>(emptyForm);
-  const [parents, setParents] = useState<ParentOption[]>([]);
+  const [parents, setParents] = useState<ParentFromApi[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -53,12 +57,28 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       const res = await fetch('/api/parent-master?limit=500');
       const json = await res.json();
       if (json?.success && Array.isArray(json.data)) {
-        setParents(json.data.filter((p: ParentOption) => p.sku && String(p.sku).trim()));
+        setParents(json.data);
       }
     } catch {
       setMessage({ type: 'error', text: 'Failed to load parent SKUs' });
     }
   }, []);
+
+  /** All unique SKUs from parent master */
+  const parentOptions = useMemo(() => {
+    const set = new Set<string>();
+    parents.forEach((p: ParentFromApi) => {
+      if (p.sku && String(p.sku).trim()) set.add(String(p.sku).trim());
+    });
+    return Array.from(set)
+      .sort()
+      .map((sku) => ({ value: sku, label: sku }));
+  }, [parents]);
+
+  const hubOptions = useMemo(
+    () => HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub })),
+    []
+  );
 
   useEffect(() => {
     if (isOpen) {
@@ -109,6 +129,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       productPrice,
       amount,
       parentSku: form.parentSku.trim(),
+      ...(form.hub.trim() && { hub: form.hub.trim() }),
       type: {
         ...(listing > 0 && { listing }),
         ...(revival > 0 && { revival }),
@@ -145,11 +166,6 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
 
   const inputClass =
     'w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500';
-
-  const parentOptions = parents.map((p) => ({
-    value: p.sku ?? p._id,
-    label: `${p.plant} ${p.sku ? `(${p.sku})` : ''}`,
-  }));
 
   return (
     <ModalContainer isOpen={isOpen} onClose={onClose}>
@@ -234,6 +250,21 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
                 >
                   <option value="">Select</option>
                   {parentOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Hub</span>
+                <select
+                  value={form.hub}
+                  onChange={(e) => setForm((f) => ({ ...f, hub: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="">Select</option>
+                  {hubOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>

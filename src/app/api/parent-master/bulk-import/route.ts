@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel } from '@/models/parentMaster';
 import type { ParentMaster } from '@/models/parentMaster';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
-import { HUB_MAPPINGS } from '@/shared/constants/hubs';
-import { generateParentSKU } from '@/lib/skuGenerator';
+import { generateParentSKUGlobal } from '@/lib/skuGenerator';
 
 const TEMPLATE_HEADERS = [
   'plant',
@@ -179,20 +178,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const allHubNames = HUB_MAPPINGS.map((m) => m.hub);
-
-    // Generate SKUs for all hubs per row
+    // Generate single SKU per row (no hub letter; parent live in all hubs)
     for (let i = 0; i < validatedItems.length; i++) {
       const item = validatedItems[i];
       if (!item.plant) continue;
       try {
-        const skus: Record<string, string> = {};
-        for (const hubName of allHubNames) {
-          skus[hubName] = await generateParentSKU(hubName, item.plant);
-        }
-        (validatedItems[i] as Record<string, unknown>).hubs = allHubNames;
-        (validatedItems[i] as Record<string, unknown>).skus = skus;
-        (validatedItems[i] as Record<string, unknown>).skuList = Object.values(skus);
+        const sku = await generateParentSKUGlobal(item.plant);
+        (validatedItems[i] as Record<string, unknown>).sku = sku;
       } catch (err) {
         console.error('SKU generation failed for row:', err);
         return NextResponse.json(

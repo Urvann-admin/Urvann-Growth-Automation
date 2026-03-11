@@ -2,6 +2,11 @@ import type { Rule, RuleCondition, RuleConditionField } from '@/models/category'
 
 export type StepId = 'basics' | 'hierarchy' | 'type-rule' | 'publish-substores' | 'review';
 
+/** Form representation: either a leaf condition or a nested group */
+export type FormRuleItem =
+  | { field: RuleConditionField; value: string }
+  | { rule_operator: 'AND' | 'OR'; items: FormRuleItem[] };
+
 export interface CategoryFormData {
   category: string;
   alias: string;
@@ -13,7 +18,8 @@ export interface CategoryFormData {
   publish: boolean;
   type: 'Automatic' | 'Manual';
   ruleOperator: 'AND' | 'OR';
-  conditions: RuleCondition[];
+  /** Top-level rule items (conditions or nested groups) */
+  ruleItems: FormRuleItem[];
   priorityOrder: string;
   substores: string[];
 }
@@ -52,7 +58,7 @@ export const initialFormData: CategoryFormData = {
   publish: true,
   type: 'Manual',
   ruleOperator: 'AND',
-  conditions: [{ field: 'Plant', value: '' }],
+  ruleItems: [{ field: 'Plant', value: '' }],
   priorityOrder: '0',
   substores: [],
 };

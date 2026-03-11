@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PurchaseMasterModel } from '@/models/purchaseMaster';
+import { ParentMasterModel } from '@/models/parentMaster';
 import { syncParentFromPurchases } from '../syncParent';
 
 export async function GET(
@@ -50,6 +51,17 @@ export async function PUT(
     const updateData = { ...body } as Record<string, unknown>;
     delete updateData._id;
     delete updateData.createdAt;
+
+    const newParentSkuVal = updateData.parentSku != null ? String(updateData.parentSku).trim() : null;
+    if (newParentSkuVal) {
+      const parent = await ParentMasterModel.findBySku(newParentSkuVal);
+      if (!parent) {
+        return NextResponse.json(
+          { success: false, message: 'The selected parent SKU is not in our system. Please add this product in parent master first.' },
+          { status: 400 }
+        );
+      }
+    }
 
     const quantity = updateData.quantity != null ? Number(updateData.quantity) : undefined;
     const amount = updateData.amount != null ? Number(updateData.amount) : undefined;

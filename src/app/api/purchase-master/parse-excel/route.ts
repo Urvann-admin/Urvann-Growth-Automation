@@ -3,8 +3,8 @@ import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
-// Excel format: Bill no., Product Code, Product Name, Quantity, Price, Amount
-const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'quantity', 'productPrice', 'amount'] as const;
+// Excel format: Bill no., Product Code, Quantity, Price, Amount, Parent (or Parent SKU). No Hub column; user selects Hub after upload. Product name optional; when missing, filled from parent master on save.
+const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'quantity', 'productPrice', 'amount', 'parentSku', 'hub'] as const;
 const COLUMN_MAP: Record<string, (typeof EXCEL_COLUMNS)[number]> = {
   'bill number': 'billNumber',
   'bill no': 'billNumber',
@@ -14,6 +14,10 @@ const COLUMN_MAP: Record<string, (typeof EXCEL_COLUMNS)[number]> = {
   'quantity': 'quantity',
   'price': 'productPrice',
   'amount': 'amount',
+  'parent': 'parentSku',
+  'parent sku': 'parentSku',
+  'parent sku.': 'parentSku',
+  'hub': 'hub',
 };
 
 function normalizeHeader(h: string): (typeof EXCEL_COLUMNS)[number] | null {
@@ -58,15 +62,21 @@ export async function POST(request: NextRequest) {
     }
 
     const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    if (ext !== '.xlsx' && ext !== '.xls') {
+    if (ext !== '.xlsx' && ext !== '.xls' && ext !== '.csv') {
       return NextResponse.json(
-        { success: false, message: 'Unsupported format. Use .xlsx or .xls' },
+        { success: false, message: 'Unsupported format. Use .xlsx, .xls, or .csv' },
         { status: 400 }
       );
     }
 
     const arrayBuffer = await file.arrayBuffer();
-    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    let workbook: XLSX.WorkBook;
+    if (ext === '.csv') {
+      const text = new TextDecoder().decode(arrayBuffer);
+      workbook = XLSX.read(text, { type: 'string', raw: false });
+    } else {
+      workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    }
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
     const rows = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false }) as Record<string, unknown>[];
@@ -82,14 +92,22 @@ export async function POST(request: NextRequest) {
 
     parsed.forEach((row) => {
       const q = Number(row.quantity);
-      const amt = Number(row.amount);
+      let amt = row.amount != null ? Number(row.amount) : NaN;
       const priceFromCol = row.productPrice != null ? Number(row.productPrice) : NaN;
-      row.productPrice =
-        Number.isFinite(priceFromCol) && priceFromCol >= 0
-          ? Math.round(priceFromCol)
-          : Number.isFinite(q) && q > 0 && Number.isFinite(amt)
-            ? Math.round(amt / q)
-            : 0;
+      let productPrice: number;
+      if (Number.isFinite(priceFromCol) && priceFromCol >= 0) {
+        productPrice = Math.round(priceFromCol);
+        if (!Number.isFinite(amt) && Number.isFinite(q) && q > 0) {
+          amt = Math.round(productPrice * q);
+        }
+      } else if (Number.isFinite(q) && q > 0 && Number.isFinite(amt)) {
+        productPrice = Math.round(amt / q);
+      } else {
+        productPrice = 0;
+        if (!Number.isFinite(amt)) amt = 0;
+      }
+      row.productPrice = productPrice;
+      row.amount = amt;
     });
 
     return NextResponse.json({ success: true, rows: parsed });

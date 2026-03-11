@@ -81,6 +81,10 @@ export interface ListingProduct {
   categories: string[];
   /** Auto-populated collection IDs from parent collections */
   collectionIds?: (string | ObjectId)[];
+  /** Combined redirects from parent redirects */
+  redirects?: string[];
+  /** Combined features from parent features */
+  features?: string[];
   /** Selected AWS S3 image URLs from collections */
   images: string[];
   /** Generated SKU for this listing product */
@@ -95,6 +99,14 @@ export interface ListingProduct {
   hub?: string;
   /** Substores derived from hub mapping */
   substores?: string[];
+  /** Product tag (e.g. Bestseller, New Arrival) */
+  tag?: string;
+  /** Compare-at price shown as original/strikethrough price */
+  compare_at_price?: number;
+  /** Display sort order; defaults to 3000 */
+  sort_order?: number;
+  /** Publish status: 1 = published, 0 = unpublished. Auto-set based on inventory_quantity. */
+  publish_status?: 0 | 1;
   /** StoreHippo product ID (if synced) */
   storeHippoId?: string;
   /** StoreHippo product _id - same as storeHippoId */

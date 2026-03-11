@@ -1,7 +1,7 @@
 'use client';
 
 import { getSelectedHubsFromSubstores } from '@/shared/constants/hubs';
-import type { CategoryFormData } from '../types';
+import type { CategoryFormData, FormRuleItem } from '../types';
 
 export interface StepReviewProps {
   data: CategoryFormData;
@@ -16,14 +16,25 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function ruleItemsSummary(items: FormRuleItem[], op: string): string {
+  const parts: string[] = [];
+  for (const item of items) {
+    if ('field' in item) {
+      const v = String((item as { value: string }).value).trim();
+      if (v) parts.push(`${item.field}: ${v}`);
+    } else {
+      const nested = ruleItemsSummary(item.items, item.rule_operator);
+      if (nested) parts.push(`(${nested})`);
+    }
+  }
+  return parts.join(` ${op} `);
+}
+
 export function StepReview({ data }: StepReviewProps) {
   const selectedHubs = getSelectedHubsFromSubstores(data.substores);
   const conditionsSummary =
-    data.type === 'Automatic' && data.conditions.length > 0
-      ? data.conditions
-          .filter((c) => String(c.value).trim() !== '')
-          .map((c) => `${c.field}: ${c.value}`)
-          .join(` ${data.ruleOperator} `)
+    data.type === 'Automatic' && data.ruleItems.length > 0
+      ? ruleItemsSummary(data.ruleItems, data.ruleOperator)
       : null;
 
   return (

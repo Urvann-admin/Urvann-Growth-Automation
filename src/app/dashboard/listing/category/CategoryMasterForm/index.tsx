@@ -16,6 +16,8 @@ import {
   initialFormData,
   type StepId,
   type CategoryFormData,
+  type FormRuleItem,
+  type RuleConditionField,
 } from './types';
 import { Notification } from '@/components/ui/Notification';
 
@@ -29,12 +31,6 @@ import {
   StepReview,
 } from './steps';
 
-function isDescriptionEmpty(html: string): boolean {
-  if (!html || !html.trim()) return true;
-  const text = html.replace(/<[^>]*>/g, '').trim();
-  return !text;
-}
-
 function slugify(text: string): string {
   return text
     .trim()
@@ -45,6 +41,112 @@ function slugify(text: string): string {
     .replace(/^-|-$/g, '');
 }
 
+function hasConditionWithValue(items: FormRuleItem[]): boolean {
+  for (const item of items) {
+    if ('field' in item) {
+      if (String((item as { value: string }).value).trim() !== '') return true;
+    } else {
+      if (hasConditionWithValue(item.items)) return true;
+    }
+  }
+  return false;
+}
+
+function formRuleItemsToRuleItems(
+  items: FormRuleItem[]
+): Rule['items'] {
+  return items
+    .map((item): Rule['items'][number] => {
+      if ('field' in item) {
+        const cond = item as { field: string; value: string };
+        const v = cond.value?.trim();
+        const num = Number(v);
+        const value =
+          v !== '' && !Number.isNaN(num) ? num : (v as string | number);
+        return { field: cond.field as Rule['items'][0]['field'], value };
+      }
+      return {
+        rule_operator: item.rule_operator,
+        items: formRuleItemsToRuleItems(item.items),
+      };
+    })
+    .filter((i) => {
+      if ('field' in i) return i.value !== '' && i.value !== undefined;
+      return (i as Rule).items.length > 0;
+    });
+}
+
+function getListAtPath(items: FormRuleItem[], path: number[]): FormRuleItem[] {
+  if (path.length === 0) return items;
+  const [i, ...rest] = path;
+  const parent = items[i];
+  if (!parent || !('items' in parent)) return items;
+  return getListAtPath(parent.items, rest);
+}
+
+function setListAtPath(
+  items: FormRuleItem[],
+  path: number[],
+  newList: FormRuleItem[]
+): FormRuleItem[] {
+  if (path.length === 0) return newList;
+  const [i, ...rest] = path;
+  const parent = { ...items[i] } as { rule_operator: 'AND' | 'OR'; items: FormRuleItem[] };
+  parent.items = setListAtPath(parent.items, rest, newList);
+  const next = [...items];
+  next[i] = parent;
+  return next;
+}
+
+function removeAtPath(items: FormRuleItem[], path: number[]): FormRuleItem[] {
+  if (path.length === 1) {
+    return items.filter((_, i) => i !== path[0]);
+  }
+  const [i, ...rest] = path;
+  const parent = items[i];
+  if (!parent || !('items' in parent)) return items;
+  return items.map((it, idx) =>
+    idx === i ? { ...it, items: removeAtPath(it.items, rest) } : it
+  ) as FormRuleItem[];
+}
+
+function appendToPath(
+  items: FormRuleItem[],
+  path: number[],
+  item: FormRuleItem
+): FormRuleItem[] {
+  const list = getListAtPath(items, path);
+  const newList = [...list, item];
+  return setListAtPath(items, path, newList);
+}
+
+function getItemAtPath(items: FormRuleItem[], path: number[]): FormRuleItem | null {
+  if (path.length === 0) return null;
+  if (path.length === 1) return items[path[0]] ?? null;
+  const [i, ...rest] = path;
+  const parent = items[i];
+  if (!parent || !('items' in parent)) return null;
+  return getItemAtPath(parent.items, rest);
+}
+
+function setItemAtPath(
+  items: FormRuleItem[],
+  path: number[],
+  newItem: FormRuleItem
+): FormRuleItem[] {
+  if (path.length === 1) {
+    const next = [...items];
+    next[path[0]] = newItem;
+    return next;
+  }
+  const [i, ...rest] = path;
+  const parent = items[i];
+  if (!parent || !('items' in parent)) return items;
+  return items.map((it, idx) =>
+    idx === i ? { ...it, items: setItemAtPath(it.items, rest, newItem) } : it
+  ) as FormRuleItem[];
+}
+
 function validateStep(stepId: StepId, data: CategoryFormData): Record<string, string> {
   const err: Record<string, string> = {};
   switch (stepId) {
@@ -52,13 +154,11 @@ function validateStep(stepId: StepId, data: CategoryFormData): Record<string, st
       if (!data.category.trim()) err.category = 'Name is required';
       if (!data.alias.trim()) err.alias = 'Alias is required';
       if (!data.typeOfCategory.trim()) err.typeOfCategory = 'Type of category is required';
-      if (isDescriptionEmpty(data.description)) err.description = 'Description is required';
       break;
     case 'type-rule':
       if (!data.type) err.type = 'Type is required';
       if (data.type === 'Automatic') {
-        const valid = data.conditions.filter((c) => String(c.value).trim() !== '');
-        if (valid.length === 0)
+        if (!hasConditionWithValue(data.ruleItems))
           err.rule = 'Add at least one condition with a value when Type is Automatic';
       }
       break;
@@ -85,8 +185,12 @@ export function CategoryMasterForm() {
     return saved?.stepIndex ?? 0;
   });
   const [data, setData] = useState<CategoryFormData>(() => {
-    const saved = getPersistedForm<{ data: CategoryFormData; stepIndex: number }>(FORM_STORAGE_KEY);
-    return saved?.data ?? initialFormData;
+    const saved = getPersistedForm<{ data: CategoryFormData & { conditions?: { field: string; value: string }[] }; stepIndex: number }>(FORM_STORAGE_KEY);
+    const d = saved?.data ?? initialFormData;
+    if (d && 'conditions' in d && Array.isArray((d as any).conditions) && !('ruleItems' in d && Array.isArray((d as any).ruleItems))) {
+      return { ...d, ruleItems: (d as any).conditions, conditions: undefined } as CategoryFormData;
+    }
+    return d as CategoryFormData;
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -215,32 +319,21 @@ export function CategoryMasterForm() {
     }
     setSubmitting(true);
 
+    const ruleItemsConverted = formRuleItemsToRuleItems(data.ruleItems);
     const rule: Rule | undefined =
-      data.type === 'Automatic' && data.conditions.length > 0
-        ? {
-            rule_operator: data.ruleOperator,
-            items: data.conditions
-              .map((c) => ({
-                field: c.field,
-                value:
-                  typeof c.value === 'string' &&
-                  c.value.trim() !== '' &&
-                  !Number.isNaN(Number(c.value))
-                    ? Number(c.value)
-                    : c.value,
-              }))
-              .filter((c) => c.value !== '' && c.value !== undefined),
-          }
+      data.type === 'Automatic' && ruleItemsConverted.length > 0
+        ? { rule_operator: data.ruleOperator, items: ruleItemsConverted }
         : undefined;
 
+    const isL2 = String(data.typeOfCategory || '').toUpperCase() === 'L2';
     const payload = {
       category: data.category.trim(),
       alias: data.alias.trim(),
       typeOfCategory: data.typeOfCategory.trim(),
-      description: data.description.trim(),
+      description: (data.description || '').trim(),
       l1Parent: data.l1Parent.trim(),
-      l2Parent: data.l2Parent.trim(),
-      l3Parent: data.l3Parent.trim(),
+      l2Parent: isL2 ? '' : data.l2Parent.trim(),
+      l3Parent: isL2 ? '' : data.l3Parent.trim(),
       publish: data.publish,
       type: data.type,
       rule,
@@ -275,30 +368,46 @@ export function CategoryMasterForm() {
     }
   };
 
-  const addCondition = () => {
+  const addCondition = (path: number[]) => {
     setData((prev) => ({
       ...prev,
-      conditions: [...prev.conditions, { field: 'Plant', value: '' }],
+      ruleItems: appendToPath(prev.ruleItems, path, { field: 'Plant', value: '' }),
     }));
   };
 
-  const removeCondition = (index: number) => {
+  const addGroup = (path: number[]) => {
     setData((prev) => ({
       ...prev,
-      conditions: prev.conditions.filter((_, i) => i !== index),
+      ruleItems: appendToPath(prev.ruleItems, path, {
+        rule_operator: 'AND',
+        items: [{ field: 'Plant', value: '' }],
+      }),
     }));
   };
 
-  const updateCondition = (
-    index: number,
-    updates: Partial<{ field: CategoryFormData['conditions'][number]['field']; value: string }>
+  const removeRuleItem = (path: number[]) => {
+    setData((prev) => ({
+      ...prev,
+      ruleItems: removeAtPath(prev.ruleItems, path),
+    }));
+  };
+
+  const updateRuleItem = (
+    path: number[],
+    updates: Partial<{ field: RuleConditionField; value: string }> | { rule_operator: 'AND' | 'OR' }
   ) => {
-    setData((prev) => ({
-      ...prev,
-      conditions: prev.conditions.map((c, i) =>
-        i === index ? { ...c, ...updates } : c
-      ),
-    }));
+    setData((prev) => {
+      const current = getItemAtPath(prev.ruleItems, path);
+      if (!current) return prev;
+      const newItem: FormRuleItem =
+        'field' in current
+          ? { ...current, ...(updates as Partial<{ field: RuleConditionField; value: string }>) }
+          : { ...current, ...('rule_operator' in updates ? { rule_operator: updates.rule_operator } : {}) };
+      return {
+        ...prev,
+        ruleItems: setItemAtPath(prev.ruleItems, path, newItem),
+      };
+    });
   };
 
   return (
@@ -386,6 +495,7 @@ export function CategoryMasterForm() {
         )}
         {currentStep.id === 'hierarchy' && (
           <StepHierarchy
+            typeOfCategory={data.typeOfCategory}
             l1Parent={data.l1Parent}
             l2Parent={data.l2Parent}
             l3Parent={data.l3Parent}
@@ -401,13 +511,14 @@ export function CategoryMasterForm() {
           <StepTypeAndRule
             type={data.type}
             ruleOperator={data.ruleOperator}
-            conditions={data.conditions.map((c) => ({ field: c.field, value: String(c.value) }))}
+            ruleItems={data.ruleItems}
             errors={errors}
             onTypeChange={(v) => setField('type', v)}
             onRuleOperatorChange={(v) => setField('ruleOperator', v)}
             onAddCondition={addCondition}
-            onRemoveCondition={removeCondition}
-            onUpdateCondition={updateCondition}
+            onAddGroup={addGroup}
+            onRemoveRuleItem={removeRuleItem}
+            onUpdateRuleItem={updateRuleItem}
             onClearError={clearError}
           />
         )}

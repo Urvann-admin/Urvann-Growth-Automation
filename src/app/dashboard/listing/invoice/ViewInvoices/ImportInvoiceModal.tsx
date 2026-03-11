@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Upload, Plus } from 'lucide-react';
+import { Upload, Plus, Download } from 'lucide-react';
 import { ModalContainer } from '../../shared';
 import { Notification } from '@/components/ui/Notification';
-import type { DraftPurchaseRow, ParentOption } from '../AddInvoiceForm/types';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
+import type { DraftPurchaseRow } from '../AddInvoiceForm/types';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { OverheadModal, type OverheadFormState } from '../AddInvoiceForm/OverheadModal';
 
@@ -40,6 +41,7 @@ function parsedToDraftRow(parsed: Record<string, unknown>): DraftPurchaseRow {
       : quantity > 0
         ? Math.round(amount / quantity)
         : 0;
+  const parentSku = parsed.parentSku != null ? String(parsed.parentSku).trim() : '';
   return {
     billNumber: String(parsed.billNumber ?? '').trim(),
     productCode: String(parsed.productCode ?? '').trim(),
@@ -48,7 +50,8 @@ function parsedToDraftRow(parsed: Record<string, unknown>): DraftPurchaseRow {
     quantity,
     productPrice,
     amount,
-    parentSku: '',
+    parentSku,
+    hub: undefined,
     type: {},
   };
 }
@@ -61,7 +64,6 @@ interface ImportInvoiceModalProps {
 
 export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoiceModalProps) {
   const [rows, setRows] = useState<DraftPurchaseRow[]>([]);
-  const [parents, setParents] = useState<ParentOption[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,21 +74,26 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
   const [typeDropdownValues, setTypeDropdownValues] = useState<('' | keyof PurchaseTypeBreakdown)[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const fetchParents = useCallback(async () => {
+  const handleDownloadTemplate = useCallback(async () => {
     try {
-      const res = await fetch('/api/parent-master?limit=500');
-      const json = await res.json();
-      if (json?.success && Array.isArray(json.data)) {
-        setParents(json.data.filter((p: ParentOption) => p.sku && String(p.sku).trim()));
-      }
+      const XLSX = await import('xlsx');
+      const headers = [
+        'Bill no.',
+        'Product Code',
+        'Product name',
+        'Quantity',
+        'Price',
+        'Amount',
+        'Parent',
+      ];
+      const ws = XLSX.utils.aoa_to_sheet([headers]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
+      XLSX.writeFile(wb, 'import-invoice-template.xlsx');
     } catch {
-      setMessage({ type: 'error', text: 'Failed to load parent SKUs' });
+      setMessage({ type: 'error', text: 'Failed to download template.' });
     }
   }, []);
-
-  useEffect(() => {
-    if (isOpen) fetchParents();
-  }, [isOpen, fetchParents]);
 
   const updateRow = useCallback((index: number, patch: Partial<DraftPurchaseRow>) => {
     setRows((prev) => {
@@ -113,8 +120,8 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
     const file = e.target.files?.[0];
     if (!file) return;
     const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-    if (ext !== '.xlsx' && ext !== '.xls') {
-      setMessage({ type: 'error', text: 'Please upload an Excel file (.xlsx or .xls)' });
+    if (ext !== '.xlsx' && ext !== '.xls' && ext !== '.csv') {
+      setMessage({ type: 'error', text: 'Please upload an Excel or CSV file (.xlsx, .xls, or .csv)' });
       return;
     }
     setMessage(null);
@@ -228,29 +235,32 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
 
   const openOverheadModal = () => {
     if (rows.length === 0) {
-      setMessage({ type: 'error', text: 'Upload Excel first to add overhead.' });
+      setMessage({ type: 'error', text: 'Upload a file first to add overhead.' });
       return;
     }
     setManualAmounts(rows.map(() => 0));
     setManualTotalError(null);
+    const billFromFile = rows[0]?.billNumber?.trim() ?? '';
+    setOverheadForm((prev) => ({ ...prev, bill: billFromFile }));
     setOverheadModalOpen(true);
   };
 
   const handleSave = async () => {
     if (rows.length === 0) {
-      setMessage({ type: 'error', text: 'Upload an Excel file first.' });
+      setMessage({ type: 'error', text: 'Upload a file first.' });
       return;
     }
     const invalid = rows.find(
-      (r, i) =>
+      (r) =>
         !r.billNumber.trim() ||
         !r.productCode.trim() ||
         !r.parentSku.trim() ||
+        !r.hub?.trim() ||
         r.quantity < 0 ||
         r.amount < 0
     );
     if (invalid) {
-      setMessage({ type: 'error', text: 'Fill item type, parent, and type for all rows. Bill number, product code, quantity and amount are required.' });
+      setMessage({ type: 'error', text: 'Excel must include Parent. After upload, select Hub and set item type and type for all rows.' });
       return;
     }
     setMessage(null);
@@ -269,6 +279,7 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
           productPrice,
           amount,
           parentSku: r.parentSku,
+          ...(r.hub?.trim() && { hub: r.hub.trim() }),
           type: r.type,
           overhead: r.overhead
             ? {
@@ -314,7 +325,7 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
 
   return (
     <>
-      <ModalContainer isOpen={isOpen} onClose={onClose}>
+      <ModalContainer isOpen={isOpen} onClose={onClose} contentClassName="max-w-[95vw] sm:max-w-6xl">
         <div className="flex flex-col max-h-[88vh] min-h-0">
           <div className="flex items-center justify-between shrink-0 border-b border-slate-200 bg-slate-50/80 px-6 py-4 rounded-t-xl">
             <h2 id="import-invoice-modal-title" className="text-lg font-semibold text-slate-900">
@@ -336,13 +347,16 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
               <Notification type={message.type} text={message.text} onDismiss={() => setMessage(null)} />
             )}
             <p className="text-sm text-slate-600">
-              Excel format: <strong>Bill no., Product Code, Product Name, Quantity, Price, Amount</strong>. After upload, choose item type, parent, and type for each row.
+              Upload an Excel or CSV file with Parent column. After upload, set Hub, overhead (optional), item type, and type for each row, then Save.
+            </p>
+            <p className="text-xs text-slate-500">
+              Excel columns: <strong>Bill no., Product Code, Product name (optional), Quantity, Price, Amount, Parent (or Parent SKU)</strong>. Select Hub from dropdown after upload.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <label className="inline-flex items-center gap-2 cursor-pointer">
                 <input
                   type="file"
-                  accept=".xlsx,.xls"
+                  accept=".xlsx,.xls,.csv"
                   onChange={handleFileChange}
                   disabled={parsing}
                   className="sr-only"
@@ -350,9 +364,18 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
                 />
                 <span className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
                   <Upload className="w-4 h-4" />
-                  {parsing ? 'Parsing...' : 'Upload Excel'}
+                  {parsing ? 'Parsing...' : 'Upload Excel or CSV'}
                 </span>
               </label>
+              <button
+                type="button"
+                onClick={handleDownloadTemplate}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                title="Download Excel template"
+              >
+                <Download className="w-4 h-4" />
+                Download template
+              </button>
               <button
                 type="button"
                 onClick={openOverheadModal}
@@ -377,6 +400,7 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Amount</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Item Type</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Parent</th>
+                        <th className="text-left py-2 px-2 font-semibold text-slate-700">Hub</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Type</th>
                       </tr>
                     </thead>
@@ -400,16 +424,17 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
                               <option value="Consumable">Consumable</option>
                             </select>
                           </td>
-                          <td className="py-1 px-2 min-w-[120px]">
+                          <td className="py-1 px-2 text-slate-600 min-w-[100px]">{row.parentSku || '—'}</td>
+                          <td className="py-1 px-2 min-w-[100px]">
                             <select
-                              value={row.parentSku}
-                              onChange={(e) => updateRow(i, { parentSku: e.target.value })}
+                              value={row.hub ?? ''}
+                              onChange={(e) => updateRow(i, { hub: e.target.value || undefined })}
                               className={inputClass}
                             >
                               <option value="">Select</option>
-                              {parents.map((p) => (
-                                <option key={p._id} value={p.sku ?? p._id}>
-                                  {p.plant} {p.sku ? `(${p.sku})` : ''}
+                              {HUB_MAPPINGS.map((m) => (
+                                <option key={m.hub} value={m.hub}>
+                                  {m.hub}
                                 </option>
                               ))}
                             </select>
@@ -468,6 +493,7 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
           });
         }}
         manualTotalError={manualTotalError}
+        hideBillField
       />
     </>
   );

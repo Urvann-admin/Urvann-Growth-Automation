@@ -34,7 +34,7 @@ export function StepPricing({
           placeholder="0.00"
         />
         {errors.sellingPrice && <p className="text-red-500 text-xs mt-1">{errors.sellingPrice}</p>}
-        <p className="text-xs text-slate-500 mt-1">SKUs are generated per hub when you create the product (parent is live in all hubs).</p>
+        <p className="text-xs text-slate-500 mt-1">A single SKU (no hub letter) is generated when you create the product; parent is live in all hubs.</p>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ export interface DraftPurchaseRow {
   productPrice: number;
   amount: number;
   parentSku: string;
+  hub?: string;
   type: PurchaseTypeBreakdown;
   overhead?: {
     overheadAmount: number;

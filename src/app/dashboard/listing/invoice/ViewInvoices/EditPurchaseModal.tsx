@@ -10,6 +10,7 @@ export interface EditPurchaseForm {
   quantity: string;
   amount: string;
   parentSku: string;
+  hub: string;
   listing: string;
   revival: string;
   growth: string;
@@ -21,6 +22,7 @@ interface EditPurchaseModalProps {
   editForm: EditPurchaseForm;
   saving: boolean;
   parentOptions: { value: string; label: string }[];
+  hubOptions: { value: string; label: string }[];
   onClose: () => void;
   onSave: () => void;
   onChange: (form: EditPurchaseForm) => void;
@@ -31,6 +33,7 @@ export function EditPurchaseModal({
   editForm,
   saving,
   parentOptions,
+  hubOptions,
   onClose,
   onSave,
   onChange,
@@ -115,6 +118,21 @@ export function EditPurchaseModal({
                 >
                   <option value="">Select</option>
                   {parentOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Hub</span>
+                <select
+                  value={editForm.hub}
+                  onChange={(e) => onChange({ ...editForm, hub: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="">Select</option>
+                  {hubOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>

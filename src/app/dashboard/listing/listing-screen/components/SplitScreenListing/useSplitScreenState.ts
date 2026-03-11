@@ -82,11 +82,11 @@ export function useSplitScreenState(section: ListingSection) {
     }
   }, []);
 
-  // Load available parents
+  // Load available parents — fetch all, no section filter so pots/zero-inventory items appear
   const loadAvailableParents = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true }));
     try {
-      const response = await fetch(`/api/parent-master?section=${section}&minQuantity=0&limit=1000`);
+      const response = await fetch(`/api/parent-master?limit=1000&sortField=plant&sortOrder=asc`);
       const result = await response.json();
       if (result.success) {
         setState(prev => ({ 
@@ -100,7 +100,7 @@ export function useSplitScreenState(section: ListingSection) {
       toast.error('Failed to load parent products');
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [section]);
+  }, []);
 
   // Generate unique ID for new rows / parent items
   const generateRowId = useCallback(() => {
@@ -139,7 +139,7 @@ export function useSplitScreenState(section: ListingSection) {
         inventory: minInventory === Infinity ? 0 : minInventory,
       };
     },
-    [section]
+    []
   );
 
   // Create initial product row from parent
@@ -179,6 +179,9 @@ export function useSplitScreenState(section: ListingSection) {
         potQuantity: 0,
         price,
         inventory_quantity: inventory,
+        tag: '',
+        compare_at_price: undefined,
+        sort_order: 3000,
         
         // Metadata
         hub: parent.hub || '',
@@ -238,6 +241,9 @@ export function useSplitScreenState(section: ListingSection) {
         potQuantity: 0,
         price: 0,
         inventory_quantity: 0,
+        tag: '',
+        compare_at_price: undefined,
+        sort_order: 3000,
         
         // Metadata
         hub: '',
@@ -376,7 +382,9 @@ export function useSplitScreenState(section: ListingSection) {
 
       // Run validation synchronously first
       validatedRows = state.productRows.map(row => {
-        const rowImages = allImages.filter(img => img.serial === row.serial);
+        const rowImages = row.taggedImages?.length
+          ? row.taggedImages
+          : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : []);
 
         const formData = {
           listingType: 'child' as const,
@@ -465,15 +473,17 @@ export function useSplitScreenState(section: ListingSection) {
         quantity: row.setQuantity,
         price: row.price,
         inventory_quantity: row.inventory_quantity,
+        tag: row.tag || undefined,
+        compare_at_price: row.compare_at_price ?? undefined,
+        sort_order: row.sort_order ?? 3000,
+        publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
         hub: row.hub,
         seller: row.seller,
-        categories: row.categories,
-        collectionIds: row.collectionIds,
-        images: allImages
-          .filter(img => img.serial === row.serial)
-          .map(img => img.url),
-        status: 'draft',
-      }));
+          categories: row.categories,
+          collectionIds: row.collectionIds,
+          images: (row.taggedImages?.length ? row.taggedImages : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : [])).map((img: { url: string }) => img.url),
+          status: 'draft',
+        }));
 
       // Bulk create
       const response = await fetch('/api/listing-product', {
@@ -511,6 +521,105 @@ export function useSplitScreenState(section: ListingSection) {
     }
   }, [state, section, allImages]);
 
+  /** Save only the current (active) product row; returns true if saved so caller can advance to next. */
+  const saveCurrentProduct = useCallback(async (activeRowId: string | null): Promise<boolean> => {
+    if (!activeRowId) return false;
+    const row = state.productRows.find((r) => r.id === activeRowId);
+    if (!row || row.isSaved) return false;
+
+    const rowImages = row.taggedImages?.length
+      ? row.taggedImages
+      : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : []);
+    const formData = {
+      listingType: 'child' as const,
+      parentSkus: row.parentSkus,
+      section,
+      plant: row.plant,
+      otherNames: row.otherNames,
+      variety: row.variety,
+      colour: row.colour,
+      height: row.height,
+      size: row.size,
+      type: row.type,
+      description: row.description,
+      quantity: row.setQuantity,
+      price: row.price,
+      inventory_quantity: row.inventory_quantity,
+      hub: row.hub,
+      seller: row.seller,
+      categories: row.categories,
+      collectionIds: row.collectionIds,
+      images: rowImages.map((img: { url: string }) => img.url),
+      status: 'draft' as const,
+    };
+    const selectedParents = row.parentItems.map((item) => item.parent).filter(Boolean) as ParentMaster[];
+    const { errors } = validateStep('review', formData as any, selectedParents, section);
+    const isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
+    if (!isValid) {
+      toast.error(Object.values(errors).filter(Boolean)[0] || 'Please complete required fields');
+      return false;
+    }
+
+    setState((prev) => ({ ...prev, isSaving: true }));
+    try {
+      const payload = {
+        listingType: 'child',
+        parentSkus: row.parentSkus,
+        parentItems: row.parentItems.map((item) => ({
+          parentSku: item.parentSku,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        section,
+        plant: row.plant,
+        otherNames: row.otherNames,
+        variety: row.variety,
+        colour: row.colour,
+        height: row.height,
+        size: row.size,
+        type: row.type,
+        description: row.description,
+        setQuantity: row.setQuantity,
+        potQuantity: row.potQuantity,
+        quantity: row.setQuantity,
+        price: row.price,
+        inventory_quantity: row.inventory_quantity,
+        tag: row.tag || undefined,
+        compare_at_price: row.compare_at_price ?? undefined,
+        sort_order: row.sort_order ?? 3000,
+        publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
+        hub: row.hub,
+        seller: row.seller,
+        categories: row.categories,
+        collectionIds: row.collectionIds,
+        images: rowImages.map((img: { url: string }) => img.url),
+        status: 'draft',
+      };
+      const response = await fetch('/api/listing-product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (result.success) {
+        setState((prev) => ({
+          ...prev,
+          productRows: prev.productRows.map((r) => (r.id === activeRowId ? { ...r, isSaved: true } : r)),
+          isSaving: false,
+        }));
+        toast.success('Listing saved');
+        return true;
+      }
+      toast.error(result.message || 'Failed to save');
+      setState((prev) => ({ ...prev, isSaving: false }));
+      return false;
+    } catch (e) {
+      toast.error('Failed to save');
+      setState((prev) => ({ ...prev, isSaving: false }));
+      return false;
+    }
+  }, [state.productRows, section, allImages]);
+
   // Clear all data
   const clearAll = useCallback(() => {
     setState(prev => ({
@@ -529,13 +638,14 @@ export function useSplitScreenState(section: ListingSection) {
       // Create 3 empty rows by default to show the table structure
       const initialRows: ProductRow[] = [];
       for (let i = 1; i <= Math.min(3, Math.max(1, allImages.length)); i++) {
-        const emptyRow: ProductRow = {
-          id: `row_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
-          serial: i,
-          parentSkus: [],
-          parentItems: [],
-          selectedParent: undefined,
-          taggedImages: [],
+      const defaultImage = allImages[i - 1];
+      const emptyRow: ProductRow = {
+        id: `row_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
+        serial: i,
+        parentSkus: [],
+        parentItems: [],
+        selectedParent: undefined,
+        taggedImages: defaultImage ? [defaultImage] : [],
           
           // Empty product details
           plant: '',
@@ -553,6 +663,9 @@ export function useSplitScreenState(section: ListingSection) {
           potQuantity: 0,
           price: 0,
           inventory_quantity: 0,
+          tag: '',
+          compare_at_price: undefined,
+          sort_order: 3000,
           
           // Metadata
           hub: '',
@@ -629,6 +742,7 @@ export function useSplitScreenState(section: ListingSection) {
       clearImageSelection,
       validateAllRows,
       saveAllProducts,
+      saveCurrentProduct,
       clearAll,
       loadImageCollections,
       loadAvailableParents,

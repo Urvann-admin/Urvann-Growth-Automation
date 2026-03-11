@@ -72,6 +72,14 @@ export interface ProductRow {
   finalName?: string;
   /** Generated SKU (set after save) */
   sku?: string;
+  /** Product tag (e.g. Bestseller, New Arrival) */
+  tag?: string;
+  /** Compare-at price shown as original/strikethrough price */
+  compare_at_price?: number;
+  /** Display sort order; defaults to 3000 */
+  sort_order?: number;
+  /** Publish status: 1 = published, 0 = unpublished (auto-set from inventory) */
+  publish_status?: 0 | 1;
 
   // Status
   isValid: boolean;

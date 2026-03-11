@@ -42,22 +42,20 @@ export interface ParentMaster {
   product_id?: string;
   /** Procurement seller _id from procurement_seller_master */
   seller?: string;
-  /** All hub names (parent is live in all hubs) */
-  hubs?: string[];
-  /** SKU per hub: { [hubName]: sku } */
-  skus?: Record<string, string>;
-  /** Flat list of all SKUs for querying (findBySku) */
-  skuList?: string[];
+  /** Hub name (optional; when parent is live in all hubs, SKU has no hub letter) */
+  hub?: string;
+  /** Single SKU for this product (no hub prefix when live in all hubs) */
+  sku?: string;
+  /** Substores derived from hub mapping (e.g. bgl-e, bgl-e2 for Whitefield) */
+  substores?: string[];
+  /** Product features (dropdown selection) */
+  features?: string;
+  /** Redirects (dropdown selection) */
+  redirects?: string;
   /** @deprecated Use potType */
   type?: string;
   /** @deprecated Use sellingPrice */
   price?: number;
-  /** @deprecated Use hubs */
-  hub?: string;
-  /** @deprecated Use skuList[0] or skus[hub] */
-  sku?: string;
-  /** Substores derived from hub mapping (e.g. bgl-e, bgl-e2 for Whitefield) */
-  substores?: string[];
   /** Type breakdown from purchase (Listing, Revival, Growth, Consumers) – updated when saving purchase master. Stored as object "type" in DB. */
   typeBreakdown?: PurchaseTypeBreakdown;
   createdAt?: Date;
@@ -89,12 +87,8 @@ export class ParentMasterModel {
   static async findBySku(sku: string) {
     const collection = await getCollection(COLLECTION_NAME);
     const trimmed = String(sku).trim();
-    return collection.findOne({
-      $or: [
-        { skuList: trimmed },
-        { sku: trimmed },
-      ],
-    });
+    if (!trimmed) return null;
+    return collection.findOne({ sku: trimmed });
   }
 
   static async create(data: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>) {
@@ -158,6 +152,7 @@ export class ParentMasterModel {
   static async search(searchTerm: string) {
     const collection = await getCollection(COLLECTION_NAME);
     const regex = new RegExp(searchTerm, 'i');
+    const trimmed = String(searchTerm).trim();
     return collection.find({
       $or: [
         { plant: regex },
@@ -165,8 +160,7 @@ export class ParentMasterModel {
         { variety: regex },
         { potType: regex },
         { type: regex },
-        { skuList: String(searchTerm).trim() },
-        { sku: String(searchTerm).trim() },
+        ...(trimmed ? [{ sku: trimmed }] : []),
       ],
     }).toArray();
   }
