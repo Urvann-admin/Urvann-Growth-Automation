@@ -23,6 +23,7 @@ export interface ListingSidebarProps {
   onListingSectionChange: (section: ListingSectionTab) => void;
   listingSectionOpen: boolean;
   onListingSectionToggle: () => void;
+  canAccessListing?: boolean;
   categorySectionOpen: boolean;
   onCategorySectionToggle: () => void;
   productSectionOpen: boolean;
@@ -44,6 +45,7 @@ export function ListingSidebar({
   onListingSectionChange,
   listingSectionOpen,
   onListingSectionToggle,
+  canAccessListing = false,
   categorySectionOpen,
   onCategorySectionToggle,
   productSectionOpen,
@@ -98,6 +100,7 @@ export function ListingSidebar({
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />
+        {canAccessListing && (
         <ListingNavSection
           activeTab={activeTab}
           onTabChange={onTabChange}
@@ -108,6 +111,7 @@ export function ListingSidebar({
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />
+        )}
         <ImageNavSection
           activeTab={activeTab}
           onTabChange={onTabChange}

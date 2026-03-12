@@ -14,6 +14,7 @@ export default function ListingLayout({
 }) {
   const {
     loading,
+    canAccessListing,
     activeTab,
     setActiveTab,
     categorySectionOpen,
@@ -95,6 +96,7 @@ export default function ListingLayout({
             onListingSectionChange={setListingSectionTab}
             listingSectionOpen={listingSectionOpen}
             onListingSectionToggle={onListingSectionToggle}
+            canAccessListing={canAccessListing}
             categorySectionOpen={categorySectionOpen}
             onCategorySectionToggle={onCategorySectionToggle}
             productSectionOpen={productSectionOpen}

@@ -1,5 +1,12 @@
 import { List, Plus, ListIcon, Upload, Image as ImageIcon, ScrollText, FileText, type LucideIcon } from 'lucide-react';
 
+/** Email addresses allowed to see the Listing tab (sidebar section + dashboard card) */
+export const LISTING_TAB_ALLOWED_EMAILS = ['nandini@urvann.com'] as const;
+
+export function canAccessListingTab(email: string | undefined): boolean {
+  return !!email && LISTING_TAB_ALLOWED_EMAILS.includes(email as (typeof LISTING_TAB_ALLOWED_EMAILS)[number]);
+}
+
 export type ListingTab =
   | 'category-add'
   | 'category-view'

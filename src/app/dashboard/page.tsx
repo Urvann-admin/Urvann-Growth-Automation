@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Button } from "@/components/ui/Button";
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useEffect, useState } from 'react';
-import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Building2, Upload, ShoppingCart, Gift, Sparkles } from 'lucide-react';
+import { TrendingUp, Users, Activity, LogOut, TreeDeciduous, Building2, Upload, ShoppingCart, Gift, Sparkles, LayoutList } from 'lucide-react';
 import { storage } from '@/shared/utils';
 import { STORAGE_KEYS } from '@/shared/constants';
 import type { AuthUser } from '@/shared/types/api';
 import { ChristmasTheme } from '@/components/theme/ChristmasTheme';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
+import { canAccessListingTab } from '@/app/dashboard/listing/config';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -192,8 +193,9 @@ export default function DashboardPage() {
       <div className="max-w-7xl mx-auto py-6 px-6">
         {/* Dashboard Cards */}
         <div className="flex flex-col items-center gap-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-7xl">
-            {/* Listing Card - First - Using Link for reliable navigation (avoids hydration/click issues) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full max-w-7xl auto-rows-fr">
+            {/* Listing Card - Visible only to nandini@urvann.com */}
+            {canAccessListingTab(user?.email) && (
             <Link
               href="/dashboard/listing"
               className={`group block rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-slate-50/50 to-slate-100/30 border border-slate-200 hover:shadow-md hover:border-slate-300'}`}
@@ -273,10 +275,11 @@ export default function DashboardPage() {
                 </svg>
               </div>
             </Link>
+            )}
 
             {/* Growth Metrics Card */}
             <div 
-              className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-emerald-50/50 to-green-50/30 border border-emerald-100 hover:shadow-md hover:border-emerald-200'}`}
+              className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-emerald-50/50 to-green-50/30 border border-emerald-100 hover:shadow-md hover:border-emerald-200'}`}
               style={isChristmasTheme ? {
                 background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
                 border: `2px solid ${CHRISTMAS_COLORS.light}`,
@@ -350,7 +353,7 @@ export default function DashboardPage() {
 
             {/* Real Time Dashboard Card */}
             <div 
-              className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-amber-50/50 to-orange-50/30 border border-amber-100 hover:shadow-md hover:border-amber-200'}`}
+              className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-amber-50/50 to-orange-50/30 border border-amber-100 hover:shadow-md hover:border-amber-200'}`}
               style={isChristmasTheme ? {
                 background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
                 border: `2px solid ${CHRISTMAS_COLORS.light}`,
@@ -451,7 +454,7 @@ export default function DashboardPage() {
 
           {/* Saathi App Logs Card */}
           <div 
-            className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-violet-50/50 to-purple-50/30 border border-violet-100 hover:shadow-md hover:border-violet-200'}`}
+            className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-violet-50/50 to-purple-50/30 border border-violet-100 hover:shadow-md hover:border-violet-200'}`}
             style={isChristmasTheme ? {
               background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
               border: `2px solid ${CHRISTMAS_COLORS.light}`,
@@ -530,7 +533,7 @@ export default function DashboardPage() {
             {/* Data Upload Card */}
             {(user.role === 'admin' || user.role === 'manager') && (
               <div 
-                className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-blue-50/50 to-cyan-50/30 border border-blue-100 hover:shadow-md hover:border-blue-200'}`}
+                className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-blue-50/50 to-cyan-50/30 border border-blue-100 hover:shadow-md hover:border-blue-200'}`}
                 style={isChristmasTheme ? {
                   background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
                   border: `2px solid ${CHRISTMAS_COLORS.light}`,
@@ -606,14 +609,11 @@ export default function DashboardPage() {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* Second Row */}
-          <div className="flex justify-center gap-6">
             {/* User Management Card */}
           {(user.role === 'admin' || user.role === 'manager') && (
               <div 
-                className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-indigo-50/50 to-purple-50/30 border border-indigo-100 hover:shadow-md hover:border-indigo-200'}`}
+                className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-indigo-50/50 to-purple-50/30 border border-indigo-100 hover:shadow-md hover:border-indigo-200'}`}
                 style={isChristmasTheme ? {
                   background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
                   border: `2px solid ${CHRISTMAS_COLORS.light}`,
@@ -695,7 +695,7 @@ export default function DashboardPage() {
             {/* Frequently Bought Together Card - Admin Only */}
             {user.role === 'admin' && (
               <div 
-                className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-[280px] flex-shrink-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-teal-50/50 to-emerald-50/30 border border-teal-100 hover:shadow-md hover:border-teal-200'}`}
+                className={`group rounded-xl shadow-sm p-5 cursor-pointer transition-all duration-200 w-full min-w-0 ${isChristmasTheme ? '' : 'bg-gradient-to-br from-teal-50/50 to-emerald-50/30 border border-teal-100 hover:shadow-md hover:border-teal-200'}`}
               style={isChristmasTheme ? {
                 background: `linear-gradient(135deg, ${CHRISTMAS_COLORS.light}/50 0%, ${CHRISTMAS_COLORS.white} 100%)`,
                 border: `2px solid ${CHRISTMAS_COLORS.light}`,

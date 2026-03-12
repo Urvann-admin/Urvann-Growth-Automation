@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import type { ListingTab, ListingSectionTab } from '../config';
-import { LISTING_SECTION_TABS } from '../config';
+import { LISTING_SECTION_TABS, canAccessListingTab } from '../config';
 
 const STORAGE_KEY_TAB = 'listing_activeTab';
 const STORAGE_KEY_SECTION_TAB = 'listing_sectionTab';
@@ -84,6 +84,20 @@ export function useListingState() {
     setLoading(false);
   }, [user, isLoading, router]);
 
+  // Redirect non-allowed users away from listing tab
+  const canAccessListing = canAccessListingTab(user?.email);
+  useEffect(() => {
+    if (!loading && !canAccessListing && activeTab === 'listing') {
+      setActiveTab('category-add');
+      if (typeof window !== 'undefined') {
+        window.location.hash = 'category-add';
+        try {
+          sessionStorage.setItem(STORAGE_KEY_TAB, 'category-add');
+        } catch {}
+      }
+    }
+  }, [loading, canAccessListing, activeTab]);
+
   // Sync activeTab and listingSectionTab when hash changes (e.g. browser back/forward)
   useEffect(() => {
     const syncFromHash = () => {
@@ -135,6 +149,7 @@ export function useListingState() {
     user,
     isLoading,
     loading,
+    canAccessListing,
     activeTab,
     setActiveTab: setActiveTabWithHash,
     listingSectionTab,
