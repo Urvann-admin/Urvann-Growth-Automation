@@ -17,7 +17,6 @@ interface PaginationInfo {
 }
 
 interface EditParentForm {
-  sku: string;
   plant: string;
   otherNames: string;
   variety: string;
@@ -25,12 +24,13 @@ interface EditParentForm {
   height: number | '';
   mossStick: string;
   size: number | '';
-  type: string;
+  potType: string;
   seller: string;
+  features: string;
+  redirects: string;
   categories: string[];
-  price: number | '';
+  sellingPrice: number | '';
   images: string[];
-  hub: string;
 }
 
 export function ViewParents() {

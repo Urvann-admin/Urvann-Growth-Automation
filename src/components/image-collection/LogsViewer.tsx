@@ -14,8 +14,11 @@ import {
 } from 'lucide-react';
 import type { UploadLogEntry } from '@/models/imageCollection';
 
+/** Log entry with timestamp as Date or string (from JSON) */
+type LogEntry = Omit<UploadLogEntry, 'timestamp'> & { timestamp: string | Date };
+
 interface LogsViewerProps {
-  logs: UploadLogEntry[];
+  logs: LogEntry[];
   className?: string;
 }
 

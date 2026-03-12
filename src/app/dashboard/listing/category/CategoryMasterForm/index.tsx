@@ -63,7 +63,7 @@ function formRuleItemsToRuleItems(
         const num = Number(v);
         const value =
           v !== '' && !Number.isNaN(num) ? num : (v as string | number);
-        return { field: cond.field as Rule['items'][0]['field'], value };
+        return { field: cond.field as RuleConditionField, value };
       }
       return {
         rule_operator: item.rule_operator,
@@ -103,10 +103,10 @@ function removeAtPath(items: FormRuleItem[], path: number[]): FormRuleItem[] {
     return items.filter((_, i) => i !== path[0]);
   }
   const [i, ...rest] = path;
-  const parent = items[i];
+  const parent = items[i] as { rule_operator: 'AND' | 'OR'; items: FormRuleItem[] } | undefined;
   if (!parent || !('items' in parent)) return items;
   return items.map((it, idx) =>
-    idx === i ? { ...it, items: removeAtPath(it.items, rest) } : it
+    idx === i ? { ...parent, items: removeAtPath(parent.items, rest) } : it
   ) as FormRuleItem[];
 }
 
@@ -140,10 +140,10 @@ function setItemAtPath(
     return next;
   }
   const [i, ...rest] = path;
-  const parent = items[i];
+  const parent = items[i] as { rule_operator: 'AND' | 'OR'; items: FormRuleItem[] } | undefined;
   if (!parent || !('items' in parent)) return items;
   return items.map((it, idx) =>
-    idx === i ? { ...it, items: setItemAtPath(it.items, rest, newItem) } : it
+    idx === i ? { ...parent, items: setItemAtPath(parent.items, rest, newItem) } : it
   ) as FormRuleItem[];
 }
 

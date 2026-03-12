@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { CategoryModel } from '@/models/category';
 import type { Rule, RuleCondition, RuleConditionField, RuleItem } from '@/models/category';
 import { syncCategoryToStoreHippo } from '@/lib/storeHippoCategories';
@@ -132,7 +132,8 @@ export async function POST(request: NextRequest) {
     if (categoryId != null && String(categoryId).trim()) {
       categoryData.categoryId = String(categoryId).trim();
     }
-    categoryData.type = String(type).trim();
+    const typeVal = type === 'Automatic' || type === 'Manual' ? type : 'Manual';
+    categoryData.type = typeVal;
     categoryData.description = description != null ? String(description).trim() : '';
     if (rule != null && validateRule(rule)) categoryData.rule = normalizeRule(rule as Rule);
     if (Array.isArray(substores)) {

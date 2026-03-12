@@ -32,6 +32,13 @@ export const getHubBySubstore = (substore: string): string | null => {
   return mapping ? mapping.hub : null;
 };
 
+export const getSelectedHubsFromSubstores = (substores: string[]): string[] => {
+  const hubs = substores
+    .map(s => getHubBySubstore(s))
+    .filter((h): h is string => h !== null);
+  return [...new Set(hubs)];
+};
+
 // Format substore names for UI display
 export const formatSubstoreForDisplay = (substore: string): string => {
   const displayMap: Record<string, string> = {

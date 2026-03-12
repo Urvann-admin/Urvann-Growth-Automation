@@ -36,6 +36,10 @@ export interface Category {
   l1Parent: string;
   l2Parent: string;
   l3Parent: string;
+  /** 'Automatic' = rule-based, 'Manual' = manually assigned */
+  type?: 'Automatic' | 'Manual';
+  description?: string;
+  rule?: Rule;
   publish: boolean;
   priorityOrder: number;
   substores?: string[];
