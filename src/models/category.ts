@@ -33,19 +33,9 @@ export interface Category {
   category: string;
   alias: string;
   typeOfCategory: string;
-  /** L1 parent category name/id */
-  l1Parent?: string;
-  /** L2 parent category name/id */
-  l2Parent?: string;
-  /** L3 parent category name/id */
-  l3Parent?: string;
-  /** Optional rule for filtering/eligibility (e.g. status + order_count) */
-  rule?: Rule;
-  /** Type (string) */
-  type?: string;
-  /** Description (string) */
-  description?: string;
-  /** Whether the category is published */
+  l1Parent: string;
+  l2Parent: string;
+  l3Parent: string;
   publish: boolean;
   priorityOrder: number;
   substores?: string[];

@@ -1,7 +1,7 @@
 // Product API utilities for fetching valid products from Urvann API
 
-const BASE_URL = process.env.STOREHIPPO_BASE_URL || 'https://www.urvann.com';
-const ACCESS_KEY = process.env.URVANN_API_ACCESS_KEY || '13945648c9da5fdbfc71e3a397218e75';
+const BASE_URL = 'https://www.urvann.com';
+const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
 
 /**
  * Fetch all valid SKUs (publish=1, inventory_quantity > 0) from Urvann API

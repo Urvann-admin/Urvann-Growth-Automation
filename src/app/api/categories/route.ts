@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { CategoryModel } from '@/models/category';
 import type { Rule, RuleCondition, RuleConditionField, RuleItem } from '@/models/category';
 import { syncCategoryToStoreHippo } from '@/lib/storeHippoCategories';

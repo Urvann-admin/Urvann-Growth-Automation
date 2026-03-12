@@ -5,8 +5,8 @@ import ProductCount from '@/models/ProductCount';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes max for background refresh
 
-const BASE_URL = process.env.STOREHIPPO_BASE_URL || 'https://www.urvann.com';
-const ACCESS_KEY = process.env.URVANN_API_ACCESS_KEY || '13945648c9da5fdbfc71e3a397218e75';
+const BASE_URL = 'https://www.urvann.com';
+const ACCESS_KEY = '13945648c9da5fdbfc71e3a397218e75';
 
 // Very conservative settings to avoid rate limits during background refresh
 const REFRESH_CONCURRENCY = 3;  // Very low to avoid rate limits
