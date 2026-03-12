@@ -108,7 +108,7 @@ export function RichTextEditor({
     lastValueRef.current = value;
     const current = editor.getHTML();
     const normalized = value || '<p></p>';
-    if (current !== normalized) editor.commands.setContent(normalized, { emitUpdate: false });
+    if (current !== normalized) editor.commands.setContent(normalized, false);
   }, [value, editor]);
 
   const setMinHeight = useCallback(
