@@ -1,10 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Standalone output: creates .next/standalone/ with minimal files.
-  // Run with: node .next/standalone/server.js (copy public + .next/static in first).
-  // Helps avoid issues if something on the server removes .next — you can run from standalone.
-  output: "standalone",
+  // Use default output for reliable deployment with `next start`
   // Do not bundle these server-only packages; resolve at runtime.
   serverExternalPackages: ["mongodb", "mongoose"],
   // Compiler optimizations
