@@ -7,7 +7,7 @@ export interface HubMapping {
 export const HUB_MAPPINGS: HubMapping[] = [
   { hub: 'Whitefield', substores: ['bgl-e', 'bgl-e2'] },
   { hub: 'Thanissandra', substores: ['bgl-n', 'bgl-n2'] },
-  { hub: 'HSR', substores: ['bgl-s1', 'bgl-s2', 'bgl-w1', 'bgl-w2'] },
+  { hub: 'HSR', substores: ['HSR', 'Bgl-n3', 'bgl-w1', 'bgl-w2'] },
   { hub: 'Noida', substores: ['noi', 'greaternoida', 'kalkaji', 'greaternoida-west'] },
   { hub: 'Rohini', substores: ['roh'] },
   { hub: 'Dwarka', substores: ['dwarka', 'uttam', 'vasantkunj'] },
