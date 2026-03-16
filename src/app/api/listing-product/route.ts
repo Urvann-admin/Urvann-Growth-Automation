@@ -3,11 +3,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ListingProductModel } from '@/models/listingProduct';
 import type { ListingProduct, ListingSection, ListingStatus, ListingParentItem } from '@/models/listingProduct';
 import { ParentMasterModel } from '@/models/parentMaster';
+import { PurchaseMasterModel } from '@/models/purchaseMaster';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { CategoryModel } from '@/models/category';
+import { syncParentFromPurchases } from '@/app/api/purchase-master/syncParent';
 import { generateSKU } from '@/lib/skuGenerator';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
 import { withDerivedParentSkus } from '@/models/listingProduct';
+import { syncListingProductToSkuMasterNew } from '@/models/skuMasterNew';
 
 export async function GET(request: NextRequest) {
   try {
@@ -94,10 +97,15 @@ export async function POST(request: NextRequest) {
       }
       
       const result = await ListingProductModel.createMany(validatedItems);
-      
+
       // Update parent quantities after successful creation
       await updateParentQuantitiesAfterCreation(validatedItems);
-      
+
+      // Sync each to Inventory_Master.Sku_Master_New (best-effort; errors logged only)
+      for (const item of validatedItems) {
+        await syncListingProductToSkuMasterNew(item);
+      }
+
       return NextResponse.json({
         success: true,
         message: `Created ${result.insertedCount} listing products`,
@@ -115,9 +123,12 @@ export async function POST(request: NextRequest) {
     }
 
     const created = await ListingProductModel.create(validated.data!);
-    
+
     // Update parent quantities after successful creation
     await updateParentQuantitiesAfterCreation([validated.data!]);
+
+    // Sync to Inventory_Master.Sku_Master_New (best-effort; errors logged only)
+    await syncListingProductToSkuMasterNew(created);
 
     console.log('Listing product saved to DB:', created._id);
     return NextResponse.json({
@@ -164,12 +175,18 @@ export async function PUT(request: NextRequest) {
     }
 
     const result = await ListingProductModel.update(_id, sanitized.data!);
-    
+
     if (result.matchedCount === 0) {
       return NextResponse.json(
         { success: false, message: 'Listing product not found' },
         { status: 404 }
       );
+    }
+
+    // Sync to Inventory_Master.Sku_Master_New (refetch full document first)
+    const updated = await ListingProductModel.findById(_id);
+    if (updated) {
+      await syncListingProductToSkuMasterNew(updated as ListingProduct);
     }
 
     return NextResponse.json({ success: true, message: 'Listing product updated successfully' });
@@ -697,15 +714,10 @@ function evaluateCondition(condition: any, product: any): boolean {
   return String(actualValue).toLowerCase() === String(expectedValue).toLowerCase();
 }
 
-// Helper function to update parent quantities after listing product creation
+// Helper function to update parent quantities and purchase master after listing product creation
 async function updateParentQuantitiesAfterCreation(listingProducts: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'>[]): Promise<void> {
   const parentUpdates = new Map<string, { section: ListingSection; quantityToDeduct: number }>();
-  
-  // Group updates by parent SKU.
-  // New semantics:
-  // - For each listing product, we deduct:
-  //     inventory_quantity * parentItem.quantity
-  //   units from each parent used in the composition.
+
   for (const listingProduct of listingProducts) {
     const items: ListingParentItem[] =
       (listingProduct.parentItems && listingProduct.parentItems.length > 0)
@@ -732,22 +744,52 @@ async function updateParentQuantitiesAfterCreation(listingProducts: Omit<Listing
       }
     }
   }
-  
-  // Update each parent
+
   for (const [parentSku, update] of parentUpdates) {
-    const parent = await ParentMasterModel.findBySku(parentSku);
-    if (parent && parent.typeBreakdown) {
-      const currentQuantity = parent.typeBreakdown[update.section] || 0;
-      const newQuantity = Math.max(0, currentQuantity - update.quantityToDeduct);
-      
-      const updatedTypeBreakdown: PurchaseTypeBreakdown = {
-        ...parent.typeBreakdown,
-        [update.section]: newQuantity,
-      };
-      
-      await ParentMasterModel.update(parent._id!, {
-        typeBreakdown: updatedTypeBreakdown,
-      });
+    if (update.section === 'listing') {
+      // Add to listed_quantity on purchase records (FIFO), then sync parent
+      let remaining = update.quantityToDeduct;
+      const purchases = await PurchaseMasterModel.findByParentSku(parentSku);
+      const listingPurchases = purchases
+        .filter((p) => (p.type?.listing ?? 0) > 0)
+        .sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
+
+      for (const purchase of listingPurchases) {
+        if (remaining <= 0) break;
+        const typeSum =
+          (Number(purchase.type?.listing ?? 0) || 0) +
+          (Number(purchase.type?.revival ?? 0) || 0) +
+          (Number(purchase.type?.growth ?? 0) || 0) +
+          (Number(purchase.type?.consumers ?? 0) || 0);
+        const isFlagMode = typeSum <= 1;
+        const grossListing = isFlagMode ? (Number(purchase.quantity) || 0) : (Number(purchase.type?.listing) || 0);
+        const currentListed = Number((purchase as { listed_quantity?: number }).listed_quantity ?? 0) || 0;
+        const available = Math.max(0, grossListing - currentListed);
+        const toAdd = Math.min(remaining, available);
+        if (toAdd > 0 && purchase._id) {
+          await PurchaseMasterModel.update(purchase._id, {
+            listed_quantity: currentListed + toAdd,
+          });
+          remaining -= toAdd;
+        }
+      }
+
+      await syncParentFromPurchases(parentSku);
+    } else {
+      // Non-listing section: deduct from parent typeBreakdown directly
+      const parent = await ParentMasterModel.findBySku(parentSku);
+      if (parent && parent.typeBreakdown) {
+        const sectionKey = update.section === 'consumer' ? 'consumers' : update.section;
+        const currentQuantity = parent.typeBreakdown[sectionKey] || 0;
+        const newQuantity = Math.max(0, currentQuantity - update.quantityToDeduct);
+        const updatedTypeBreakdown: PurchaseTypeBreakdown = {
+          ...parent.typeBreakdown,
+          [sectionKey]: newQuantity,
+        };
+        await ParentMasterModel.update(parent._id!, {
+          typeBreakdown: updatedTypeBreakdown,
+        });
+      }
     }
   }
 }

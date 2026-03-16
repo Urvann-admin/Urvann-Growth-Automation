@@ -50,6 +50,8 @@ export interface PurchaseMaster {
   amount: number;
   /** Type breakdown (Listing, Revival, Growth, Consumers) */
   type: PurchaseTypeBreakdown;
+  /** Quantity of this purchase line's listing allocation that has been used in listings. Remaining = type.listing - listed_quantity */
+  listed_quantity?: number;
   /** Parent SKU */
   parentSku: string;
   /** Hub (e.g. Whitefield, HSR) */

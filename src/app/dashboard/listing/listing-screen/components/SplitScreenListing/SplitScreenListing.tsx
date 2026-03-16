@@ -65,9 +65,9 @@ export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = fals
           <div className="h-14 px-4 border-b border-slate-200 flex items-center gap-2 shrink-0">
             <ImageIcon className="w-4 h-4 text-[#E6007A] shrink-0" />
             <h2 className="text-sm font-medium text-slate-700">Photo</h2>
-            {activeRow && (
-              <span className="text-xs text-slate-400 ml-auto truncate max-w-[120px]">
-                Product {state.productRows.findIndex((r) => r.id === activeRow.id) + 1}
+            {activeRow?.plant && (
+              <span className="text-xs text-slate-400 ml-auto truncate max-w-[140px]" title={activeRow.plant}>
+                {activeRow.plant}
               </span>
             )}
           </div>
@@ -132,7 +132,7 @@ export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = fals
         </div>
       </div>
 
-      {/* Save & Next: save current product then switch to next */}
+      {/* Save & Next: right bottom corner */}
       <button
         onClick={async () => {
           const saved = await actions.saveCurrentProduct(activeRowId);
@@ -146,11 +146,8 @@ export function SplitScreenListing({ section, onSuccess, sidebarCollapsed = fals
           }
         }}
         disabled={state.productRows.length === 0 || state.isSaving || !activeRowId}
-        className="fixed bottom-6 z-20 inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
-        style={{
-          backgroundColor: '#E6007A',
-          left: `${(sidebarCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_OPEN) + FAB_OFFSET}px`,
-        }}
+        className="fixed bottom-6 right-6 z-20 inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+        style={{ backgroundColor: '#E6007A' }}
       >
         {state.isSaving ? (
           <>

@@ -9,6 +9,7 @@ import { ImageCollectionsView } from '../image/components/ImageCollectionsView';
 import { UploadLogsView } from '../image/components/UploadLogsView';
 import { ViewSellers, AddSellerForm } from '../seller';
 import { ViewInvoices } from '../invoice';
+import { CollectionMasterForm, ViewCollections } from '../collection';
 import {
   ListingProductForm,
   ViewListingProducts,
@@ -58,6 +59,16 @@ export function ListingContent({
       {activeTab === 'invoice-view' && (
         <div className="max-w-[90rem] mx-auto w-full">
           <ViewInvoices />
+        </div>
+      )}
+      {activeTab === 'collection-add' && (
+        <div className="max-w-2xl mx-auto">
+          <CollectionMasterForm />
+        </div>
+      )}
+      {activeTab === 'collection-view' && (
+        <div className="max-w-5xl mx-auto w-full">
+          <ViewCollections />
         </div>
       )}
       {activeTab === 'listing' && (

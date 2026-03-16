@@ -19,6 +19,8 @@ interface CustomSelectProps {
   disabled?: boolean;
   searchable?: boolean;
   hideIndicatorWhenSelected?: boolean;
+  /** When false, dropdown stays open after selecting an option (e.g. for multi-select). Default true. */
+  closeOnSelect?: boolean;
 }
 
 export function CustomSelect({
@@ -31,6 +33,7 @@ export function CustomSelect({
   disabled = false,
   searchable = true,
   hideIndicatorWhenSelected = false,
+  closeOnSelect = true,
 }: CustomSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -154,7 +157,7 @@ export function CustomSelect({
                       type="button"
                       onClick={() => {
                         onChange(opt.value);
-                        setOpen(false);
+                        if (closeOnSelect) setOpen(false);
                       }}
                       className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
                         isSelected

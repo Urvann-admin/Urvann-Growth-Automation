@@ -25,11 +25,13 @@ export async function syncParentFromPurchases(parentSku: string): Promise<void> 
     const typeSum = (Number(t?.listing ?? 0) || 0) + (Number(t?.revival ?? 0) || 0) + (Number(t?.growth ?? 0) || 0) + (Number(t?.consumers ?? 0) || 0);
     const isFlagMode = typeSum <= 1;
     const rowQty = Number(row.quantity) || 0;
+    const listedQty = Number((row as { listed_quantity?: number }).listed_quantity ?? 0) || 0;
 
     if (t?.listing != null && t.listing > 0) {
-      const q = isFlagMode ? rowQty : (Number(t.listing) || 0);
-      typeBreakdown.listing! += q;
-      if (q > 0) listingQuantity += q;
+      const grossQ = isFlagMode ? rowQty : (Number(t.listing) || 0);
+      const availableQ = Math.max(0, grossQ - listedQty);
+      typeBreakdown.listing! += availableQ;
+      if (availableQ > 0) listingQuantity += availableQ;
     }
     if (t?.revival != null && t.revival > 0) {
       typeBreakdown.revival! += isFlagMode ? rowQty : (Number(t.revival) || 0);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ListingProductModel, withDerivedParentSkus, type ListingProduct } from '@/models/listingProduct';
+import { syncListingProductToSkuMasterNew } from '@/models/skuMasterNew';
 
 export async function GET(
   request: NextRequest,
@@ -65,7 +66,7 @@ export async function PUT(
     const sanitized = sanitizeIndividualUpdateData(body);
 
     const result = await ListingProductModel.update(id, sanitized);
-    
+
     if (result.matchedCount === 0) {
       return NextResponse.json(
         { success: false, message: 'Listing product not found' },
@@ -73,9 +74,15 @@ export async function PUT(
       );
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Listing product updated successfully' 
+    // Sync to Inventory_Master.Sku_Master_New (refetch full document first)
+    const updated = await ListingProductModel.findById(id);
+    if (updated) {
+      await syncListingProductToSkuMasterNew(updated as ListingProduct);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Listing product updated successfully',
     });
   } catch (error) {
     console.error('Error updating listing product:', error);

@@ -32,6 +32,21 @@ interface PurchaseTableProps {
   onPendingType?: (p: PurchaseMaster, type: PurchaseTypeBreakdown | Record<string, never>) => void;
 }
 
+function getListingDisplay(p: PurchaseMaster): string {
+  const t = p.type;
+  if (!t?.listing || t.listing <= 0) return '—';
+  const typeSum =
+    (Number(t?.listing ?? 0) || 0) +
+    (Number(t?.revival ?? 0) || 0) +
+    (Number(t?.growth ?? 0) || 0) +
+    (Number(t?.consumers ?? 0) || 0);
+  const isFlagMode = typeSum <= 1;
+  const total = isFlagMode ? (Number(p.quantity) || 0) : (Number(t.listing) || 0);
+  const listed = Number(p.listed_quantity ?? 0) || 0;
+  const remaining = Math.max(0, total - listed);
+  return `${listed} / ${total} (${remaining} left)`;
+}
+
 function getTypeSlug(p: { type?: { listing?: number; revival?: number; growth?: number; consumers?: number } }): TypeSlug | null {
   const t = p.type;
   if (!t) return null;
@@ -74,6 +89,7 @@ export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, 
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Amount</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Overhead</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Type</th>
+            <th className="text-left py-3 px-3 font-semibold text-slate-700">Listed</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Parent SKU</th>
             <th className="text-right py-3 px-3 font-semibold text-slate-700">Actions</th>
           </tr>
@@ -120,6 +136,9 @@ export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, 
                     hideIndicatorWhenSelected
                   />
                 </div>
+              </td>
+              <td className="py-3 px-3 text-slate-600 text-xs">
+                {getListingDisplay(p)}
               </td>
               <td className="py-3 px-3 text-slate-600 font-mono text-xs">
                 <span className="inline-flex items-center gap-1.5">

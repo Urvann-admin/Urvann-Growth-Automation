@@ -1,7 +1,7 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import { LayoutList, FolderTree, Package, Store, FileText, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon, Image as ImageIcon, ScrollText, Upload, List } from 'lucide-react';
+import { LayoutList, FolderTree, Package, Store, FileText, Layers, ChevronLeft, ChevronRight, ChevronDown, Plus, ListIcon, Image as ImageIcon, ScrollText, Upload, List } from 'lucide-react';
 import { THEME_CONFIG, CHRISTMAS_COLORS, LISTING_SIDEBAR_THEME } from '@/config/theme';
 import {
   CATEGORY_SUB_TABS,
@@ -9,6 +9,7 @@ import {
   IMAGE_SUB_TABS,
   SELLER_SUB_TABS,
   INVOICE_SUB_TABS,
+  COLLECTION_SUB_TABS,
   TAB_CONFIG,
   LISTING_TOP_LEVEL_TABS,
   LISTING_SECTION_TABS,
@@ -34,6 +35,8 @@ export interface ListingSidebarProps {
   onSellerSectionToggle: () => void;
   invoiceSectionOpen: boolean;
   onInvoiceSectionToggle: () => void;
+  collectionSectionOpen: boolean;
+  onCollectionSectionToggle: () => void;
   sidebarCollapsed: boolean;
   onSidebarCollapsedToggle: () => void;
 }
@@ -56,6 +59,8 @@ export function ListingSidebar({
   onSellerSectionToggle,
   invoiceSectionOpen,
   onInvoiceSectionToggle,
+  collectionSectionOpen,
+  onCollectionSectionToggle,
   sidebarCollapsed,
   onSidebarCollapsedToggle,
 }: ListingSidebarProps) {
@@ -133,6 +138,14 @@ export function ListingSidebar({
           onTabChange={onTabChange}
           sectionOpen={invoiceSectionOpen}
           onSectionToggle={onInvoiceSectionToggle}
+          collapsed={sidebarCollapsed}
+          isChristmasTheme={isChristmasTheme}
+        />
+        <CollectionNavSection
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          sectionOpen={collectionSectionOpen}
+          onSectionToggle={onCollectionSectionToggle}
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />
@@ -644,6 +657,78 @@ function InvoiceNavSection({
               }
             >
               <ListIcon className="w-4 h-4 shrink-0" />
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CollectionNavSection({
+  activeTab,
+  onTabChange,
+  sectionOpen,
+  onSectionToggle,
+  collapsed,
+  isChristmasTheme,
+}: {
+  activeTab: ListingTab;
+  onTabChange: (id: ListingTab) => void;
+  sectionOpen: boolean;
+  onSectionToggle: () => void;
+  collapsed: boolean;
+  isChristmasTheme: boolean;
+}) {
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => !collapsed && onSectionToggle()}
+        title={collapsed ? 'Collection' : undefined}
+        className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
+          collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
+        } ${
+          isChristmasTheme
+            ? 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+            : 'text-white hover:bg-white/10'
+        }`}
+      >
+        <Layers className="w-5 h-5 shrink-0" strokeWidth={2} />
+        {!collapsed && (
+          <>
+            <span className="truncate flex-1">Collection</span>
+            <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
+          </>
+        )}
+      </button>
+      {!collapsed && sectionOpen && (
+        <div className="ml-4 mt-0.5 space-y-0.5 pl-2">
+          {COLLECTION_SUB_TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => onTabChange(id)}
+              className={`w-full flex items-center gap-2 rounded-md py-2 px-2 text-left text-sm transition-all focus:outline-none focus-visible:ring-0 ${
+                activeTab === id
+                  ? isChristmasTheme
+                    ? 'bg-slate-100 text-slate-900 font-medium'
+                    : 'bg-[#E6007A] text-white font-medium'
+                  : isChristmasTheme
+                    ? 'text-slate-600 hover:bg-slate-50'
+                    : 'text-white/90 hover:bg-white/10'
+              }`}
+              style={
+                activeTab === id && isChristmasTheme
+                  ? { background: `${CHRISTMAS_COLORS.light}/60`, color: CHRISTMAS_COLORS.primary }
+                  : {}
+              }
+            >
+              {id === 'collection-add' ? (
+                <Plus className="w-4 h-4 shrink-0" />
+              ) : (
+                <ListIcon className="w-4 h-4 shrink-0" />
+              )}
               <span className="truncate">{label}</span>
             </button>
           ))}

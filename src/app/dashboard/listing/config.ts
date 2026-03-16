@@ -16,6 +16,8 @@ export type ListingTab =
   | 'seller-view'
   | 'invoice-add'
   | 'invoice-view'
+  | 'collection-add'
+  | 'collection-view'
   | 'listing'
   | 'image-upload'
   | 'image-view'
@@ -47,6 +49,11 @@ export const INVOICE_SUB_TABS: { id: ListingTab; label: string }[] = [
   { id: 'invoice-view', label: 'Purchase Master' },
 ];
 
+export const COLLECTION_SUB_TABS: { id: ListingTab; label: string }[] = [
+  { id: 'collection-add', label: 'Add Collection' },
+  { id: 'collection-view', label: 'View Collection' },
+];
+
 export interface ListingTabConfig {
   id: ListingTab;
   label: string;
@@ -62,6 +69,8 @@ export const TAB_CONFIG: ListingTabConfig[] = [
   { id: 'seller-add', label: 'Add Seller', subtitle: 'Create a new seller', icon: Plus },
   { id: 'seller-view', label: 'View Seller', subtitle: 'View and edit sellers', icon: ListIcon },
   { id: 'invoice-view', label: 'Purchase Master', subtitle: 'View and edit purchase records', icon: ListIcon },
+  { id: 'collection-add', label: 'Add Collection', subtitle: 'Create a new collection', icon: Plus },
+  { id: 'collection-view', label: 'View Collection', subtitle: 'View and edit collections', icon: ListIcon },
   { id: 'listing', label: 'Listing', subtitle: 'Listing rules and status', icon: List },
   { id: 'image-upload', label: 'Add Image', subtitle: 'Bulk upload images', icon: Upload },
   { id: 'image-view', label: 'View Image', subtitle: 'View image collections', icon: ListIcon },

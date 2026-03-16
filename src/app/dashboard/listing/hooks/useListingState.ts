@@ -17,6 +17,8 @@ const VALID_HASHES: ListingTab[] = [
   'seller-add',
   'seller-view',
   'invoice-view',
+  'collection-add',
+  'collection-view',
   'listing',
   'image-upload',
   'image-view',
@@ -68,6 +70,7 @@ export function useListingState() {
   const [imageSectionOpen, setImageSectionOpen] = useState(true);
   const [sellerSectionOpen, setSellerSectionOpen] = useState(true);
   const [invoiceSectionOpen, setInvoiceSectionOpen] = useState(false);
+  const [collectionSectionOpen, setCollectionSectionOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [listingSectionTab, setListingSectionTab] = useState<ListingSectionTab>(getInitialSectionTab);
   const [listingViewMode, setListingViewMode] = useState<'create' | 'view-all'>('create');
@@ -116,6 +119,7 @@ export function useListingState() {
         if (baseTab === 'image-upload' || baseTab === 'image-view' || baseTab === 'upload-logs') setImageSectionOpen(true);
         if (baseTab === 'seller-add' || baseTab === 'seller-view') setSellerSectionOpen(true);
         if (baseTab === 'invoice-view') setInvoiceSectionOpen(true);
+        if (baseTab === 'collection-add' || baseTab === 'collection-view') setCollectionSectionOpen(true);
       }
     };
     window.addEventListener('hashchange', syncFromHash);
@@ -168,6 +172,8 @@ export function useListingState() {
     setSellerSectionOpen,
     invoiceSectionOpen,
     setInvoiceSectionOpen,
+    collectionSectionOpen,
+    setCollectionSectionOpen,
     sidebarCollapsed,
     setSidebarCollapsed,
   };

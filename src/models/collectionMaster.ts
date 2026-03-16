@@ -62,6 +62,38 @@ export class CollectionMasterModel {
     return { ...document, _id: result.insertedId };
   }
 
+  static async createMany(
+    dataArray: Omit<CollectionMaster, '_id' | 'createdAt' | 'updatedAt'>[]
+  ) {
+    const collection = await getCollection(COLLECTION_NAME);
+    const now = new Date();
+    const documents = dataArray.map((data) => ({
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    const result = await collection.insertMany(documents);
+    return { insertedCount: result.insertedCount, insertedIds: result.insertedIds };
+  }
+
+  static async update(
+    id: string | ObjectId,
+    data: Partial<Omit<CollectionMaster, '_id' | 'createdAt'>>
+  ) {
+    const collection = await getCollection(COLLECTION_NAME);
+    const queryId =
+      typeof id === 'string' && ObjectId.isValid(id) ? new ObjectId(id) : id;
+    const updateData = {
+      ...data,
+      updatedAt: new Date(),
+    };
+    const result = await collection.updateOne(
+      { _id: queryId as any },
+      { $set: updateData }
+    );
+    return result;
+  }
+
   static async upsertByStoreHippoId(
     storeHippoId: string,
     data: Omit<CollectionMaster, '_id' | 'createdAt' | 'updatedAt'>

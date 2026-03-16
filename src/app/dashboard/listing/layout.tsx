@@ -29,6 +29,8 @@ export default function ListingLayout({
     setSellerSectionOpen,
     invoiceSectionOpen,
     setInvoiceSectionOpen,
+    collectionSectionOpen,
+    setCollectionSectionOpen,
     listingSectionTab,
     setListingSectionTab,
     listingViewMode,
@@ -45,6 +47,7 @@ export default function ListingLayout({
   const onImageSectionToggle = useCallback(() => setImageSectionOpen((o) => !o), [setImageSectionOpen]);
   const onSellerSectionToggle = useCallback(() => setSellerSectionOpen((o) => !o), [setSellerSectionOpen]);
   const onInvoiceSectionToggle = useCallback(() => setInvoiceSectionOpen((o) => !o), [setInvoiceSectionOpen]);
+  const onCollectionSectionToggle = useCallback(() => setCollectionSectionOpen((o) => !o), [setCollectionSectionOpen]);
   const onSidebarCollapsedToggle = useCallback(() => setSidebarCollapsed((c) => !c), [setSidebarCollapsed]);
 
   if (loading) {
@@ -107,6 +110,8 @@ export default function ListingLayout({
             onSellerSectionToggle={onSellerSectionToggle}
             invoiceSectionOpen={invoiceSectionOpen}
             onInvoiceSectionToggle={onInvoiceSectionToggle}
+            collectionSectionOpen={collectionSectionOpen}
+            onCollectionSectionToggle={onCollectionSectionToggle}
             sidebarCollapsed={sidebarCollapsed}
             onSidebarCollapsedToggle={onSidebarCollapsedToggle}
           />
