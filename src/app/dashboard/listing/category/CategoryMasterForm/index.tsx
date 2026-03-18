@@ -235,29 +235,26 @@ export function CategoryMasterForm() {
 
   const l1Options = useMemo(() => {
     const list = categories.filter((c) => String(c.typeOfCategory || '').toUpperCase() === 'L1');
-    const opts = list.map((c) => ({
+    return list.map((c) => ({
       value: (c.category ?? c.categoryId ?? '').toString(),
       label: c.category || (c.categoryId ?? ''),
-    }));
-    return [{ value: '', label: 'None' }, ...opts.filter((o) => o.value)];
+    })).filter((o) => o.value);
   }, [categories]);
 
   const l2Options = useMemo(() => {
     const list = categories.filter((c) => String(c.typeOfCategory || '').toUpperCase() === 'L2');
-    const opts = list.map((c) => ({
+    return list.map((c) => ({
       value: (c.category ?? c.categoryId ?? '').toString(),
       label: c.category || (c.categoryId ?? ''),
-    }));
-    return [{ value: '', label: 'None' }, ...opts.filter((o) => o.value)];
+    })).filter((o) => o.value);
   }, [categories]);
 
   const l3Options = useMemo(() => {
     const list = categories.filter((c) => String(c.typeOfCategory || '').toUpperCase() === 'L3');
-    const opts = list.map((c) => ({
+    return list.map((c) => ({
       value: (c.category ?? c.categoryId ?? '').toString(),
       label: c.category || (c.categoryId ?? ''),
-    }));
-    return [{ value: '', label: 'None' }, ...opts.filter((o) => o.value)];
+    })).filter((o) => o.value);
   }, [categories]);
 
   const setField = <K extends keyof CategoryFormData>(key: K, value: CategoryFormData[K]) => {
@@ -293,6 +290,15 @@ export function CategoryMasterForm() {
       }
     }
     setErrors({});
+    // When moving from Basics to Hierarchy, keep parent dropdowns empty by default
+    if (currentStep.id === 'basics') {
+      setData((prev) => ({
+        ...prev,
+        l1Parent: '',
+        l2Parent: '',
+        l3Parent: '',
+      }));
+    }
     setStepIndex((i) => Math.min(i + 1, STEPS.length - 1));
   };
 
@@ -325,15 +331,17 @@ export function CategoryMasterForm() {
         ? { rule_operator: data.ruleOperator, items: ruleItemsConverted }
         : undefined;
 
-    const isL2 = String(data.typeOfCategory || '').toUpperCase() === 'L2';
+    const typeUpper = String(data.typeOfCategory || '').toUpperCase();
+    const isL1 = typeUpper === 'L1';
+    const isL2 = typeUpper === 'L2';
     const payload = {
       category: data.category.trim(),
       alias: data.alias.trim(),
       typeOfCategory: data.typeOfCategory.trim(),
       description: (data.description || '').trim(),
-      l1Parent: data.l1Parent.trim(),
-      l2Parent: isL2 ? '' : data.l2Parent.trim(),
-      l3Parent: isL2 ? '' : data.l3Parent.trim(),
+      l1Parent: isL1 ? '' : data.l1Parent.trim(),
+      l2Parent: isL1 || isL2 ? '' : data.l2Parent.trim(),
+      l3Parent: isL1 || isL2 ? '' : data.l3Parent.trim(),
       publish: data.publish,
       type: data.type,
       rule,

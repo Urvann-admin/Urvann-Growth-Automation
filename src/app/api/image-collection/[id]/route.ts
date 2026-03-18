@@ -15,6 +15,9 @@ export async function GET(
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const excludeListed = searchParams.get('excludeListed') === 'true';
+
     const collection = await ImageCollectionModel.findById(id);
 
     if (!collection) {
@@ -24,12 +27,24 @@ export async function GET(
       );
     }
 
+    let data = collection;
+    if (excludeListed && collection.images?.length) {
+      const filteredImages = collection.images.filter(
+        (img: { isListed?: boolean }) => !img.isListed
+      );
+      data = {
+        ...collection,
+        images: filteredImages,
+        imageCount: filteredImages.length,
+      };
+    }
+
     // Optionally get associated logs
     const logs = await UploadLogModel.findByCollectionId(id);
 
     return NextResponse.json({
       success: true,
-      data: collection,
+      data,
       logs: logs.length > 0 ? logs : undefined,
     });
   } catch (error) {

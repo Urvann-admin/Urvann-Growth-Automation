@@ -13,8 +13,11 @@ import {
 
 const emptyEditForm: EditCollectionForm = {
   name: '',
+  type: 'manual',
   publish: 0,
   description: '',
+  default_sort_order: '',
+  substore: [],
 };
 
 export function ViewCollections() {
@@ -48,6 +51,8 @@ export function ViewCollections() {
             description: d.description,
             type: d.type,
             storeHippoId: d.storeHippoId,
+            default_sort_order: d.default_sort_order,
+            substore: d.substore,
           }))
         );
       } else {
@@ -82,10 +87,19 @@ export function ViewCollections() {
 
   const openEdit = (row: CollectionRow) => {
     setEditing(row);
+    const substore = row.substore;
+    const substoreArr = Array.isArray(substore)
+      ? (substore as string[])
+      : substore != null
+        ? [String(substore)]
+        : [];
     setEditForm({
       name: row.name ?? '',
+      type: row.type ?? 'manual',
       publish: row.publish ?? 0,
       description: row.description ?? '',
+      default_sort_order: row.default_sort_order ?? '',
+      substore: substoreArr,
     });
   };
 
@@ -99,8 +113,11 @@ export function ViewCollections() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: editForm.name.trim(),
+          type: editForm.type,
           publish: editForm.publish,
           description: editForm.description.trim() || undefined,
+          default_sort_order: editForm.default_sort_order.trim() || undefined,
+          substore: editForm.substore.length > 0 ? editForm.substore : undefined,
         }),
       });
       const data = await res.json();

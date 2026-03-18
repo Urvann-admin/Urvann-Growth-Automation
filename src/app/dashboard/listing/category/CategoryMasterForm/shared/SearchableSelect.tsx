@@ -9,12 +9,14 @@ export function SearchableSelect({
   onChange,
   placeholder,
   className = '',
+  disabled = false,
 }: {
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -53,8 +55,13 @@ export function SearchableSelect({
     <div ref={ref} className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="h-10 w-full rounded-lg border border-slate-200 hover:border-slate-300 bg-white px-3 py-2 text-left text-sm text-slate-900 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 flex items-center justify-between gap-2"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
+        className={`h-10 w-full rounded-lg border px-3 py-2 text-left text-sm shadow-sm transition-all flex items-center justify-between gap-2 ${
+          disabled
+            ? 'border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed'
+            : 'border-slate-200 hover:border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500'
+        }`}
       >
         <span className={selected ? '' : 'text-slate-400'}>
           {selected ? selected.label : placeholder || 'Select...'}
@@ -63,7 +70,7 @@ export function SearchableSelect({
           className={`w-4 h-4 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
         />
       </button>
-      {open && (
+      {open && !disabled && (
         <div className="absolute z-50 mt-1 w-full min-w-[180px] rounded-lg border border-slate-200 bg-white shadow-xl overflow-hidden">
           <div className="shrink-0 border-b border-slate-200 p-2 bg-slate-50/50">
             <input

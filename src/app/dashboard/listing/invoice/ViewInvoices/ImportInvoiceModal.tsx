@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { Upload, Plus, Download } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import { Upload, Plus, Download, ChevronRight, ChevronLeft } from 'lucide-react';
 import { ModalContainer } from '../../shared';
 import { Notification } from '@/components/ui/Notification';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
@@ -17,9 +17,9 @@ const TYPE_OPTIONS: { value: '' | keyof PurchaseTypeBreakdown; label: string }[]
   { value: 'consumers', label: 'Consumers' },
 ];
 
-function typeDropdownToBreakdown(value: '' | keyof PurchaseTypeBreakdown): PurchaseTypeBreakdown {
+function typeDropdownToBreakdown(value: '' | keyof PurchaseTypeBreakdown, quantity: number): PurchaseTypeBreakdown {
   if (!value) return {};
-  return { [value]: 1 };
+  return { [value]: quantity };
 }
 
 const emptyOverheadForm: OverheadFormState = {
@@ -62,7 +62,10 @@ interface ImportInvoiceModalProps {
   onSuccess: () => void;
 }
 
+type ImportStep = 0 | 1; // 0 = Upload file, 1 = Fill details
+
 export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoiceModalProps) {
+  const [step, setStep] = useState<ImportStep>(0);
   const [rows, setRows] = useState<DraftPurchaseRow[]>([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -73,6 +76,14 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
   const [manualTotalError, setManualTotalError] = useState<string | null>(null);
   const [typeDropdownValues, setTypeDropdownValues] = useState<('' | keyof PurchaseTypeBreakdown)[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleClose = useCallback(() => {
+    setStep(0);
+    setRows([]);
+    setTypeDropdownValues([]);
+    setMessage(null);
+    onClose();
+  }, [onClose]);
 
   const handleDownloadTemplate = useCallback(async () => {
     try {
@@ -111,7 +122,8 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
     });
     setRows((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], type: typeDropdownToBreakdown(value) };
+      const quantity = next[index].quantity ?? 0;
+      next[index] = { ...next[index], type: typeDropdownToBreakdown(value, quantity) };
       return next;
     });
   }, []);
@@ -140,7 +152,7 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
       setRows(parsedRows);
       setTypeDropdownValues(parsedRows.map(() => ''));
       setManualAmounts(parsedRows.map(() => 0));
-      setMessage({ type: 'success', text: `Parsed ${parsedRows.length} row(s). Choose item type, parent, and type for each line, then save.` });
+      setMessage({ type: 'success', text: `Parsed ${parsedRows.length} row(s). Click Next to fill Item Type, Hub, and Type for each line.` });
     } catch {
       setMessage({ type: 'error', text: 'Failed to parse file' });
     } finally {
@@ -245,9 +257,31 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
     setOverheadModalOpen(true);
   };
 
+  const hasRequiredFields = useCallback((r: DraftPurchaseRow) => {
+    const hasItemType = (r.itemType?.trim() === 'Product' || r.itemType?.trim() === 'Consumable');
+    const hasHub = !!r.hub?.trim();
+    const hasType =
+      r.type &&
+      (Number(r.type.listing ?? 0) > 0 ||
+        Number(r.type.revival ?? 0) > 0 ||
+        Number(r.type.growth ?? 0) > 0 ||
+        Number(r.type.consumers ?? 0) > 0);
+    return hasItemType && hasHub && hasType;
+  }, []);
+
+  const allRowsComplete = rows.length > 0 && rows.every(hasRequiredFields);
+  const incompleteCount = rows.filter((r) => !hasRequiredFields(r)).length;
+
   const handleSave = async () => {
     if (rows.length === 0) {
       setMessage({ type: 'error', text: 'Upload a file first.' });
+      return;
+    }
+    if (!allRowsComplete) {
+      setMessage({
+        type: 'error',
+        text: `Fill Item Type, Hub, and Type for all rows before saving. ${incompleteCount} row(s) incomplete.`,
+      });
       return;
     }
     const invalid = rows.find(
@@ -255,12 +289,11 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
         !r.billNumber.trim() ||
         !r.productCode.trim() ||
         !r.parentSku.trim() ||
-        !r.hub?.trim() ||
         r.quantity < 0 ||
         r.amount < 0
     );
     if (invalid) {
-      setMessage({ type: 'error', text: 'Excel must include Parent. After upload, select Hub and set item type and type for all rows.' });
+      setMessage({ type: 'error', text: 'Each row must have Bill no., Product code, and Parent from the file.' });
       return;
     }
     setMessage(null);
@@ -308,9 +341,7 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
         text: data.insertedCount ? `Saved ${data.insertedCount} purchase record(s).` : 'Saved.',
       });
       onSuccess();
-      onClose();
-      setRows([]);
-      setTypeDropdownValues([]);
+      handleClose();
     } catch {
       setMessage({ type: 'error', text: 'Network error.' });
     } finally {
@@ -325,15 +356,15 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
 
   return (
     <>
-      <ModalContainer isOpen={isOpen} onClose={onClose} contentClassName="max-w-[95vw] sm:max-w-6xl">
+      <ModalContainer isOpen={isOpen} onClose={handleClose} contentClassName="max-w-[95vw] sm:max-w-6xl">
         <div className="flex flex-col max-h-[88vh] min-h-0">
           <div className="flex items-center justify-between shrink-0 border-b border-slate-200 bg-slate-50/80 px-6 py-4 rounded-t-xl">
             <h2 id="import-invoice-modal-title" className="text-lg font-semibold text-slate-900">
-              Import Invoice
+              Import Invoice {step === 1 && <span className="text-slate-500 font-normal">— Fill details</span>}
             </h2>
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 rounded-lg text-slate-500 hover:bg-slate-200 hover:text-slate-700"
               aria-label="Close"
             >
@@ -346,48 +377,83 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
             {message && (
               <Notification type={message.type} text={message.text} onDismiss={() => setMessage(null)} />
             )}
-            <p className="text-sm text-slate-600">
-              Upload an Excel or CSV file with Parent column. After upload, set Hub, overhead (optional), item type, and type for each row, then Save.
-            </p>
-            <p className="text-xs text-slate-500">
-              Excel columns: <strong>Bill no., Product Code, Product name (optional), Quantity, Price, Amount, Parent (or Parent SKU)</strong>. Select Hub from dropdown after upload.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleFileChange}
-                  disabled={parsing}
-                  className="sr-only"
-                  ref={fileInputRef}
-                />
-                <span className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
-                  <Upload className="w-4 h-4" />
-                  {parsing ? 'Parsing...' : 'Upload Excel or CSV'}
-                </span>
-              </label>
-              <button
-                type="button"
-                onClick={handleDownloadTemplate}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                title="Download Excel template"
-              >
-                <Download className="w-4 h-4" />
-                Download template
-              </button>
-              <button
-                type="button"
-                onClick={openOverheadModal}
-                disabled={rows.length === 0}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-4 h-4" /> Add overhead
-              </button>
-            </div>
 
-            {rows.length > 0 && (
-              <>
+            {/* Step 0: Upload file only */}
+            {step === 0 && (
+              <div className="space-y-6">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
+                  <h3 className="text-base font-semibold text-slate-800 mb-2">Step 1 — Upload file</h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Upload an Excel or CSV file with a <strong>Parent</strong> column. Required columns: Bill no., Product Code, Product name (optional), Quantity, Price, Amount, Parent (or Parent SKU).
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleFileChange}
+                        disabled={parsing}
+                        className="sr-only"
+                        ref={fileInputRef}
+                      />
+                      <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700">
+                        <Upload className="w-4 h-4" />
+                        {parsing ? 'Parsing...' : 'Upload Excel or CSV'}
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleDownloadTemplate}
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                      title="Download Excel template"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download template
+                    </button>
+                  </div>
+                </div>
+                {rows.length > 0 && (
+                  <div className="flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/80 p-4">
+                    <p className="text-sm text-emerald-800">
+                      <strong>{rows.length}</strong> row(s) parsed. Click Next to fill Item Type, Hub, and Type for each line.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setStep(1)}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700"
+                    >
+                      Next <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 1: Fill Item Type, Hub, Type and Save — line items only here */}
+            {step === 1 && (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+                  <h3 className="text-base font-semibold text-slate-800 mb-1">Step 2 — Fill details</h3>
+                  <p className="text-sm text-slate-600">
+                    Set <strong>Item Type</strong>, <strong>Hub</strong>, and <strong>Type</strong> for each line. Add overhead (optional), then Save. After saving, line items will appear on the dashboard.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep(0)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openOverheadModal}
+                    className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700"
+                  >
+                    <Plus className="w-4 h-4" /> Add overhead
+                  </button>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
@@ -457,17 +523,22 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
                     </tbody>
                   </table>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex flex-col items-end gap-2">
+                  {!allRowsComplete && (
+                    <p className="text-sm text-amber-600">
+                      Select <strong>Item Type</strong>, <strong>Hub</strong>, and <strong>Type</strong> for every row to enable Save.
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={handleSave}
-                    disabled={saving}
-                    className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                    disabled={saving || !allRowsComplete}
+                    className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {saving ? 'Saving...' : 'Save'}
+                    {saving ? 'Saving...' : 'Save invoice'}
                   </button>
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>

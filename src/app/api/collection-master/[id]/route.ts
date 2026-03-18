@@ -88,8 +88,22 @@ export async function PATCH(
       updateData.publish = Number.isFinite(publish) ? publish : 0;
     }
     if (typeof body.description === 'string') {
-      updateData.description =
-        body.description.trim() || undefined;
+      updateData.description = body.description.trim() || undefined;
+    }
+    if (body.type === 'dynamic' || body.type === 'manual') {
+      updateData.type = body.type;
+    }
+    if (typeof body.default_sort_order === 'string') {
+      updateData.default_sort_order =
+        body.default_sort_order.trim() || undefined;
+    }
+    if (Array.isArray(body.substore)) {
+      updateData.substore = body.substore
+        .map((s: unknown) => String(s).trim())
+        .filter(Boolean);
+    }
+    if (body.filters !== undefined && Array.isArray(body.filters)) {
+      updateData.filters = body.filters;
     }
 
     if (Object.keys(updateData).length === 0) {

@@ -2,6 +2,56 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/lib/mongodb';
 import { CollectionMasterModel } from '@/models/collectionMaster';
 import { slug } from '@/lib/utils';
+import {
+  pushCollectionToStoreHippo,
+  type StoreHippoFilterItem,
+} from '@/lib/storeHippoCollections';
+
+// ─── Operator mapping: our UI labels → StoreHippo values ─────────────────────
+const OPERATOR_MAP: Record<string, string> = {
+  'Equals': 'eq',
+  'Not Equals': 'neq',
+  'greater than': 'greater_than',
+  'less than': 'less_than',
+  'Has': 'has',
+  'Have not': 'have_not',
+};
+
+// ─── Field mapping: our UI labels → StoreHippo field names ────────────────────
+const FIELD_MAP: Record<string, string> = {
+  Price: 'price',
+  Categories: 'categories',
+  Collections: 'collections',
+};
+
+// Fields whose value is sent as an array to StoreHippo
+const MULTI_VALUE_FIELDS = new Set(['Categories', 'Collections']);
+
+/**
+ * Convert our internal filter structure into StoreHippo-ready filter items.
+ * Input filters: [{ rule_operator, items: [{field, operator, value?, values?}] }]
+ */
+function toStoreHippoFilters(rawFilters: unknown[]): StoreHippoFilterItem[] {
+  if (!Array.isArray(rawFilters) || rawFilters.length === 0) return [];
+  const group = rawFilters[0] as {
+    items?: { field: string; operator: string; value?: string; values?: string[] }[];
+  };
+  if (!Array.isArray(group?.items)) return [];
+
+  return group.items
+    .filter((item) => item.field && item.operator)
+    .map((item) => {
+      const shField = FIELD_MAP[item.field] ?? item.field.toLowerCase();
+      const shOperator = OPERATOR_MAP[item.operator] ?? item.operator.toLowerCase();
+      const isMulti = MULTI_VALUE_FIELDS.has(item.field);
+      const shValue: string | string[] = isMulti
+        ? Array.isArray(item.values) && item.values.length > 0
+          ? item.values
+          : []
+        : item.value ?? '';
+      return { field: shField, operator: shOperator, value: shValue };
+    });
+}
 
 /**
  * GET /api/collection-master
@@ -53,13 +103,18 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/collection-master
- * Create a new collection (manual). Body: { name, publish?, description? }.
+ * Create a new collection in MongoDB then push it to StoreHippo.
+ * If StoreHippo push fails, the MongoDB document is deleted (rollback).
  */
 export async function POST(request: NextRequest) {
+  let mongoId: string | undefined;
+
   try {
     await connectDB();
 
     const body = await request.json();
+
+    // ── Validate / parse fields ─────────────────────────────────────────────
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!name) {
       return NextResponse.json(
@@ -67,34 +122,89 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const publish =
-      body.publish !== undefined && body.publish !== null
-        ? Number(body.publish)
-        : 0;
+
+    const type: 'manual' | 'dynamic' = body.type === 'dynamic' ? 'dynamic' : 'manual';
+    const publish = body.publish !== undefined && body.publish !== null ? Number(body.publish) : 0;
     const description =
       typeof body.description === 'string' ? body.description.trim() || undefined : undefined;
+    const default_sort_order =
+      typeof body.default_sort_order === 'string' && body.default_sort_order.trim()
+        ? body.default_sort_order.trim()
+        : undefined;
+    const substore =
+      Array.isArray(body.substore) && body.substore.length > 0
+        ? body.substore.map((s: unknown) => String(s).trim()).filter(Boolean)
+        : undefined;
 
-    const storeHippoId = `manual-${crypto.randomUUID()}`;
+    // Raw filters from the frontend (our internal format)
+    const rawFilters: unknown[] =
+      type === 'dynamic' && Array.isArray(body.filters) && body.filters.length > 0
+        ? body.filters
+        : [];
+
     const alias = slug(name);
 
-    const document = {
-      storeHippoId,
+    // ── Save to MongoDB first (with a placeholder storeHippoId) ────────────
+    const mongoDoc: Record<string, unknown> = {
+      storeHippoId: `pending-${crypto.randomUUID()}`,
       name,
-      type: 'manual',
+      type,
       alias,
       publish: Number.isFinite(publish) ? publish : 0,
       ...(description !== undefined && { description }),
+      ...(default_sort_order !== undefined && { default_sort_order }),
+      ...(substore !== undefined && { substore }),
+      ...(rawFilters.length > 0 && { filters: rawFilters }),
     };
 
-    const created = await CollectionMasterModel.create(document as any);
-    return NextResponse.json({ success: true, data: created });
+    const created = await CollectionMasterModel.create(mongoDoc as Parameters<typeof CollectionMasterModel.create>[0]);
+    mongoId = String(created._id);
+
+    // ── Push to StoreHippo ─────────────────────────────────────────────────
+    const shFilters = type === 'dynamic' ? toStoreHippoFilters(rawFilters) : [];
+
+    const shPayload = {
+      name,
+      alias,
+      publish: Number.isFinite(publish) ? publish : 0,
+      type,
+      ...(description !== undefined && { description }),
+      ...(default_sort_order !== undefined && { default_sort_order }),
+      ...(substore !== undefined && { substore }),
+      ...(shFilters.length > 0 && { filters: shFilters }),
+    };
+
+    let storeHippoId: string;
+    try {
+      storeHippoId = await pushCollectionToStoreHippo(shPayload);
+    } catch (shError) {
+      // ── Rollback: delete the MongoDB document ───────────────────────────
+      console.error('[collection-master] StoreHippo push failed – rolling back MongoDB doc:', shError);
+      try {
+        await CollectionMasterModel.delete(mongoId);
+      } catch (deleteErr) {
+        console.error('[collection-master] Rollback delete failed:', deleteErr);
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Saved to MongoDB but StoreHippo push failed and was rolled back. Error: ${shError instanceof Error ? shError.message : String(shError)}`,
+        },
+        { status: 502 }
+      );
+    }
+
+    // ── Update MongoDB with the real StoreHippo _id ────────────────────────
+    await CollectionMasterModel.update(mongoId, { storeHippoId });
+    const final = await CollectionMasterModel.findById(mongoId);
+
+    return NextResponse.json({ success: true, data: final });
   } catch (error) {
     console.error('[collection-master] POST error:', error);
     return NextResponse.json(
       {
         success: false,
-        message:
-          error instanceof Error ? error.message : 'Failed to create collection',
+        message: error instanceof Error ? error.message : 'Failed to create collection',
       },
       { status: 500 }
     );

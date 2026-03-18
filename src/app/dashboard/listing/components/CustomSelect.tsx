@@ -21,6 +21,8 @@ interface CustomSelectProps {
   hideIndicatorWhenSelected?: boolean;
   /** When false, dropdown stays open after selecting an option (e.g. for multi-select). Default true. */
   closeOnSelect?: boolean;
+  /** When true, value is comma-separated; clicking an option toggles it in the list and dropdown stays open. */
+  multiSelect?: boolean;
 }
 
 export function CustomSelect({
@@ -34,7 +36,9 @@ export function CustomSelect({
   searchable = true,
   hideIndicatorWhenSelected = false,
   closeOnSelect = true,
+  multiSelect = false,
 }: CustomSelectProps) {
+  const effectiveCloseOnSelect = multiSelect ? false : closeOnSelect;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
@@ -42,6 +46,35 @@ export function CustomSelect({
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedValues = multiSelect
+    ? value
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const selectedLabels = multiSelect
+    ? selectedValues.map((v) => options.find((o) => o.value === v)?.label ?? v)
+    : [];
+  const displayText = multiSelect
+    ? selectedLabels.length > 0
+      ? selectedLabels.join(', ')
+      : placeholder
+    : value && (options.find((o) => o.value === value)?.label ?? value);
+  const isOptionSelected = (optValue: string) =>
+    multiSelect ? selectedValues.includes(optValue) : value === optValue;
+  const handleOptionClick = (optValue: string) => {
+    if (multiSelect) {
+      if (!optValue) return;
+      const next = selectedValues.includes(optValue)
+        ? selectedValues.filter((v) => v !== optValue)
+        : [...selectedValues, optValue];
+      onChange(next.join(', '));
+    } else {
+      onChange(optValue);
+      if (effectiveCloseOnSelect) setOpen(false);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -60,9 +93,10 @@ export function CustomSelect({
     if (open) {
       if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect();
+        // Fixed positioning is viewport-relative; do not add scroll offset
         setDropdownPosition({
-          top: rect.bottom + window.scrollY,
-          left: rect.left + window.scrollX,
+          top: rect.bottom,
+          left: rect.left,
           width: rect.width,
         });
       }
@@ -77,12 +111,17 @@ export function CustomSelect({
   }, [open, searchable]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
-  const isReadOnlyWhenSelected = Boolean(hideIndicatorWhenSelected && value && selectedLabel);
+  const isReadOnlyWhenSelected = Boolean(
+    !multiSelect && hideIndicatorWhenSelected && value && selectedLabel
+  );
 
   const filteredOptions =
     searchable && search.trim()
       ? options.filter((opt) => opt.label.toLowerCase().includes(search.toLowerCase().trim()))
       : options;
+  const optionsForList = multiSelect
+    ? filteredOptions.filter((opt) => opt.value !== '')
+    : filteredOptions;
 
   return (
     <div ref={ref} className="relative">
@@ -105,8 +144,8 @@ export function CustomSelect({
             : 'cursor-pointer'
         }`}
       >
-        <span className={value && selectedLabel ? 'text-slate-900' : 'text-slate-400'}>
-          {value && selectedLabel ? selectedLabel : placeholder}
+        <span className={displayText ? 'text-slate-900' : 'text-slate-400'}>
+          {displayText ?? placeholder}
         </span>
         {!isReadOnlyWhenSelected && (
           <ChevronDown
@@ -146,19 +185,16 @@ export function CustomSelect({
               </div>
             )}
             <div className="max-h-56 overflow-y-auto">
-              {filteredOptions.length === 0 ? (
+              {optionsForList.length === 0 ? (
                 <p className="text-slate-500 text-sm p-3 text-center">No options found</p>
               ) : (
-                filteredOptions.map((opt, index) => {
-                  const isSelected = opt.value === value;
+                optionsForList.map((opt, index) => {
+                  const isSelected = isOptionSelected(opt.value);
                   return (
                     <button
                       key={opt.value ? `${opt.value}-${index}` : `option-${index}`}
                       type="button"
-                      onClick={() => {
-                        onChange(opt.value);
-                        if (closeOnSelect) setOpen(false);
-                      }}
+                      onClick={() => handleOptionClick(opt.value)}
                       className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
                         isSelected
                           ? 'bg-pink-50 text-[#E6007A]'

@@ -7,16 +7,16 @@ import {
 } from '@/models/purchaseMaster';
 import { ParentMasterModel } from '@/models/parentMaster';
 
-/** Add type breakdown amounts (existing + incoming); used to accumulate on parent when same SKU appears in multiple bills */
+/** Add type breakdown amounts (existing + incoming); used to accumulate on parent when same SKU appears in multiple bills. Stores exact integer quantities. */
 function addTypeBreakdown(
   existing: PurchaseTypeBreakdown | undefined,
   incoming: PurchaseTypeBreakdown | undefined
 ): PurchaseTypeBreakdown {
   return {
-    listing: (existing?.listing ?? 0) + (incoming?.listing ?? 0),
-    revival: (existing?.revival ?? 0) + (incoming?.revival ?? 0),
-    growth: (existing?.growth ?? 0) + (incoming?.growth ?? 0),
-    consumers: (existing?.consumers ?? 0) + (incoming?.consumers ?? 0),
+    listing: Math.floor((Number(existing?.listing ?? 0) || 0) + (Number(incoming?.listing ?? 0) || 0)),
+    revival: Math.floor((Number(existing?.revival ?? 0) || 0) + (Number(incoming?.revival ?? 0) || 0)),
+    growth: Math.floor((Number(existing?.growth ?? 0) || 0) + (Number(incoming?.growth ?? 0) || 0)),
+    consumers: Math.floor((Number(existing?.consumers ?? 0) || 0) + (Number(incoming?.consumers ?? 0) || 0)),
   };
 }
 

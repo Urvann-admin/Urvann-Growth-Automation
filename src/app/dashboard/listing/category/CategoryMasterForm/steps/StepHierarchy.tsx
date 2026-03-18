@@ -27,9 +27,18 @@ export function StepHierarchy({
   onL2ParentChange,
   onL3ParentChange,
 }: StepHierarchyProps) {
-  const isL2 = String(typeOfCategory || '').toUpperCase() === 'L2';
+  const typeUpper = String(typeOfCategory || '').toUpperCase();
+  const isL1 = typeUpper === 'L1';
+  const isL2 = typeUpper === 'L2';
+  const parentsDisabled = isL1;
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      {isL1 && (
+        <p className="text-sm text-slate-500 mb-4">
+          L1 categories are top-level and do not have parents. Parent selection is disabled.
+        </p>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Field label="L1 parent">
           <SearchableSelect
@@ -37,6 +46,7 @@ export function StepHierarchy({
             options={l1Options}
             onChange={onL1ParentChange}
             placeholder="Select L1 parent"
+            disabled={parentsDisabled}
           />
         </Field>
         {!isL2 && (
@@ -47,6 +57,7 @@ export function StepHierarchy({
                 options={l2Options}
                 onChange={onL2ParentChange}
                 placeholder="Select L2 parent"
+                disabled={parentsDisabled}
               />
             </Field>
             <Field label="L3 parent">
@@ -55,6 +66,7 @@ export function StepHierarchy({
                 options={l3Options}
                 onChange={onL3ParentChange}
                 placeholder="Select L3 parent"
+                disabled={parentsDisabled}
               />
             </Field>
           </>

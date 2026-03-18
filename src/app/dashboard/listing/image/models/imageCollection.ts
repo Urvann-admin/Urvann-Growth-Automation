@@ -10,6 +10,8 @@ export interface ImageItem {
   size: number;
   /** Upload timestamp */
   uploadedAt: Date;
+  /** True when this image has been used in a listing product (hide from listing form) */
+  isListed?: boolean;
 }
 
 export interface ImageCollection {
@@ -128,6 +130,34 @@ export class ImageCollectionModel {
   static async count(query: Record<string, unknown> = {}) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.countDocuments(query);
+  }
+
+  /**
+   * Mark image URLs as listed (used in a listing product). Updates all collections
+   * that contain any of the given URLs, setting isListed: true on matching images.
+   */
+  static async markImagesAsListed(urls: string[]): Promise<void> {
+    if (urls.length === 0) return;
+    const collection = await getCollection(COLLECTION_NAME);
+    const urlSet = new Set(urls.map((u) => u.trim()).filter(Boolean));
+    const docs = await collection.find({}).toArray();
+    for (const doc of docs) {
+      const images = (doc.images as ImageItem[]) || [];
+      let changed = false;
+      const updatedImages = images.map((img: ImageItem) => {
+        if (img.url && urlSet.has(img.url.trim())) {
+          changed = true;
+          return { ...img, isListed: true };
+        }
+        return img;
+      });
+      if (changed) {
+        await collection.updateOne(
+          { _id: doc._id },
+          { $set: { images: updatedImages, updatedAt: new Date() } }
+        );
+      }
+    }
   }
 
   /**

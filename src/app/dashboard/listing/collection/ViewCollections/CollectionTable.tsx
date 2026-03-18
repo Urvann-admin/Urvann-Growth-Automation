@@ -10,6 +10,8 @@ export interface CollectionRow {
   description?: string;
   type?: string;
   storeHippoId?: string;
+  default_sort_order?: string;
+  substore?: unknown;
 }
 
 interface CollectionTableProps {

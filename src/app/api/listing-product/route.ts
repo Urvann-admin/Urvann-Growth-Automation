@@ -11,6 +11,7 @@ import { generateSKU } from '@/lib/skuGenerator';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
 import { withDerivedParentSkus } from '@/models/listingProduct';
 import { syncListingProductToSkuMasterNew } from '@/models/skuMasterNew';
+import { ImageCollectionModel } from '@/app/dashboard/listing/image/models/imageCollection';
 
 export async function GET(request: NextRequest) {
   try {
@@ -106,6 +107,14 @@ export async function POST(request: NextRequest) {
         await syncListingProductToSkuMasterNew(item);
       }
 
+      // Mark used images as listed in image collections (so they are hidden from listing form)
+      const allImageUrls = validatedItems.flatMap((item) => (item.images || []).filter(Boolean));
+      if (allImageUrls.length > 0) {
+        ImageCollectionModel.markImagesAsListed(allImageUrls).catch((err) =>
+          console.error('Failed to mark images as listed:', err)
+        );
+      }
+
       return NextResponse.json({
         success: true,
         message: `Created ${result.insertedCount} listing products`,
@@ -129,6 +138,14 @@ export async function POST(request: NextRequest) {
 
     // Sync to Inventory_Master.Sku_Master_New (best-effort; errors logged only)
     await syncListingProductToSkuMasterNew(created);
+
+    // Mark used images as listed in image collections (so they are hidden from listing form)
+    const imageUrls = (validated.data!.images || []).filter(Boolean);
+    if (imageUrls.length > 0) {
+      ImageCollectionModel.markImagesAsListed(imageUrls).catch((err) =>
+        console.error('Failed to mark images as listed:', err)
+      );
+    }
 
     console.log('Listing product saved to DB:', created._id);
     return NextResponse.json({
@@ -756,13 +773,8 @@ async function updateParentQuantitiesAfterCreation(listingProducts: Omit<Listing
 
       for (const purchase of listingPurchases) {
         if (remaining <= 0) break;
-        const typeSum =
-          (Number(purchase.type?.listing ?? 0) || 0) +
-          (Number(purchase.type?.revival ?? 0) || 0) +
-          (Number(purchase.type?.growth ?? 0) || 0) +
-          (Number(purchase.type?.consumers ?? 0) || 0);
-        const isFlagMode = typeSum <= 1;
-        const grossListing = isFlagMode ? (Number(purchase.quantity) || 0) : (Number(purchase.type?.listing) || 0);
+        const listingVal = Number(purchase.type?.listing) || 0;
+        const grossListing = listingVal > 1 ? listingVal : (Number(purchase.quantity) || 0);
         const currentListed = Number((purchase as { listed_quantity?: number }).listed_quantity ?? 0) || 0;
         const available = Math.max(0, grossListing - currentListed);
         const toAdd = Math.min(remaining, available);
@@ -780,8 +792,8 @@ async function updateParentQuantitiesAfterCreation(listingProducts: Omit<Listing
       const parent = await ParentMasterModel.findBySku(parentSku);
       if (parent && parent.typeBreakdown) {
         const sectionKey = update.section === 'consumer' ? 'consumers' : update.section;
-        const currentQuantity = parent.typeBreakdown[sectionKey] || 0;
-        const newQuantity = Math.max(0, currentQuantity - update.quantityToDeduct);
+        const currentQuantity = Number(parent.typeBreakdown[sectionKey] ?? 0) || 0;
+        const newQuantity = Math.max(0, Math.floor(currentQuantity - update.quantityToDeduct));
         const updatedTypeBreakdown: PurchaseTypeBreakdown = {
           ...parent.typeBreakdown,
           [sectionKey]: newQuantity,

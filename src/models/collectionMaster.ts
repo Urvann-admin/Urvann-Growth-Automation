@@ -114,6 +114,13 @@ export class CollectionMasterModel {
     return result;
   }
 
+  static async delete(id: string | ObjectId) {
+    const collection = await getCollection(COLLECTION_NAME);
+    const queryId =
+      typeof id === 'string' && ObjectId.isValid(id) ? new ObjectId(id) : id;
+    return collection.deleteOne({ _id: queryId as any });
+  }
+
   static async deleteMany(query: Record<string, unknown> = {}) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.deleteMany(query);

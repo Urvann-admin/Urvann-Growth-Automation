@@ -65,6 +65,84 @@ async function fetchPage(start: number): Promise<StoreHippoCollectionsResponse> 
   return json;
 }
 
+/** StoreHippo operator names for our filter conditions. */
+export interface StoreHippoFilterItem {
+  field: string;
+  operator: string;
+  value: string | string[];
+  _id?: string;
+}
+
+export interface StoreHippoCollectionCreateBody {
+  name: string;
+  alias: string;
+  publish: number;
+  type: string;
+  description?: string;
+  default_sort_order?: string;
+  substore?: string[];
+  filters?: StoreHippoFilterItem[];
+}
+
+/**
+ * Push a new collection to StoreHippo.
+ * Returns the StoreHippo _id of the created collection.
+ */
+export async function pushCollectionToStoreHippo(
+  data: StoreHippoCollectionCreateBody
+): Promise<string> {
+  const url = `${BASE_URL}/api/1.1/entity/ms.collections/`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'access-key': ACCESS_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`StoreHippo create collection error (${response.status}): ${text}`);
+  }
+
+  const json = await response.json();
+  // Some StoreHippo endpoints return the created entity's _id directly
+  const directId: string | undefined =
+    json?.data?._id ?? json?._id ?? undefined;
+  if (directId) return directId;
+
+  // Otherwise fetch by alias
+  return fetchCollectionIdByAlias(data.alias);
+}
+
+/**
+ * Fetch a collection from StoreHippo by alias and return its _id.
+ */
+export async function fetchCollectionIdByAlias(alias: string): Promise<string> {
+  const filters = encodeURIComponent(
+    JSON.stringify([{ field: 'alias', operator: 'eq', value: alias }])
+  );
+  const url = `${BASE_URL}/api/1.1/entity/ms.collections/?filters=${filters}`;
+  const response = await fetch(url, {
+    headers: { 'access-key': ACCESS_KEY },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(
+      `StoreHippo fetch collection by alias error (${response.status}): ${text}`
+    );
+  }
+
+  const json = (await response.json()) as StoreHippoCollectionsResponse;
+  const item = json?.data?.[0];
+  if (!item?._id) {
+    throw new Error(`Collection with alias "${alias}" not found in StoreHippo`);
+  }
+  return item._id;
+}
+
 /**
  * Fetch all manual collections from StoreHippo (handles pagination).
  */

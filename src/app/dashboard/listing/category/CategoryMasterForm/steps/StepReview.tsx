@@ -47,9 +47,9 @@ export function StepReview({ data }: StepReviewProps) {
         <Row label="Alias" value={data.alias || '—'} />
         <Row label="Type of category" value={data.typeOfCategory || '—'} />
         <Row label="Description" value={data.description || '—'} />
-        <Row label="L1 parent" value={data.l1Parent || 'None'} />
-        <Row label="L2 parent" value={data.l2Parent || 'None'} />
-        <Row label="L3 parent" value={data.l3Parent || 'None'} />
+        <Row label="L1 parent" value={data.l1Parent || '—'} />
+        <Row label="L2 parent" value={data.l2Parent || '—'} />
+        <Row label="L3 parent" value={data.l3Parent || '—'} />
         <Row label="Type" value={data.type} />
         {data.type === 'Automatic' && conditionsSummary && (
           <Row label="Conditions" value={conditionsSummary} />

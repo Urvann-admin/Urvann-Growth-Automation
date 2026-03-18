@@ -1,12 +1,29 @@
 'use client';
 
+import { X } from 'lucide-react';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 import { CustomSelect } from '../../components/CustomSelect';
+import { SubstoreMultiPicker } from '@/app/dashboard/listing/category/CategoryMasterForm/shared/SubstoreMultiPicker';
+import { HUB_MAPPINGS, getSubstoresByHub, getSelectedHubsFromSubstores } from '@/shared/constants/hubs';
+
+const DEFAULT_SORT_OPTIONS = [
+  { value: 'Manually', label: 'Manually' },
+  { value: 'Alphabetically: A-Z', label: 'Alphabetically: A-Z' },
+  { value: 'Alphabetically: Z-A', label: 'Alphabetically: Z-A' },
+  { value: 'By price: Highest to lowest', label: 'By price: Highest to lowest' },
+  { value: 'By price: Lowest to highest', label: 'By price: Lowest to highest' },
+  { value: 'By date: Oldest to newest', label: 'By date: Oldest to newest' },
+  { value: 'By date: Newest to oldest', label: 'By date: Newest to oldest' },
+  { value: 'By best seller', label: 'By best seller' },
+];
 
 export interface EditCollectionForm {
   name: string;
+  type: string;
   publish: number;
   description: string;
+  default_sort_order: string;
+  substore: string[];
 }
 
 interface EditCollectionModalProps {
@@ -55,6 +72,19 @@ export function EditCollectionModal({
               </label>
               <div className="block">
                 <CustomSelect
+                  label="Type"
+                  value={editForm.type}
+                  onChange={(v) => onChange({ ...editForm, type: v })}
+                  options={[
+                    { value: 'manual', label: 'manual' },
+                    { value: 'dynamic', label: 'dynamic' },
+                  ]}
+                  searchable={false}
+                  placeholder="Choose..."
+                />
+              </div>
+              <div className="block">
+                <CustomSelect
                   label="Publish"
                   value={String(editForm.publish)}
                   onChange={(v) =>
@@ -67,6 +97,57 @@ export function EditCollectionModal({
                   searchable={false}
                   placeholder="Choose..."
                 />
+              </div>
+              <div className="block sm:col-span-2">
+                <CustomSelect
+                  label="Default sort order"
+                  value={editForm.default_sort_order}
+                  onChange={(v) =>
+                    onChange({ ...editForm, default_sort_order: v })
+                  }
+                  options={DEFAULT_SORT_OPTIONS}
+                  searchable={true}
+                  placeholder="Choose..."
+                />
+              </div>
+              <div className="block sm:col-span-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Substore
+                </label>
+                <SubstoreMultiPicker
+                  value={editForm.substore}
+                  options={HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub }))}
+                  onChange={(v) => onChange({ ...editForm, substore: v })}
+                  optionToSubstores={getSubstoresByHub}
+                />
+                {getSelectedHubsFromSubstores(editForm.substore).length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {getSelectedHubsFromSubstores(editForm.substore).map((hub) => (
+                      <span
+                        key={hub}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-[#F4F6F8] px-2.5 py-1 text-sm text-slate-800"
+                      >
+                        {hub}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const toRemove = getSubstoresByHub(hub);
+                            onChange({
+                              ...editForm,
+                              substore: editForm.substore.filter(
+                                (s) => !toRemove.includes(s)
+                              ),
+                            });
+                          }}
+                          className="rounded p-0.5 text-slate-400 hover:bg-slate-200"
+                          aria-label={`Remove ${hub}`}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <label className="block sm:col-span-2">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">

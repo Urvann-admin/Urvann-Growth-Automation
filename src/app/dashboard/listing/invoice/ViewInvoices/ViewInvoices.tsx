@@ -36,22 +36,26 @@ function computeBillAnalytics(purchases: PurchaseMaster[]): BillAnalytics[] {
     const totalOverhead = rows.reduce((s, r) => s + (r.overhead?.allocatedAmount ?? 0), 0);
     const grandTotalAmount = billTotalAmount + totalOverhead;
     const normalizedFactor = billTotalAmount > 0 ? grandTotalAmount / billTotalAmount : 1;
-    const amountListing = rows.reduce(
-      (s, r) => s + ((r.type?.listing ?? 0) * (r.amount ?? 0) * normalizedFactor),
-      0
-    );
-    const amountRevival = rows.reduce(
-      (s, r) => s + ((r.type?.revival ?? 0) * (r.amount ?? 0) * normalizedFactor),
-      0
-    );
-    const amountGrowth = rows.reduce(
-      (s, r) => s + ((r.type?.growth ?? 0) * (r.amount ?? 0) * normalizedFactor),
-      0
-    );
-    const amountConsumers = rows.reduce(
-      (s, r) => s + ((r.type?.consumers ?? 0) * (r.amount ?? 0) * normalizedFactor),
-      0
-    );
+    const amountListing = rows.reduce((s, r) => {
+      const qty = Math.max(1, r.quantity ?? 0);
+      const price = (r.amount ?? 0) / qty;
+      return s + (r.type?.listing ?? 0) * price * normalizedFactor;
+    }, 0);
+    const amountRevival = rows.reduce((s, r) => {
+      const qty = Math.max(1, r.quantity ?? 0);
+      const price = (r.amount ?? 0) / qty;
+      return s + (r.type?.revival ?? 0) * price * normalizedFactor;
+    }, 0);
+    const amountGrowth = rows.reduce((s, r) => {
+      const qty = Math.max(1, r.quantity ?? 0);
+      const price = (r.amount ?? 0) / qty;
+      return s + (r.type?.growth ?? 0) * price * normalizedFactor;
+    }, 0);
+    const amountConsumers = rows.reduce((s, r) => {
+      const qty = Math.max(1, r.quantity ?? 0);
+      const price = (r.amount ?? 0) / qty;
+      return s + (r.type?.consumers ?? 0) * price * normalizedFactor;
+    }, 0);
     result.push({
       billNumber,
       billTotalAmount,

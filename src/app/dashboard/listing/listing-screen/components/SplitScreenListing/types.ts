@@ -64,7 +64,8 @@ export interface ProductRow {
   inventory_quantity: number;
   
   // Metadata
-  hub: string;
+  /** One or more hubs this product will be listed on. Each hub gets its own document + unique SKU on save. */
+  hubs: string[];
   seller: string;
   categories: string[];
   collectionIds: string[];
@@ -117,7 +118,7 @@ export interface ExcelRow {
   quantity: number;
   price: number;
   inventory_quantity: number;
-  hub: string;
+  hubs: string[];
   seller: string;
   categories: string[];
   collectionIds: string[];
@@ -126,7 +127,7 @@ export interface ExcelRow {
   validationErrors: Record<string, string>;
 }
 
-export interface SplitScreenState {
+export interface ListingState {
   selectedImages: SelectedImage[];
   productRows: ProductRow[];
   availableParents: ParentMaster[];
@@ -153,7 +154,7 @@ export interface ImageCollection {
   createdAt: string;
 }
 
-export interface SplitScreenListingProps {
+export interface ListingScreenProps {
   section: ListingSection;
   onSuccess?: (products: any[]) => void;
   /** When true, sidebar is collapsed (72px); when false, open (240px). Used to position floating Save button. */

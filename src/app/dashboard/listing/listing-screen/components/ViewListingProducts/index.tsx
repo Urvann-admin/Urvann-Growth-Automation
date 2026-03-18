@@ -1,19 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Download, RefreshCw } from 'lucide-react';
+import { Search, Filter, RefreshCw } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { ListingProduct, ListingSection, ListingStatus } from '@/models/listingProduct';
 import { ListingProductTable } from './ListingProductTable';
 
 export interface ViewListingProductsProps {
   section: ListingSection;
-  onCreateNew?: () => void;
 }
 
 export function ViewListingProducts({
   section,
-  onCreateNew,
 }: ViewListingProductsProps) {
   const [products, setProducts] = useState<ListingProduct[]>([]);
   const [loading, setLoading] = useState(false);
@@ -121,61 +119,6 @@ export function ViewListingProducts({
     }
   };
 
-  // Handle bulk actions
-  const handleBulkAction = async (productIds: string[], action: string) => {
-    if (!confirm(`Are you sure you want to ${action} ${productIds.length} product(s)?`)) {
-      return;
-    }
-
-    try {
-      let endpoint = '';
-      let method = '';
-      let body: any = {};
-
-      switch (action) {
-        case 'delete':
-          endpoint = `/api/listing-product?ids=${productIds.join(',')}`;
-          method = 'DELETE';
-          break;
-        case 'publish':
-        case 'draft':
-        case 'listed':
-          // For bulk status updates, we'd need a bulk update endpoint
-          // For now, update them one by one
-          for (const id of productIds) {
-            await fetch(`/api/listing-product/${id}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: action }),
-            });
-          }
-          toast.success(`Updated ${productIds.length} product(s)`);
-          fetchProducts(pagination.page);
-          return;
-      }
-
-      if (endpoint) {
-        const response = await fetch(endpoint, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined,
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          toast.success(`${action} completed for ${productIds.length} product(s)`);
-          fetchProducts(pagination.page);
-        } else {
-          toast.error(result.message || `Failed to ${action} products`);
-        }
-      }
-    } catch (error) {
-      console.error(`Error performing ${action}:`, error);
-      toast.error(`Failed to ${action} products`);
-    }
-  };
-
   // Handle pagination
   const handlePageChange = (newPage: number) => {
     fetchProducts(newPage);
@@ -245,23 +188,6 @@ export function ViewListingProducts({
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
-            <button
-              onClick={() => toast('Export functionality coming soon')}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export
-            </button>
-            {onCreateNew && (
-              <button
-                onClick={onCreateNew}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-white rounded-xl font-medium hover:opacity-90 transition-opacity"
-                style={{ backgroundColor: '#E6007A' }}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Create New Product
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -270,9 +196,6 @@ export function ViewListingProducts({
       <ListingProductTable
         products={products}
         loading={loading}
-        onStatusChange={handleStatusChange}
-        onDelete={handleDelete}
-        onBulkAction={handleBulkAction}
       />
 
       {/* Pagination */}

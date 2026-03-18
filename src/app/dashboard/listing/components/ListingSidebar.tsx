@@ -89,22 +89,6 @@ export function ListingSidebar({
         isChristmasTheme={isChristmasTheme}
       />
       <nav className="p-2 space-y-0.5">
-        <CategoryNavSection
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          sectionOpen={categorySectionOpen}
-          onSectionToggle={onCategorySectionToggle}
-          collapsed={sidebarCollapsed}
-          isChristmasTheme={isChristmasTheme}
-        />
-        <ProductNavSection
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          sectionOpen={productSectionOpen}
-          onSectionToggle={onProductSectionToggle}
-          collapsed={sidebarCollapsed}
-          isChristmasTheme={isChristmasTheme}
-        />
         {canAccessListing && (
         <ListingNavSection
           activeTab={activeTab}
@@ -117,11 +101,27 @@ export function ListingSidebar({
           isChristmasTheme={isChristmasTheme}
         />
         )}
+        <InvoiceNavSection
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          sectionOpen={invoiceSectionOpen}
+          onSectionToggle={onInvoiceSectionToggle}
+          collapsed={sidebarCollapsed}
+          isChristmasTheme={isChristmasTheme}
+        />
         <ImageNavSection
           activeTab={activeTab}
           onTabChange={onTabChange}
           sectionOpen={imageSectionOpen}
           onSectionToggle={onImageSectionToggle}
+          collapsed={sidebarCollapsed}
+          isChristmasTheme={isChristmasTheme}
+        />
+        <ProductNavSection
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          sectionOpen={productSectionOpen}
+          onSectionToggle={onProductSectionToggle}
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />
@@ -133,19 +133,19 @@ export function ListingSidebar({
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />
-        <InvoiceNavSection
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          sectionOpen={invoiceSectionOpen}
-          onSectionToggle={onInvoiceSectionToggle}
-          collapsed={sidebarCollapsed}
-          isChristmasTheme={isChristmasTheme}
-        />
         <CollectionNavSection
           activeTab={activeTab}
           onTabChange={onTabChange}
           sectionOpen={collectionSectionOpen}
           onSectionToggle={onCollectionSectionToggle}
+          collapsed={sidebarCollapsed}
+          isChristmasTheme={isChristmasTheme}
+        />
+        <CategoryNavSection
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          sectionOpen={categorySectionOpen}
+          onSectionToggle={onCategorySectionToggle}
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
         />

@@ -62,6 +62,7 @@ export function StepDetails({
           onChange={(v) => onFieldChange('features', v)}
           options={FEATURES_OPTIONS}
           placeholder="Select Features"
+          multiSelect
         />
         <CustomSelect
           label="Redirects"

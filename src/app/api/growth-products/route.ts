@@ -73,14 +73,11 @@ export async function GET(request: NextRequest) {
       billToFactor.set(billNumber, factor);
     }
 
-    // Per row: when type is a flag ({ growth: 1 }), use row.quantity; else use type.growth
     const byParent = new Map<string, { quantity: number; amount: number; priceSum: number; priceCount: number; factorSum: number; earliestDate?: Date }>();
     for (const r of rows) {
       const t = r.type;
-      const typeSum = (Number(t?.listing ?? 0) || 0) + (Number(t?.revival ?? 0) || 0) + (Number(t?.growth ?? 0) || 0) + (Number(t?.consumers ?? 0) || 0);
-      const growthQty = (t?.growth ?? 0) > 0
-        ? (typeSum <= 1 ? Math.max(Number(r.quantity) || 0, 0) : Number(t?.growth) || 0)
-        : 0;
+      const growthVal = Number(t?.growth ?? 0) || 0;
+      const growthQty = growthVal > 1 ? growthVal : (growthVal > 0 ? (Number(r.quantity) || 0) : 0);
       if (growthQty <= 0) continue;
 
       const qty = Math.max(Number(r.quantity) || 0, 1);

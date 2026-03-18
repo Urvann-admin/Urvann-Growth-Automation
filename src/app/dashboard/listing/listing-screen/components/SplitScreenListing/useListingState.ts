@@ -4,7 +4,7 @@ import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
 import type { ImageItem } from '@/models/imageCollection';
 import type { 
-  SplitScreenState, 
+  ListingState, 
   SelectedImage, 
   ProductRow, 
   ImageCollection,
@@ -12,8 +12,8 @@ import type {
 } from './types';
 import { validateStep } from '@/lib/listingProductValidation';
 
-export function useSplitScreenState(section: ListingSection) {
-  const [state, setState] = useState<SplitScreenState>({
+export function useListingState(section: ListingSection) {
+  const [state, setState] = useState<ListingState>({
     selectedImages: [],
     productRows: [],
     availableParents: [],
@@ -38,7 +38,7 @@ export function useSplitScreenState(section: ListingSection) {
         const collectionsWithImages = await Promise.all(
           result.data.map(async (collection: any) => {
             try {
-              const detailResponse = await fetch(`/api/image-collection/${collection._id}`);
+              const detailResponse = await fetch(`/api/image-collection/${collection._id}?excludeListed=true`);
               const detailResult = await detailResponse.json();
               if (detailResult.success && detailResult.data.images) {
                 return {
@@ -184,7 +184,7 @@ export function useSplitScreenState(section: ListingSection) {
         sort_order: 3000,
         
         // Metadata
-        hub: parent.hub || '',
+        hubs: [],
         seller: parent.seller || '',
         categories: parent.categories || [],
         collectionIds: parent.collectionIds?.map(id => String(id)) || [],
@@ -246,7 +246,7 @@ export function useSplitScreenState(section: ListingSection) {
         sort_order: 3000,
         
         // Metadata
-        hub: '',
+        hubs: [],
         seller: '',
         categories: [],
         collectionIds: [],
@@ -346,7 +346,7 @@ export function useSplitScreenState(section: ListingSection) {
           quantity: row.setQuantity,
           price: row.price,
           inventory_quantity: row.inventory_quantity,
-          hub: row.hub,
+          hub: (row.hubs ?? [])[0] ?? '',
           seller: row.seller,
           categories: row.categories,
           collectionIds: row.collectionIds,
@@ -358,6 +358,8 @@ export function useSplitScreenState(section: ListingSection) {
 
         const selectedParents = row.parentItems.map(item => item.parent).filter(Boolean) as ParentMaster[];
         const { errors } = validateStep('review', formData as any, selectedParents, section);
+        // Hub validation: require at least one hub selected
+        if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
         const isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
 
         return {
@@ -401,7 +403,7 @@ export function useSplitScreenState(section: ListingSection) {
           quantity: row.setQuantity,
           price: row.price,
           inventory_quantity: row.inventory_quantity,
-          hub: row.hub,
+          hub: (row.hubs ?? [])[0] ?? '',
           seller: row.seller,
           categories: row.categories,
           collectionIds: row.collectionIds,
@@ -411,6 +413,7 @@ export function useSplitScreenState(section: ListingSection) {
 
         const selectedParents = row.parentItems.map(item => item.parent).filter(Boolean) as ParentMaster[];
         const { errors } = validateStep('review', formData as any, selectedParents, section);
+        if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
         const isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
 
         if (!isValid) {
@@ -450,40 +453,47 @@ export function useSplitScreenState(section: ListingSection) {
         return undefined;
       }
 
-      // Transform rows to API format
-      const productsToCreate = validRows.map(row => ({
-        listingType: 'child',
-        parentSkus: row.parentSkus,
-        parentItems: row.parentItems.map(item => ({
-          parentSku: item.parentSku,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-        section,
-        plant: row.plant,
-        otherNames: row.otherNames,
-        variety: row.variety,
-        colour: row.colour,
-        height: row.height,
-        size: row.size,
-        type: row.type,
-        description: row.description,
-        setQuantity: row.setQuantity,
-        potQuantity: row.potQuantity,
-        quantity: row.setQuantity,
-        price: row.price,
-        inventory_quantity: row.inventory_quantity,
-        tags: row.tags?.length ? row.tags : undefined,
-        compare_at_price: row.compare_at_price ?? undefined,
-        sort_order: row.sort_order ?? 3000,
-        publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
-        hub: row.hub,
-        seller: row.seller,
+      // Transform rows to API format — expand each row into one payload per selected hub
+      const productsToCreate = validRows.flatMap(row => {
+        const rowImages = (row.taggedImages?.length
+          ? row.taggedImages
+          : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : [])
+        ).map((img: { url: string }) => img.url);
+        const basePayload = {
+          listingType: 'child',
+          parentSkus: row.parentSkus,
+          parentItems: row.parentItems.map(item => ({
+            parentSku: item.parentSku,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          })),
+          section,
+          plant: row.plant,
+          otherNames: row.otherNames,
+          variety: row.variety,
+          colour: row.colour,
+          height: row.height,
+          size: row.size,
+          type: row.type,
+          description: row.description,
+          setQuantity: row.setQuantity,
+          potQuantity: row.potQuantity,
+          quantity: row.setQuantity,
+          price: row.price,
+          inventory_quantity: row.inventory_quantity,
+          tags: row.tags?.length ? row.tags : undefined,
+          compare_at_price: row.compare_at_price ?? undefined,
+          sort_order: row.sort_order ?? 3000,
+          publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
+          seller: row.seller,
           categories: row.categories,
           collectionIds: row.collectionIds,
-          images: (row.taggedImages?.length ? row.taggedImages : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : [])).map((img: { url: string }) => img.url),
+          images: rowImages,
           status: 'draft',
-        }));
+        };
+        // One payload per hub — backend generates a unique SKU for each
+        return (row.hubs ?? []).map(hub => ({ ...basePayload, hub }));
+      });
 
       // Bulk create
       const response = await fetch('/api/listing-product', {
@@ -545,7 +555,7 @@ export function useSplitScreenState(section: ListingSection) {
       quantity: row.setQuantity,
       price: row.price,
       inventory_quantity: row.inventory_quantity,
-      hub: row.hub,
+      hub: (row.hubs ?? [])[0] ?? '',
       seller: row.seller,
       categories: row.categories,
       collectionIds: row.collectionIds,
@@ -554,6 +564,7 @@ export function useSplitScreenState(section: ListingSection) {
     };
     const selectedParents = row.parentItems.map((item) => item.parent).filter(Boolean) as ParentMaster[];
     const { errors } = validateStep('review', formData as any, selectedParents, section);
+    if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
     const isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
     if (!isValid) {
       toast.error(Object.values(errors).filter(Boolean)[0] || 'Please complete required fields');
@@ -562,7 +573,8 @@ export function useSplitScreenState(section: ListingSection) {
 
     setState((prev) => ({ ...prev, isSaving: true }));
     try {
-      const payload = {
+      // One payload per selected hub — backend generates a unique SKU for each
+      const basePayload = {
         listingType: 'child',
         parentSkus: row.parentSkus,
         parentItems: row.parentItems.map((item) => ({
@@ -588,17 +600,17 @@ export function useSplitScreenState(section: ListingSection) {
         compare_at_price: row.compare_at_price ?? undefined,
         sort_order: row.sort_order ?? 3000,
         publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
-        hub: row.hub,
         seller: row.seller,
         categories: row.categories,
         collectionIds: row.collectionIds,
         images: rowImages.map((img: { url: string }) => img.url),
         status: 'draft',
       };
+      const payloads = (row.hubs ?? []).map(hub => ({ ...basePayload, hub }));
       const response = await fetch('/api/listing-product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payloads.length === 1 ? payloads[0] : payloads),
       });
       const result = await response.json();
       if (result.success) {
@@ -668,7 +680,7 @@ export function useSplitScreenState(section: ListingSection) {
           sort_order: 3000,
           
           // Metadata
-          hub: '',
+          hubs: [],
           seller: '',
           categories: [],
           collectionIds: [],
@@ -699,7 +711,7 @@ export function useSplitScreenState(section: ListingSection) {
         parentSkus: r.parentSkus,
         parentItems: r.parentItems,
         plant: r.plant,
-        hub: r.hub,
+        hubs: r.hubs,
         seller: r.seller,
         categories: r.categories,
         setQuantity: r.setQuantity,

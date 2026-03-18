@@ -13,7 +13,7 @@ import { CollectionMasterForm, ViewCollections } from '../collection';
 import {
   ListingProductForm,
   ViewListingProducts,
-  SplitScreenListing,
+  ListingScreen,
   GrowthProductsView,
 } from '../listing-screen';
 
@@ -62,7 +62,7 @@ export function ListingContent({
         </div>
       )}
       {activeTab === 'collection-add' && (
-        <div className="max-w-2xl mx-auto">
+        <div className="max-w-6xl mx-auto w-full">
           <CollectionMasterForm />
         </div>
       )}
@@ -109,7 +109,7 @@ function ListingSectionContent({
   return (
     <div className="h-full">
       {sectionTab === 'listing' && listingViewMode === 'create' && (
-        <SplitScreenListing
+        <ListingScreen
           section={sectionTab}
           onSuccess={(products) => {
             console.log('Listing products created:', products);
@@ -121,12 +121,7 @@ function ListingSectionContent({
 
       {sectionTab === 'listing' && listingViewMode === 'view-all' && (
         <div className="space-y-6 p-6">
-          <ViewListingProducts
-            section={sectionTab}
-            onCreateNew={() => {
-              // Switch to create could be done by parent via callback if needed
-            }}
-          />
+          <ViewListingProducts section={sectionTab} />
         </div>
       )}
 
@@ -138,12 +133,7 @@ function ListingSectionContent({
 
       {sectionTab !== 'listing' && sectionTab !== 'growth' && (
         <div className="space-y-6 p-6">
-          <ViewListingProducts
-            section={sectionTab}
-            onCreateNew={() => {
-              console.log(`Create new ${sectionTab} product`);
-            }}
-          />
+          <ViewListingProducts section={sectionTab} />
         </div>
       )}
     </div>

@@ -1,2 +1,3 @@
-export { SplitScreenListing } from './SplitScreenListing';
-export type { SplitScreenListingProps, SelectedImage, ProductRow, SplitScreenState } from './types';
+export { ListingScreen } from './ListingScreen';
+export { useListingState } from './useListingState';
+export type { ListingScreenProps, ListingState, SelectedImage, ProductRow } from './types';

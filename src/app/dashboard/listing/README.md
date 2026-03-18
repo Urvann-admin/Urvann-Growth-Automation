@@ -45,7 +45,7 @@ listing/
 │   ├── components/             # Listing-screen UI
 │   │   ├── ViewListingProducts/
 │   │   ├── ListingProductForm/
-│   │   ├── SplitScreenListing/
+│   │   ├── SplitScreenListing/   # ListingScreen, useListingState, ProductTable
 │   │   ├── ListingSectionTabs.tsx
 │   │   ├── ParentSelector.tsx
 │   │   ├── ParentQuantityDisplay.tsx

@@ -20,8 +20,8 @@ const TYPE_OPTIONS: SelectOption[] = [
   { value: 'consumers', label: 'Consumers' },
 ];
 
-function typeSlugToBreakdown(slug: TypeSlug): PurchaseTypeBreakdown {
-  return { [slug]: 1 };
+function typeSlugToBreakdown(slug: TypeSlug, quantity: number): PurchaseTypeBreakdown {
+  return { [slug]: quantity };
 }
 
 interface PurchaseTableProps {
@@ -71,7 +71,7 @@ export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, 
 
   const handleTypeChange = (p: PurchaseMaster, slug: TypeSlug | '') => {
     if (!onPendingType || !p._id) return;
-    onPendingType(p, slug ? typeSlugToBreakdown(slug as TypeSlug) : {});
+    onPendingType(p, slug ? typeSlugToBreakdown(slug as TypeSlug, Number(p.quantity) || 0) : {});
   };
 
   return (
