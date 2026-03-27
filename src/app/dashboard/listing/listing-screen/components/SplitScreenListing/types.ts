@@ -1,5 +1,15 @@
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
+import type { HubParentCheckResult } from '@/lib/childListingHubSku';
+
+/** Child listing parent dropdown: sourced from `listingProduct` (merged with Parent Master for row state). */
+export interface ListingSourcedParentOption {
+  listingId: string;
+  listingSku: string;
+  /** Hub on the source listing document (filter parent picker by context hub). */
+  listingHub: string;
+  parent: ParentMaster;
+}
 
 export interface SelectedImage {
   url: string;
@@ -25,8 +35,11 @@ export interface ParentItemRow {
   parent?: ParentMaster;
 }
 
+/** Split-screen listing: queue base parents vs compose child products */
+export type ListingScreenMode = 'parent' | 'child';
+
 export interface ProductRow {
-  /** Temporary ID for unsaved rows */
+  /** Temporary ID for unsaved rows; parent mode uses `parent_<MongoId>` */
   id: string;
   /** Line-item serial number shown in the right table */
   serial: number;
@@ -64,6 +77,8 @@ export interface ProductRow {
   inventory_quantity: number;
   
   // Metadata
+  /** Latest hub × parent SKU existence checks (from verify API). */
+  hubParentChecks: HubParentCheckResult[];
   /** One or more hubs this product will be listed on. Each hub gets its own document + unique SKU on save. */
   hubs: string[];
   seller: string;
@@ -130,12 +145,27 @@ export interface ExcelRow {
 export interface ListingState {
   selectedImages: SelectedImage[];
   productRows: ProductRow[];
-  availableParents: ParentMaster[];
+  /**
+   * Child listing only: global hub filter (must be set before photo rows appear).
+   * Parent picker options are limited to listing products for this hub.
+   */
+  childContextHub: string;
+  availableParents: ListingSourcedParentOption[];
   selectedParent: ParentMaster | null;
   viewMode: ViewMode;
   validationErrors: Record<string, string>;
   isSaving: boolean;
   isLoading: boolean;
+  listingMode: ListingScreenMode;
+  parentListPage: number;
+  parentListTotalPages: number;
+  parentListTotal: number;
+  parentListLimit: number;
+  parentListLoading: boolean;
+  /** Parent listing tab: filter API results by base parent SKU (partial match). */
+  parentSkuFilter: string;
+  /** Parent listing tab: filter by display name fields (plant, finalName, etc.). */
+  parentNameFilter: string;
 }
 
 export interface ImageCollection {

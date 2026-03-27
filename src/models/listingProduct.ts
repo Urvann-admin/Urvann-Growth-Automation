@@ -1,11 +1,18 @@
 import { ObjectId } from 'mongodb';
 import { getCollection } from '@/lib/mongodb';
+import {
+  candidateBaseParentSkusForParentListing,
+  toCanonicalParentSkuForPurchases,
+} from '@/lib/skuGenerator';
 
 /** Section types for listing products */
 export type ListingSection = 'listing' | 'revival' | 'growth' | 'consumer';
 
 /** Status types for listing products */
 export type ListingStatus = 'draft' | 'listed' | 'published';
+
+/** Whether the listing row lists a single base parent vs a composed child product */
+export type ListingProductListingType = 'parent' | 'child';
 
 /**
  * Snapshot of how a listing line item is composed from parent SKUs.
@@ -16,6 +23,10 @@ export type ListingStatus = 'draft' | 'listed' | 'published';
  * - `unitPrice` – price of the parent at the time of listing creation
  */
 export interface ListingParentItem {
+  /**
+   * Base parent SKU from Parent Master, or — for `listingType: 'parent'` with a `hub` —
+   * hub letter + base SKU (e.g. `WTES000501`) so the line matches hub-scoped inventory. Purchase / parent sync uses the canonical SKU.
+   */
   parentSku: string;
   quantity: number;
   unitPrice: number;
@@ -31,6 +42,8 @@ export interface ListingProduct {
   parentItems: ListingParentItem[];
   /** @deprecated Legacy: only present on old documents; derive from parentItems when reading. */
   parentSkus?: string[];
+  /** parent = one base parent per listing line; child = one or more parents in composition */
+  listingType?: ListingProductListingType;
   /** Plant name */
   plant: string;
   /** Other names for the plant */
@@ -128,6 +141,10 @@ export function withDerivedParentSkus<T extends { parentItems?: ListingParentIte
 }
 
 export class ListingProductModel {
+  static async getCollection() {
+    return getCollection(COLLECTION_NAME);
+  }
+
   static async findAll(query: Record<string, unknown> = {}) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.find(query).toArray();
@@ -165,6 +182,75 @@ export class ListingProductModel {
   static async findByParentSkus(parentSkus: string[]) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.find({ 'parentItems.parentSku': { $in: parentSkus } }).toArray();
+  }
+
+  /**
+   * Canonical base parent SKUs that already have at least one `listingType: 'parent'` document.
+   * Used when `excludeListed=true` on parent-master (optional filter); parent listing UI no longer relies on `isListed`.
+   */
+  static async getCanonicalParentSkusWithParentListings(): Promise<string[]> {
+    const collection = await getCollection(COLLECTION_NAME);
+    const docs = await collection
+      .find({ listingType: 'parent' as ListingProductListingType }, { projection: { hub: 1, parentItems: { $slice: 1 } } })
+      .toArray();
+    const set = new Set<string>();
+    for (const doc of docs) {
+      const hub = doc.hub ? String(doc.hub).trim() : undefined;
+      const raw = (doc as { parentItems?: { parentSku?: string }[] }).parentItems?.[0]?.parentSku;
+      if (!raw) continue;
+      for (const c of candidateBaseParentSkusForParentListing(String(raw), hub)) {
+        set.add(c);
+      }
+    }
+    return [...set];
+  }
+
+  /** Whether any parent-type listing still references this canonical base parent SKU (after hub-prefix normalization). */
+  static async hasParentTypeListingForCanonicalParentSku(canonicalSku: string): Promise<boolean> {
+    const canon = String(canonicalSku).trim();
+    if (!canon) return false;
+    const collection = await getCollection(COLLECTION_NAME);
+    const cursor = collection.find(
+      { listingType: 'parent' as ListingProductListingType },
+      { projection: { hub: 1, parentItems: { $slice: 1 } } }
+    );
+    for await (const doc of cursor) {
+      const hub = doc.hub ? String(doc.hub).trim() : undefined;
+      const raw = (doc as { parentItems?: { parentSku?: string }[] }).parentItems?.[0]?.parentSku;
+      if (!raw) continue;
+      const candidates = candidateBaseParentSkusForParentListing(String(raw), hub);
+      if (candidates.includes(canon)) return true;
+    }
+    return false;
+  }
+
+  /** Parent-type row already present for this hub, section, and canonical base parent (blocks duplicate hub publish). */
+  static async findExistingParentListingForHubSection(
+    hub: string,
+    section: ListingSection,
+    canonicalParentSku: string
+  ): Promise<ListingProduct | null> {
+    const h = String(hub ?? '').trim();
+    const canon = String(canonicalParentSku ?? '').trim();
+    if (!h || !canon) return null;
+    const collection = await getCollection(COLLECTION_NAME);
+    const cursor = collection.find(
+      {
+        listingType: 'parent' as ListingProductListingType,
+        hub: h,
+        section,
+      },
+      { projection: { sku: 1, parentItems: { $slice: 1 } } }
+    );
+    for await (const doc of cursor) {
+      const raw = (doc as ListingProduct).parentItems?.[0]?.parentSku;
+      if (!raw) continue;
+      const docCanon = toCanonicalParentSkuForPurchases('parent', h, String(raw));
+      if (docCanon === canon) return doc as ListingProduct;
+      const candidates = candidateBaseParentSkusForParentListing(String(raw), h);
+      if (candidates.includes(canon)) return doc as ListingProduct;
+    }
+    return null;
   }
 
   static async create(data: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'>) {

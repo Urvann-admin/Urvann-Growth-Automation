@@ -2,9 +2,23 @@ import { ObjectId } from 'mongodb';
 import { getCollection } from '@/lib/mongodb';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 
+export type ProductType = 'parent' | 'growing_product' | 'consumable';
+
 export interface ParentMaster {
   _id?: string | ObjectId;
-  /** Plant name */
+  /** parent | growing_product | consumable; omitted in DB means parent */
+  productType?: ProductType;
+  /** procurement_seller_master _id — primary vendor for growing/consumable (Vendor Master list) */
+  vendorMasterId?: string;
+  /** @deprecated Prefer `sku` for base-parent link on non-parent rows; may exist on older documents */
+  parentSku?: string;
+  /**
+   * User-facing / manual product code.
+   * - parent: same value as generated listing sku (set on save; not shown on form).
+   * - growing_product / consumable: typed code; unique per product.
+   */
+  productCode?: string;
+  /** Plant name — also used as display name for non-parent types */
   plant: string;
   /** Other names for the plant */
   otherNames?: string;
@@ -30,6 +44,8 @@ export interface ParentMaster {
   collectionIds?: (string | ObjectId)[];
   /** Selling price of the product (optional in form; default 0 when omitted) */
   sellingPrice?: number;
+  /** Compare-at / “was” price for merchandising (optional; `null` in DB means explicitly cleared) */
+  compare_at?: number | null;
   /** Listing price: sellingPrice × procurement seller multiplicationFactor (computed on save) */
   listing_price?: number;
   /** AWS S3 image URLs (optional in form; default [] when omitted) */
@@ -44,7 +60,10 @@ export interface ParentMaster {
   seller?: string;
   /** Hub name (optional; when parent is live in all hubs, SKU has no hub letter) */
   hub?: string;
-  /** Single SKU for this product (no hub prefix when live in all hubs) */
+  /**
+   * For base `parent` rows: generated listing SKU (same as `productCode`).
+   * For `growing_product` / `consumable`: SKU string of the linked base parent (not the typed product code).
+   */
   sku?: string;
   /** Substores derived from hub mapping (e.g. bgl-e, bgl-e2 for Whitefield) */
   substores?: string[];
@@ -58,8 +77,20 @@ export interface ParentMaster {
   price?: number;
   /** Type breakdown from purchase (Listing, Revival, Growth, Consumers) – updated when saving purchase master. Stored as object "type" in DB. */
   typeBreakdown?: PurchaseTypeBreakdown;
+  /**
+   * When true, this base parent is hidden from the split-screen **parent listing** queue (already has a parent-type listing).
+   * Set on listing create; cleared when the last parent-type listing for this canonical SKU is removed.
+   */
+  isListed?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
+}
+
+/** Legacy documents without `productType` are treated as parent (base plant) rows. */
+export function isBaseParent(doc: unknown): boolean {
+  if (!doc || typeof doc !== 'object') return false;
+  const pt = (doc as { productType?: ProductType }).productType;
+  return pt === undefined || pt === 'parent';
 }
 
 const COLLECTION_NAME = 'parentMaster';
@@ -84,11 +115,27 @@ export class ParentMasterModel {
     return collection.findOne({ plant });
   }
 
+  /**
+   * Resolve by `sku`. When multiple documents share the same `sku` (e.g. non-parent rows that store their
+   * base parent’s SKU), returns the **base parent** row first so purchase/listing logic stays correct.
+   */
   static async findBySku(sku: string) {
     const collection = await getCollection(COLLECTION_NAME);
     const trimmed = String(sku).trim();
     if (!trimmed) return null;
+    const base = await collection.findOne({
+      sku: trimmed,
+      $or: [{ productType: { $exists: false } }, { productType: 'parent' }],
+    });
+    if (base) return base;
     return collection.findOne({ sku: trimmed });
+  }
+
+  static async findByProductCode(productCode: string) {
+    const collection = await getCollection(COLLECTION_NAME);
+    const trimmed = String(productCode).trim();
+    if (!trimmed) return null;
+    return collection.findOne({ productCode: trimmed });
   }
 
   static async create(data: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>) {
@@ -160,6 +207,7 @@ export class ParentMasterModel {
         { variety: regex },
         { potType: regex },
         { type: regex },
+        { productCode: regex },
         ...(trimmed ? [{ sku: trimmed }] : []),
       ],
     }).toArray();

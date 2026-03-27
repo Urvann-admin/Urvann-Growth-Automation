@@ -304,7 +304,7 @@ function ProductNavSection({
       <button
         type="button"
         onClick={() => !collapsed && onSectionToggle()}
-        title={collapsed ? 'Parent Master' : undefined}
+        title={collapsed ? 'Product Master' : undefined}
         className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
           collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
         } ${
@@ -316,7 +316,7 @@ function ProductNavSection({
         <Package className="w-5 h-5 shrink-0" strokeWidth={2} />
         {!collapsed && (
           <>
-            <span className="truncate flex-1">Parent Master</span>
+            <span className="truncate flex-1">Product Master</span>
             <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
           </>
         )}
@@ -537,7 +537,7 @@ function SellerNavSection({
       <button
         type="button"
         onClick={() => !collapsed && onSectionToggle()}
-        title={collapsed ? 'Seller Master' : undefined}
+        title={collapsed ? 'Vendor Master' : undefined}
         className={`w-full flex items-center gap-3 rounded-lg text-left text-sm font-medium transition-all duration-200 ${
           collapsed ? 'justify-center px-0 py-3' : 'px-3 py-3'
         } ${
@@ -549,7 +549,7 @@ function SellerNavSection({
         <Store className="w-5 h-5 shrink-0" strokeWidth={2} />
         {!collapsed && (
           <>
-            <span className="truncate flex-1">Seller Master</span>
+            <span className="truncate flex-1">Vendor Master</span>
             <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
           </>
         )}

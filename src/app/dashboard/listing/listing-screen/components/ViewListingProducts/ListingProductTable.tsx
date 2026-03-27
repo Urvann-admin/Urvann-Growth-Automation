@@ -1,16 +1,39 @@
 'use client';
 
-import { Package, Image as ImageIcon } from 'lucide-react';
+import { Package, Image as ImageIcon, GitBranch, Layers } from 'lucide-react';
 import type { ListingProduct, ListingStatus } from '@/models/listingProduct';
+
+function parentSkusDisplay(product: ListingProduct): string[] {
+  const fromItems = product.parentItems?.length
+    ? product.parentItems.map((i) => String(i.parentSku || '').trim()).filter(Boolean)
+    : [];
+  if (fromItems.length > 0) return [...new Set(fromItems)];
+  const legacy = (product.parentSkus ?? []).map((s) => String(s).trim()).filter(Boolean);
+  return [...new Set(legacy)];
+}
+
+function listingKindLabel(product: ListingProduct): 'Parent' | 'Child' {
+  return product.listingType === 'parent' ? 'Parent' : 'Child';
+}
 
 export interface ListingProductTableProps {
   products: ListingProduct[];
   loading?: boolean;
+  selectedIds: Set<string>;
+  allVisibleSelected: boolean;
+  someVisibleSelected: boolean;
+  onToggleRow: (productId: string, checked: boolean) => void;
+  onToggleVisible: (checked: boolean) => void;
 }
 
 export function ListingProductTable({
   products,
   loading = false,
+  selectedIds,
+  allVisibleSelected,
+  someVisibleSelected,
+  onToggleRow,
+  onToggleVisible,
 }: ListingProductTableProps) {
   const getStatusBadge = (status: ListingStatus) => {
     const styles = {
@@ -59,7 +82,24 @@ export function ListingProductTable({
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someVisibleSelected;
+                  }}
+                  onChange={(e) => onToggleVisible(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-[#E6007A] focus:ring-[#E6007A]"
+                />
+              </th>
+              <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Product
+              </th>
+              <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                Type
+              </th>
+              <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                Parent SKUs
               </th>
               <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Parents
@@ -82,8 +122,19 @@ export function ListingProductTable({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {products.map((product) => (
+            {products.map((product) => {
+              const lineParentSkus = parentSkusDisplay(product);
+              const parentCount = lineParentSkus.length || product.parentSkus?.length || 0;
+              return (
               <tr key={String(product._id)} className="hover:bg-gray-50">
+                <td className="px-4 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(String(product._id))}
+                    onChange={(e) => onToggleRow(String(product._id), e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-[#E6007A] focus:ring-[#E6007A]"
+                  />
+                </td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0 h-8 w-8">
@@ -110,12 +161,50 @@ export function ListingProductTable({
                     </div>
                   </div>
                 </td>
+
+                <td className="px-4 py-2.5">
+                  {listingKindLabel(product) === 'Parent' ? (
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-violet-100 text-violet-800"
+                      title="Single base parent listed as its own SKU"
+                    >
+                      <GitBranch className="h-3 w-3 shrink-0" />
+                      Parent
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800"
+                      title="Composed from one or more parents"
+                    >
+                      <Layers className="h-3 w-3 shrink-0" />
+                      Child
+                    </span>
+                  )}
+                </td>
+
+                <td className="px-4 py-2.5 max-w-[220px]">
+                  {lineParentSkus.length === 0 ? (
+                    <span className="text-[11px] text-gray-400">—</span>
+                  ) : (
+                    <div className="flex flex-col gap-0.5">
+                      {lineParentSkus.map((sku) => (
+                        <span
+                          key={sku}
+                          className="text-[11px] font-mono text-gray-800 truncate"
+                          title={sku}
+                        >
+                          {sku}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </td>
                 
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-1">
                     <Package className="h-3.5 w-3.5 text-gray-400" />
                     <span className="text-xs text-gray-900">
-                      {product.parentSkus?.length || 0}
+                      {parentCount}
                     </span>
                   </div>
                 </td>
@@ -142,7 +231,8 @@ export function ListingProductTable({
                   {product.createdAt ? new Date(product.createdAt).toLocaleDateString() : '—'}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

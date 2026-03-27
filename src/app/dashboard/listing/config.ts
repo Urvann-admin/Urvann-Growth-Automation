@@ -30,7 +30,7 @@ export const CATEGORY_SUB_TABS: { id: ListingTab; label: string }[] = [
 
 export const PRODUCT_SUB_TABS: { id: ListingTab; label: string }[] = [
   { id: 'product-add', label: 'Add Product' },
-  { id: 'product-view-parent', label: 'View Parent' },
+  { id: 'product-view-parent', label: 'View products' },
 ];
 
 /** Image section: Add Image, View Image, Logs */
@@ -41,7 +41,7 @@ export const IMAGE_SUB_TABS: { id: ListingTab; label: string }[] = [
 ];
 
 export const SELLER_SUB_TABS: { id: ListingTab; label: string }[] = [
-  { id: 'seller-add', label: 'Add Seller' },
+  { id: 'seller-add', label: 'Add Vendor' },
   { id: 'seller-view', label: 'View Seller' },
 ];
 
@@ -65,8 +65,8 @@ export const TAB_CONFIG: ListingTabConfig[] = [
   { id: 'category-add', label: 'Add Category', subtitle: 'Create a new category', icon: Plus },
   { id: 'category-view', label: 'View Category', subtitle: 'View and edit categories', icon: ListIcon },
   { id: 'product-add', label: 'Add Product', subtitle: 'Create a new product', icon: Plus },
-  { id: 'product-view-parent', label: 'View Parent', subtitle: 'View parent products', icon: ListIcon },
-  { id: 'seller-add', label: 'Add Seller', subtitle: 'Create a new seller', icon: Plus },
+  { id: 'product-view-parent', label: 'View products', subtitle: 'View and edit product master', icon: ListIcon },
+  { id: 'seller-add', label: 'Add Vendor', subtitle: 'Create a new vendor', icon: Plus },
   { id: 'seller-view', label: 'View Seller', subtitle: 'View and edit sellers', icon: ListIcon },
   { id: 'invoice-view', label: 'Purchase Master', subtitle: 'View and edit purchase records', icon: ListIcon },
   { id: 'collection-add', label: 'Add Collection', subtitle: 'Create a new collection', icon: Plus },

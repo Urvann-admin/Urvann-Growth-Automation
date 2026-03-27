@@ -1,17 +1,30 @@
-import { ObjectId } from 'mongodb';
 import { NextRequest, NextResponse } from 'next/server';
 import { ListingProductModel } from '@/models/listingProduct';
-import type { ListingProduct, ListingSection, ListingStatus, ListingParentItem } from '@/models/listingProduct';
-import { ParentMasterModel } from '@/models/parentMaster';
+import type {
+  ListingProduct,
+  ListingProductListingType,
+  ListingSection,
+  ListingStatus,
+  ListingParentItem,
+} from '@/models/listingProduct';
+import { ParentMasterModel, isBaseParent } from '@/models/parentMaster';
 import { PurchaseMasterModel } from '@/models/purchaseMaster';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { CategoryModel } from '@/models/category';
 import { syncParentFromPurchases } from '@/app/api/purchase-master/syncParent';
-import { generateSKU } from '@/lib/skuGenerator';
+import {
+  appendHubLetterToParentSku,
+  generateSKU,
+  toCanonicalParentSkuForPurchases,
+} from '@/lib/skuGenerator';
 import { getSubstoresByHub } from '@/shared/constants/hubs';
 import { withDerivedParentSkus } from '@/models/listingProduct';
 import { syncListingProductToSkuMasterNew } from '@/models/skuMasterNew';
 import { ImageCollectionModel } from '@/app/dashboard/listing/image/models/imageCollection';
+
+function escapeRegexFragment(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,26 +32,60 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const search = searchParams.get('search') || '';
+    const name = searchParams.get('name') || '';
+    /** Listing product SKU or any parent line SKU (partial, case-insensitive). `parentSku` kept as alias. */
+    const skuSearch =
+      searchParams.get('sku')?.trim() || searchParams.get('parentSku')?.trim() || '';
     const section = searchParams.get('section') as ListingSection | null;
     const status = searchParams.get('status') as ListingStatus | null;
+    const hub = searchParams.get('hub') || '';
     const category = searchParams.get('category') || '';
+    const idsOnly = searchParams.get('idsOnly') === 'true';
     const sortField = searchParams.get('sortField') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') === 'asc' ? 1 : -1;
 
-    // Build query
     const query: Record<string, unknown> = {};
-    
-    if (search) {
-      const regex = new RegExp(search, 'i');
-      query.$or = [
-        { plant: regex },
-        { otherNames: regex },
-        { variety: regex },
-        { type: regex },
-        { finalName: regex },
-      ];
+    const andParts: Record<string, unknown>[] = [];
+
+    const nameSearch = (name || search).trim();
+    if (nameSearch) {
+      const regex = new RegExp(nameSearch, 'i');
+      andParts.push({
+        $or: [
+          { plant: regex },
+          { otherNames: regex },
+          { variety: regex },
+          { type: regex },
+          { finalName: regex },
+        ],
+      });
     }
-    
+
+    if (skuSearch) {
+      const esc = escapeRegexFragment(skuSearch);
+      andParts.push({
+        $or: [
+          { sku: { $regex: esc, $options: 'i' } },
+          { 'parentItems.parentSku': { $regex: esc, $options: 'i' } },
+        ],
+      });
+    }
+
+    const listingTypeParam = searchParams.get('listingType')?.trim().toLowerCase();
+    if (listingTypeParam === 'parent') {
+      andParts.push({ listingType: 'parent' as const });
+    } else if (listingTypeParam === 'child') {
+      andParts.push({
+        $or: [{ listingType: 'child' as const }, { listingType: { $exists: false } }],
+      });
+    }
+
+    if (andParts.length === 1) {
+      Object.assign(query, andParts[0]!);
+    } else if (andParts.length > 1) {
+      query.$and = andParts;
+    }
+
     if (section) {
       query.section = section;
     }
@@ -46,9 +93,24 @@ export async function GET(request: NextRequest) {
     if (status) {
       query.status = status;
     }
-    
+
+    if (hub) {
+      query.hub = hub;
+    }
+
     if (category) {
       query.categories = category;
+    }
+
+    if (idsOnly) {
+      const collection = await ListingProductModel.getCollection();
+      const docs = await collection.find(query, { projection: { _id: 1 } }).toArray();
+      const ids = docs.map((d) => String(d._id));
+      return NextResponse.json({
+        success: true,
+        data: ids,
+        total: ids.length,
+      });
     }
 
     const result = await ListingProductModel.findWithPagination(
@@ -85,7 +147,8 @@ export async function POST(request: NextRequest) {
     // Handle bulk create
     if (Array.isArray(body)) {
       const validatedItems: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'>[] = [];
-      
+      const seenParentHubSection = new Set<string>();
+
       for (const item of body) {
         const validated = await validateListingProductData(item);
         if (!validated.success) {
@@ -94,7 +157,26 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        validatedItems.push(validated.data!);
+        const data = validated.data!;
+        if (data.listingType === 'parent' && data.hub && data.parentItems?.[0]) {
+          const canon = toCanonicalParentSkuForPurchases(
+            'parent',
+            data.hub,
+            data.parentItems[0].parentSku
+          );
+          const key = `${data.section}\0${data.hub}\0${canon}`;
+          if (seenParentHubSection.has(key)) {
+            return NextResponse.json(
+              {
+                success: false,
+                message: `Duplicate parent listing for hub "${data.hub}" in this save batch.`,
+              },
+              { status: 400 }
+            );
+          }
+          seenParentHubSection.add(key);
+        }
+        validatedItems.push(data);
       }
       
       const result = await ListingProductModel.createMany(validatedItems);
@@ -231,8 +313,21 @@ export async function DELETE(request: NextRequest) {
           { status: 400 }
         );
       }
-      
+
+      const toReconcile = new Set<string>();
+      for (const oid of idArray) {
+        const doc = await ListingProductModel.findById(oid);
+        if (doc?.listingType === 'parent' && doc.parentItems?.[0]?.parentSku) {
+          toReconcile.add(
+            toCanonicalParentSkuForPurchases('parent', doc.hub, doc.parentItems[0].parentSku)
+          );
+        }
+      }
+
       const result = await ListingProductModel.deleteMany(idArray);
+      for (const sku of toReconcile) {
+        await clearParentIsListedIfNoParentListings(sku);
+      }
       return NextResponse.json({
         success: true,
         message: `Deleted ${result.deletedCount} listing products`,
@@ -248,12 +343,19 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const existing = await ListingProductModel.findById(id);
     const result = await ListingProductModel.delete(id);
-    
+
     if (result.deletedCount === 0) {
       return NextResponse.json(
         { success: false, message: 'Listing product not found' },
         { status: 404 }
+      );
+    }
+
+    if (existing?.listingType === 'parent' && existing.parentItems?.[0]?.parentSku) {
+      await clearParentIsListedIfNoParentListings(
+        toCanonicalParentSkuForPurchases('parent', existing.hub, existing.parentItems[0].parentSku)
       );
     }
 
@@ -264,6 +366,21 @@ export async function DELETE(request: NextRequest) {
       { success: false, message: 'Failed to delete listing product' },
       { status: 500 }
     );
+  }
+}
+
+async function clearParentIsListedIfNoParentListings(canonicalSku: string) {
+  const sku = String(canonicalSku).trim();
+  if (!sku) return;
+  try {
+    const still = await ListingProductModel.hasParentTypeListingForCanonicalParentSku(sku);
+    if (still) return;
+    const parent = await ParentMasterModel.findBySku(sku);
+    if (parent?._id) {
+      await ParentMasterModel.update(parent._id, { isListed: false });
+    }
+  } catch (e) {
+    console.error('[listing-product] Failed to clear parent isListed for', sku, e);
   }
 }
 
@@ -335,14 +452,64 @@ async function validateListingProductData(data: unknown): Promise<{
     }));
   }
 
-  const parentSkus = parentItems.map((item) => item.parentSku);
-  const parents = await Promise.all(parentSkus.map((sku) => ParentMasterModel.findBySku(sku)));
-  
+  let parentSkus = parentItems.map((item) => item.parentSku);
+  let parents = await Promise.all(parentSkus.map((sku) => ParentMasterModel.findBySku(sku)));
+
   for (let i = 0; i < parents.length; i++) {
     const parent = parents[i];
     if (!parent) {
       return { success: false, message: `Parent with SKU ${parentSkus[i]} not found` };
     }
+    if (!isBaseParent(parent)) {
+      return {
+        success: false,
+        message: `SKU ${parentSkus[i]} is not a base (parent) product and cannot be used in a listing`,
+      };
+    }
+  }
+
+  const listingTypeRaw =
+    typeof d.listingType === 'string' ? d.listingType.toLowerCase().trim() : '';
+  const listingType: ListingProductListingType =
+    listingTypeRaw === 'parent' ? 'parent' : listingTypeRaw === 'child' ? 'child' : 'child';
+
+  if (listingType === 'parent') {
+    if (parentItems.length !== 1) {
+      return {
+        success: false,
+        message: 'Parent listing must have exactly one parent in parentItems',
+      };
+    }
+    const row = parentItems[0]!;
+    if (row.quantity !== 1) {
+      return {
+        success: false,
+        message: 'Parent listing requires quantity 1 for the parent line',
+      };
+    }
+    const p = parents[0];
+    if (!p) {
+      return { success: false, message: `Parent with SKU ${parentSkus[0]} not found` };
+    }
+    const canonicalSku = String((p as { sku?: string }).sku || '').trim();
+    if (!canonicalSku) {
+      return { success: false, message: 'Base parent has no SKU; cannot create parent listing' };
+    }
+    parentItems = [{ parentSku: canonicalSku, quantity: 1, unitPrice: 0 }];
+    parentSkus = [canonicalSku];
+    parents = await Promise.all(parentSkus.map((sku) => ParentMasterModel.findBySku(sku)));
+    const pNorm = parents[0];
+    if (!pNorm || !isBaseParent(pNorm)) {
+      return {
+        success: false,
+        message: `SKU ${canonicalSku} is not a base (parent) product and cannot be used in a listing`,
+      };
+    }
+  }
+
+  const imageUrls = (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean);
+  if (imageUrls.length === 0) {
+    return { success: false, message: 'At least one image is required' };
   }
 
   // Calculate price and inventory_quantity (allow insufficient quantity; inventory will be 0 and publish_status 0)
@@ -428,23 +595,39 @@ async function validateListingProductData(data: unknown): Promise<{
       ? d.quantity
       : Number(d.quantity || 0) || 1;
 
-  if (d.hub && d.plant && skuQuantityForCode) {
-    try {
-      sku = await generateSKU(String(d.hub).trim(), String(d.plant).trim(), skuQuantityForCode);
-    } catch (error) {
-      console.error('SKU generation failed:', error);
-      return { success: false, message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
-    }
-  }
-
   const hub = d.hub ? String(d.hub).trim() : undefined;
   const substores = hub ? getSubstoresByHub(hub) : [];
 
   const finalInventory = minInventoryQuantity === Infinity ? 0 : minInventoryQuantity;
 
+  /** Parent + child (per hub): store hub letter + base parent SKU on each line; purchases/parent DB still use canonical SKU. */
+  const parentItemsPersisted: ListingParentItem[] =
+    listingType === 'parent' && hub && parentItems[0]
+      ? [{ ...parentItems[0], parentSku: appendHubLetterToParentSku(hub, parentItems[0].parentSku) }]
+      : listingType === 'child' && hub
+        ? parentItems.map((item) => ({
+            ...item,
+            parentSku: appendHubLetterToParentSku(hub, item.parentSku),
+          }))
+        : parentItems;
+
+  if (hub) {
+    if (listingType === 'parent' && parentItems[0]) {
+      // For parent listings, the listing SKU IS the hub-prefixed parent SKU (same as parentItemsPersisted[0].parentSku)
+      sku = appendHubLetterToParentSku(hub, parentItems[0].parentSku);
+    } else if (d.plant && skuQuantityForCode) {
+      try {
+        sku = await generateSKU(hub, String(d.plant).trim(), skuQuantityForCode);
+      } catch (error) {
+        console.error('SKU generation failed:', error);
+        return { success: false, message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}` };
+      }
+    }
+  }
+
   // Build validated object (only parentItems persisted; parentSkus is derived from parentItems when needed)
   const validated: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'> = {
-    parentItems,
+    parentItems: parentItemsPersisted,
     plant: String(d.plant).trim(),
     otherNames: d.otherNames ? String(d.otherNames).trim() : undefined,
     variety: d.variety ? String(d.variety).trim() : undefined,
@@ -486,14 +669,44 @@ async function validateListingProductData(data: unknown): Promise<{
     collectionIds: Array.from(combinedCollectionIds),
     redirects: combinedRedirects.size > 0 ? Array.from(combinedRedirects) : undefined,
     features: combinedFeatures.size > 0 ? Array.from(combinedFeatures) : undefined,
-    images: (d.images as unknown[]).map((img) => String(img).trim()).filter(Boolean),
+    images: imageUrls,
     sku: sku,
     section: d.section as ListingSection,
+    listingType,
     status: (d.status as ListingStatus) || 'draft',
     seller: d.seller ? String(d.seller).trim() : undefined,
     hub: hub,
     substores: substores.length > 0 ? substores : undefined,
   };
+
+  if (validated.listingType === 'parent' && validated.hub && validated.parentItems[0]) {
+    const canon = toCanonicalParentSkuForPurchases(
+      'parent',
+      validated.hub,
+      validated.parentItems[0].parentSku
+    );
+    const dupListing = await ListingProductModel.findExistingParentListingForHubSection(
+      validated.hub,
+      validated.section,
+      canon
+    );
+    if (dupListing) {
+      return {
+        success: false,
+        message: `This parent already has a listing for hub "${validated.hub}" in this section (SKU: ${dupListing.sku ?? '—'}). Choose another hub or remove the existing listing.`,
+      };
+    }
+  }
+
+  if (validated.sku) {
+    const skuClash = await ListingProductModel.findBySku(validated.sku);
+    if (skuClash) {
+      return {
+        success: false,
+        message: `Listing SKU "${validated.sku}" already exists. Retry save to generate a new code.`,
+      };
+    }
+  }
 
   return { success: true, data: validated };
 }
@@ -539,6 +752,12 @@ async function sanitizeUpdateData(data: Record<string, unknown>, existing: Listi
   }
   if (data.status !== undefined && ['draft', 'listed', 'published'].includes(data.status as string)) {
     sanitized.status = data.status as ListingStatus;
+  }
+  if (data.listingType !== undefined) {
+    const lt = String(data.listingType).toLowerCase().trim();
+    if (lt === 'parent' || lt === 'child') {
+      sanitized.listingType = lt as ListingProductListingType;
+    }
   }
   if (data.seller !== undefined) {
     sanitized.seller = String(data.seller).trim();
@@ -746,7 +965,11 @@ async function updateParentQuantitiesAfterCreation(listingProducts: Omit<Listing
           }));
 
     for (const item of items) {
-      const key = item.parentSku;
+      const key = toCanonicalParentSkuForPurchases(
+        listingProduct.listingType,
+        listingProduct.hub,
+        item.parentSku
+      );
       const totalUnitsToDeduct = (listingProduct.inventory_quantity || 0) * (item.quantity || 0);
       if (totalUnitsToDeduct <= 0) continue;
 
@@ -790,7 +1013,7 @@ async function updateParentQuantitiesAfterCreation(listingProducts: Omit<Listing
     } else {
       // Non-listing section: deduct from parent typeBreakdown directly
       const parent = await ParentMasterModel.findBySku(parentSku);
-      if (parent && parent.typeBreakdown) {
+      if (parent && isBaseParent(parent) && parent.typeBreakdown) {
         const sectionKey = update.section === 'consumer' ? 'consumers' : update.section;
         const currentQuantity = Number(parent.typeBreakdown[sectionKey] ?? 0) || 0;
         const newQuantity = Math.max(0, Math.floor(currentQuantity - update.quantityToDeduct));

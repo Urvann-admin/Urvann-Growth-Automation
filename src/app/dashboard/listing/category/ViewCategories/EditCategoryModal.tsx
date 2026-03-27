@@ -80,16 +80,6 @@ export function EditCategoryModal({
                   <option value="L3">L3</option>
                 </select>
               </label>
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Priority Order</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={editForm.priorityOrder}
-                  onChange={(e) => onChange({ ...editForm, priorityOrder: e.target.value })}
-                  className={inputClass}
-                />
-              </label>
             </div>
             <div className="mt-4">
               <label className="block">

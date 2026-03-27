@@ -1,28 +1,122 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
 import type { ImageItem } from '@/models/imageCollection';
-import type { 
-  ListingState, 
-  SelectedImage, 
-  ProductRow, 
+import type {
+  ListingState,
+  SelectedImage,
+  ProductRow,
   ImageCollection,
   ParentItemRow,
+  ListingScreenMode,
+  ListingSourcedParentOption,
 } from './types';
 import { validateStep } from '@/lib/listingProductValidation';
+import {
+  buildChildHubParentChecksPayload,
+  mergeVerifyResults,
+  passedHubsFromChecks,
+} from '@/lib/childListingHubSku';
+
+const PARENT_LIST_PAGE_LIMIT = 40;
+
+/** URLs to send to listing API / validation: tagged row images plus parent master images (parent mode). */
+function getListingImageUrlsForRow(
+  row: ProductRow,
+  listingMode: ListingScreenMode,
+  allImages: SelectedImage[]
+): string[] {
+  const tagged = (row.taggedImages ?? []).map((i) => i.url).filter(Boolean);
+  if (listingMode === 'parent') {
+    const fromMaster = (row.parentItems[0]?.parent?.images ?? []).map(String).filter(Boolean);
+    return [...new Set([...tagged, ...fromMaster])];
+  }
+  const fallback =
+    row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]!.url] : [];
+  const urls = tagged.length ? tagged : fallback;
+  return [...new Set(urls)].filter(Boolean);
+}
+
+/** Stable row id for child listing rows tied to a collection image URL */
+function childRowIdForImageUrl(url: string): string {
+  let h = 5381;
+  for (let i = 0; i < url.length; i++) {
+    h = (Math.imul(h, 33) ^ url.charCodeAt(i)) >>> 0;
+  }
+  return `child_${h.toString(16)}`;
+}
+
+function buildChildRowFromImage(img: SelectedImage, serial: number): ProductRow {
+  const id = childRowIdForImageUrl(img.url);
+  return {
+    id,
+    serial,
+    parentSkus: [],
+    parentItems: [],
+    selectedParent: undefined,
+    taggedImages: [img],
+    plant: '',
+    otherNames: '',
+    variety: '',
+    colour: '',
+    height: '',
+    size: '',
+    type: '',
+    description: '',
+    setQuantity: 1,
+    quantity: 1,
+    potQuantity: 0,
+    price: 0,
+    inventory_quantity: 0,
+    tags: [],
+    compare_at_price: undefined,
+    sort_order: 3000,
+    hubParentChecks: [],
+    hubs: [],
+    seller: '',
+    categories: [],
+    collectionIds: [],
+    isValid: false,
+    isSaved: false,
+    validationErrors: { parent: 'Parent selection is required' },
+  };
+}
 
 export function useListingState(section: ListingSection) {
   const [state, setState] = useState<ListingState>({
     selectedImages: [],
     productRows: [],
+    childContextHub: '',
     availableParents: [],
     selectedParent: null,
     viewMode: 'product-table',
     validationErrors: {},
     isSaving: false,
     isLoading: false,
+    listingMode: 'child',
+    parentListPage: 0,
+    parentListTotalPages: 0,
+    parentListTotal: 0,
+    parentListLimit: PARENT_LIST_PAGE_LIMIT,
+    parentListLoading: false,
+    parentSkuFilter: '',
+    parentNameFilter: '',
   });
+
+  const stateRef = useRef(state);
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  });
+
+  /** Skip one debounced parent-list reload after `setListingMode('parent')` or parent Clear (already loads explicitly). */
+  const skipNextParentFilterEffectRef = useRef(false);
+
+  const parentSkuFilter = state.parentSkuFilter;
+  const parentNameFilter = state.parentNameFilter;
+
+  /** Child rows removed by user — do not re-add until mode clear / Clear / new session */
+  const skippedChildImageUrlsRef = useRef<Set<string>>(new Set());
 
   const [imageCollections, setImageCollections] = useState<ImageCollection[]>([]);
   const [allImages, setAllImages] = useState<SelectedImage[]>([]);
@@ -84,23 +178,32 @@ export function useListingState(section: ListingSection) {
 
   // Load available parents — fetch all, no section filter so pots/zero-inventory items appear
   const loadAvailableParents = useCallback(async () => {
-    setState(prev => ({ ...prev, isLoading: true }));
+    setState((prev) => ({ ...prev, isLoading: true }));
     try {
-      const response = await fetch(`/api/parent-master?limit=1000&sortField=plant&sortOrder=asc`);
+      const response = await fetch(
+        `/api/listing-product/for-parent-picker?section=${encodeURIComponent(section)}&limit=1000`
+      );
       const result = await response.json();
       if (result.success) {
-        setState(prev => ({ 
-          ...prev, 
-          availableParents: result.data,
-          isLoading: false 
+        const data = ((result.data || []) as ListingSourcedParentOption[]).map((o) => ({
+          ...o,
+          listingHub: o.listingHub ?? '',
         }));
+        setState((prev) => ({
+          ...prev,
+          availableParents: data,
+          isLoading: false,
+        }));
+      } else {
+        toast.error(result.message || 'Failed to load parents from listings');
+        setState((prev) => ({ ...prev, isLoading: false }));
       }
     } catch (error) {
-      console.error('Failed to load parents:', error);
-      toast.error('Failed to load parent products');
-      setState(prev => ({ ...prev, isLoading: false }));
+      console.error('Failed to load listing parents:', error);
+      toast.error('Failed to load parents from listings');
+      setState((prev) => ({ ...prev, isLoading: false }));
     }
-  }, []);
+  }, [section]);
 
   // Generate unique ID for new rows / parent items
   const generateRowId = useCallback(() => {
@@ -184,6 +287,7 @@ export function useListingState(section: ListingSection) {
         sort_order: 3000,
         
         // Metadata
+        hubParentChecks: [],
         hubs: [],
         seller: parent.seller || '',
         categories: parent.categories || [],
@@ -196,6 +300,189 @@ export function useListingState(section: ListingSection) {
       };
     },
     [calculatePriceAndInventory, generateParentItemId, generateRowId]
+  );
+
+  const loadParentListingPage = useCallback(
+    async (
+      page: number,
+      append: boolean,
+      filterOverride?: { parentSkuFilter?: string; parentNameFilter?: string }
+    ) => {
+      const skuQ = String(filterOverride?.parentSkuFilter ?? parentSkuFilter).trim();
+      const nameQ = String(filterOverride?.parentNameFilter ?? parentNameFilter).trim();
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: String(PARENT_LIST_PAGE_LIMIT),
+        sortField: 'plant',
+        sortOrder: 'asc',
+        baseParentsOnly: 'true',
+      });
+      if (skuQ) params.set('parentSku', skuQ);
+      if (nameQ) params.set('nameSearch', nameQ);
+
+      setState((prev) => ({ ...prev, parentListLoading: true }));
+      try {
+        const response = await fetch(`/api/parent-master?${params.toString()}`);
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.message || 'Failed to load parents');
+        }
+        const items = result.data as ParentMaster[];
+        const { total, totalPages, limit } = result.pagination as {
+          total: number;
+          totalPages: number;
+          limit: number;
+        };
+
+        setState((prev) => {
+          if (prev.listingMode !== 'parent') {
+            return { ...prev, parentListLoading: false };
+          }
+          const existingIds = new Set(prev.productRows.map((r) => r.id));
+          const sourceItems = append
+            ? items.filter((p) => p._id && !existingIds.has(`parent_${String(p._id)}`))
+            : items.filter((p) => p._id);
+          const maxSerial =
+            append && prev.productRows.length > 0
+              ? Math.max(...prev.productRows.map((r) => r.serial || 0))
+              : 0;
+          const newRows: ProductRow[] = sourceItems.map((parent, idx) => {
+            const serial = maxSerial + idx + 1;
+            const base = createProductRowFromParent(parent, [], serial);
+            return {
+              ...base,
+              id: `parent_${String(parent._id)}`,
+              serial,
+            };
+          });
+          return {
+            ...prev,
+            productRows: append ? [...prev.productRows, ...newRows] : newRows,
+            parentListPage: page,
+            parentListTotalPages: totalPages,
+            parentListTotal: total,
+            parentListLimit: limit,
+            parentListLoading: false,
+          };
+        });
+      } catch (error) {
+        console.error('Failed to load parent listing page:', error);
+        toast.error('Failed to load parent products');
+        setState((prev) => ({ ...prev, parentListLoading: false }));
+      }
+    },
+    [createProductRowFromParent, parentSkuFilter, parentNameFilter]
+  );
+
+  const setParentListingSkuFilter = useCallback((value: string) => {
+    setState((prev) => ({ ...prev, parentSkuFilter: value }));
+  }, []);
+
+  const setParentListingNameFilter = useCallback((value: string) => {
+    setState((prev) => ({ ...prev, parentNameFilter: value }));
+  }, []);
+
+  const setListingMode = useCallback(
+    (mode: ListingScreenMode) => {
+      if (mode === 'parent') {
+        skipNextParentFilterEffectRef.current = true;
+        setState((prev) => ({
+          ...prev,
+          listingMode: 'parent',
+          productRows: [],
+          parentListPage: 0,
+          parentListTotalPages: 0,
+          parentListTotal: 0,
+        }));
+        void loadParentListingPage(1, false);
+      } else {
+        skippedChildImageUrlsRef.current.clear();
+        setState((prev) => ({
+          ...prev,
+          listingMode: 'child',
+          childContextHub: '',
+          productRows: [],
+          parentListPage: 0,
+          parentListTotalPages: 0,
+          parentListTotal: 0,
+        }));
+      }
+    },
+    [loadParentListingPage]
+  );
+
+  const loadMoreParentListingPage = useCallback(async () => {
+    const { listingMode, parentListPage, parentListTotalPages } = stateRef.current;
+    if (listingMode !== 'parent' || parentListPage >= parentListTotalPages || parentListTotalPages < 1) {
+      return;
+    }
+    await loadParentListingPage(parentListPage + 1, true);
+  }, [loadParentListingPage]);
+
+  const refreshParentInRows = useCallback(async (parentId: string) => {
+    try {
+      const response = await fetch(`/api/parent-master/${parentId}`);
+      const result = await response.json();
+      if (!result.success || !result.data) return;
+      const p = result.data as ParentMaster;
+      setState((prev) => ({
+        ...prev,
+        productRows: prev.productRows.map((row) => {
+          const first = row.parentItems[0];
+          const pid = first?.parent?._id;
+          if (!pid || String(pid) !== String(parentId)) return row;
+          return {
+            ...row,
+            parentItems: row.parentItems.map((item) =>
+              item.parent && String(item.parent._id) === String(parentId)
+                ? { ...item, parent: p, parentSku: String(p.sku || item.parentSku) }
+                : item
+            ),
+          };
+        }),
+        availableParents: prev.availableParents.map((opt) =>
+          opt.parent._id && String(opt.parent._id) === String(parentId)
+            ? { ...opt, parent: { ...opt.parent, ...p } }
+            : opt
+        ),
+      }));
+    } catch (e) {
+      console.error('refreshParentInRows', e);
+    }
+  }, []);
+
+  const uploadParentPhotoAndRefresh = useCallback(
+    async (rowId: string, file: File) => {
+      const row = state.productRows.find((r) => r.id === rowId);
+      const parentId = row?.parentItems[0]?.parent?._id;
+      if (!parentId) {
+        toast.error('No parent selected');
+        return;
+      }
+      const formData = new FormData();
+      formData.append('images', file);
+      const up = await fetch('/api/upload', { method: 'POST', body: formData });
+      const upJson = await up.json();
+      if (!upJson.success || !upJson.urls?.length) {
+        toast.error(upJson.message || 'Upload failed');
+        return;
+      }
+      const existing = row.parentItems[0]?.parent?.images ?? [];
+      const nextImages = [...existing.map(String), ...upJson.urls];
+      const put = await fetch(`/api/parent-master/${parentId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: nextImages }),
+      });
+      const putJson = await put.json();
+      if (!putJson.success) {
+        toast.error(putJson.message || 'Failed to update parent');
+        return;
+      }
+      await refreshParentInRows(String(parentId));
+      toast.success('Photo added to parent');
+    },
+    [state.productRows, refreshParentInRows]
   );
 
   // Parent selection helpers are no longer used in the new flow, but kept for compatibility
@@ -213,8 +500,17 @@ export function useListingState(section: ListingSection) {
     }));
   }, []);
 
-  // Add empty product row
+  // Add empty product row (child listing mode only)
   const addEmptyProductRow = useCallback(() => {
+    if (stateRef.current.listingMode === 'parent') {
+      toast.error('Use Child listing to add a custom row');
+      return;
+    }
+    if (!stateRef.current.childContextHub?.trim()) {
+      toast.error('Select a listing hub first');
+      return;
+    }
+    const ctxHub = stateRef.current.childContextHub.trim();
     setState(prev => {
       const serial = getNextSerial(prev.productRows);
       const emptyRow: ProductRow = {
@@ -246,7 +542,8 @@ export function useListingState(section: ListingSection) {
         sort_order: 3000,
         
         // Metadata
-        hubs: [],
+        hubParentChecks: [],
+        hubs: [ctxHub],
         seller: '',
         categories: [],
         collectionIds: [],
@@ -264,44 +561,79 @@ export function useListingState(section: ListingSection) {
     });
   }, [generateRowId, getNextSerial]);
 
+  /** Child listing: change global hub filter; clears parent composition on every row (new hub = new picker scope). */
+  const setChildContextHub = useCallback((hub: string) => {
+    const h = String(hub ?? '').trim();
+    setState((prev) => ({
+      ...prev,
+      childContextHub: h,
+      productRows: prev.productRows.map((row) => ({
+        ...row,
+        parentItems: [],
+        parentSkus: [],
+        plant: '',
+        otherNames: '',
+        variety: '',
+        colour: '',
+        height: '',
+        size: '',
+        type: '',
+        description: '',
+        categories: [],
+        collectionIds: [],
+        price: 0,
+        inventory_quantity: 0,
+        setQuantity: 1,
+        quantity: 1,
+        hubParentChecks: [],
+        hubs: h ? [h] : [],
+        seller: '',
+        isSaved: false,
+        validationErrors: { parent: 'Parent selection is required' },
+      })),
+    }));
+  }, []);
+
   // Update product row
   const updateProductRow = useCallback((rowId: string, updates: Partial<ProductRow>) => {
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      productRows: prev.productRows.map(row => 
+      productRows: prev.productRows.map((row) =>
         row.id === rowId ? { ...row, ...updates, isSaved: false } : row
-      )
+      ),
     }));
   }, []);
 
   // Remove product row
   const removeProductRow = useCallback((rowId: string) => {
-    setState(prev => {
-      const rowToRemove = prev.productRows.find(row => row.id === rowId);
-      if (!rowToRemove) return prev;
+    const currentRows = stateRef.current.productRows;
+    const rowToRemove = currentRows.find((row) => row.id === rowId);
+    const nextRows = currentRows.filter((row) => row.id !== rowId);
 
-      return {
-        ...prev,
-        productRows: prev.productRows.filter(row => row.id !== rowId)
-      };
-    });
+    if (
+      stateRef.current.listingMode === 'child' &&
+      rowId.startsWith('child_') &&
+      rowToRemove?.taggedImages?.[0]?.url
+    ) {
+      skippedChildImageUrlsRef.current.add(rowToRemove.taggedImages[0].url);
+    }
 
-    // Untag images that were only tagged to this row
-    setAllImages(prev => prev.map(img => {
-      const wasTaggedToThisRow = state.productRows
-        .find(row => row.id === rowId)?.taggedImages
-        .some(taggedImg => taggedImg.url === img.url);
-      
-      if (wasTaggedToThisRow) {
-        // Check if image is tagged to any other row
-        const isTaggedElsewhere = state.productRows.some(otherRow => 
-          otherRow.id !== rowId && otherRow.taggedImages.some(taggedImg => taggedImg.url === img.url)
+    setState((prev) => ({
+      ...prev,
+      productRows: prev.productRows.filter((row) => row.id !== rowId),
+    }));
+
+    setAllImages((prev) =>
+      prev.map((img) => {
+        const wasTagged = rowToRemove?.taggedImages?.some((t) => t.url === img.url);
+        if (!wasTagged) return img;
+        const isTaggedElsewhere = nextRows.some((r) =>
+          r.taggedImages?.some((t) => t.url === img.url)
         );
         return { ...img, isTagged: isTaggedElsewhere };
-      }
-      return img;
-    }));
-  }, [state.productRows]);
+      })
+    );
+  }, []);
 
   // Toggle image selection
   const toggleImageSelection = useCallback((image: SelectedImage) => {
@@ -329,10 +661,21 @@ export function useListingState(section: ListingSection) {
 
   // Validate all rows
   const validateAllRows = useCallback(() => {
-    setState(prev => {
-      const validatedRows = prev.productRows.map(row => {
+    setState((prev) => {
+      const listingMode = prev.listingMode;
+      const validatedRows = prev.productRows.map((row) => {
+        const imageUrls = getListingImageUrlsForRow(row, listingMode, allImages);
+        const passedHubsChild =
+          listingMode === 'child'
+            ? passedHubsFromChecks(row.hubs ?? [], row.parentItems, row.hubParentChecks ?? [])
+            : [];
+        const hubForForm =
+          listingMode === 'child'
+            ? passedHubsChild[0] ?? (row.hubs ?? [])[0] ?? ''
+            : (row.hubs ?? [])[0] ?? '';
+
         const formData = {
-          listingType: 'child' as const,
+          listingType: listingMode,
           parentSkus: row.parentSkus,
           section,
           plant: row.plant,
@@ -346,26 +689,52 @@ export function useListingState(section: ListingSection) {
           quantity: row.setQuantity,
           price: row.price,
           inventory_quantity: row.inventory_quantity,
-          hub: (row.hubs ?? [])[0] ?? '',
+          hub: hubForForm,
           seller: row.seller,
           categories: row.categories,
           collectionIds: row.collectionIds,
-          images: allImages
-            .filter(img => img.serial === row.serial)
-            .map(img => img.url),
+          images: imageUrls,
           status: 'draft' as const,
         };
 
-        const selectedParents = row.parentItems.map(item => item.parent).filter(Boolean) as ParentMaster[];
+        const selectedParents = row.parentItems
+          .map((item) => item.parent)
+          .filter(Boolean) as ParentMaster[];
         const { errors } = validateStep('review', formData as any, selectedParents, section);
-        // Hub validation: require at least one hub selected
+
+        if (listingMode === 'child') {
+          if (!prev.childContextHub?.trim()) {
+            errors.contextHub = 'Select the listing hub filter above';
+          }
+          if ((row.hubs ?? []).length === 0) {
+            errors.hub = 'At least one hub is required';
+          }
+          if (
+            row.parentSkus.length > 0 &&
+            (row.hubs ?? []).length > 0 &&
+            passedHubsChild.length === 0
+          ) {
+            errors.hubParentSku =
+              'No hub has all parent lines listed for this section (see Review for details)';
+          }
+          const isValid =
+            Object.keys(errors).length === 0 &&
+            row.parentSkus.length > 0 &&
+            passedHubsChild.length > 0;
+          return {
+            ...row,
+            isValid,
+            validationErrors: errors,
+          };
+        }
+
         if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
         const isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
 
         return {
           ...row,
           isValid,
-          validationErrors: errors
+          validationErrors: errors,
         };
       });
 
@@ -381,15 +750,22 @@ export function useListingState(section: ListingSection) {
       let validRows: ProductRow[] = [];
       let invalidReasons: { serial: number; errors: string[] }[] = [];
       let validatedRows: ProductRow[] = [];
+      const listingMode = stateRef.current.listingMode;
 
-      // Run validation synchronously first
-      validatedRows = state.productRows.map(row => {
-        const rowImages = row.taggedImages?.length
-          ? row.taggedImages
-          : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : []);
+      // Run validation synchronously first (must match validateAllRows rules)
+      validatedRows = state.productRows.map((row) => {
+        const imageUrls = getListingImageUrlsForRow(row, listingMode, allImages);
+        const passedHubsChild =
+          listingMode === 'child'
+            ? passedHubsFromChecks(row.hubs ?? [], row.parentItems, row.hubParentChecks ?? [])
+            : [];
+        const hubForForm =
+          listingMode === 'child'
+            ? passedHubsChild[0] ?? (row.hubs ?? [])[0] ?? ''
+            : (row.hubs ?? [])[0] ?? '';
 
         const formData = {
-          listingType: 'child' as const,
+          listingType: listingMode,
           parentSkus: row.parentSkus,
           section,
           plant: row.plant,
@@ -400,21 +776,45 @@ export function useListingState(section: ListingSection) {
           size: row.size,
           type: row.type,
           description: row.description,
-          quantity: row.setQuantity,
+          quantity: listingMode === 'parent' ? 1 : row.setQuantity,
           price: row.price,
           inventory_quantity: row.inventory_quantity,
-          hub: (row.hubs ?? [])[0] ?? '',
+          hub: hubForForm,
           seller: row.seller,
           categories: row.categories,
           collectionIds: row.collectionIds,
-          images: rowImages.map(img => img.url),
+          images: imageUrls,
           status: 'draft' as const,
         };
 
-        const selectedParents = row.parentItems.map(item => item.parent).filter(Boolean) as ParentMaster[];
+        const selectedParents = row.parentItems
+          .map((item) => item.parent)
+          .filter(Boolean) as ParentMaster[];
         const { errors } = validateStep('review', formData as any, selectedParents, section);
-        if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
-        const isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
+
+        let isValid: boolean;
+        const ctxHub = stateRef.current.childContextHub;
+        if (listingMode === 'child') {
+          if (!ctxHub?.trim()) {
+            errors.contextHub = 'Select the listing hub filter above';
+          }
+          if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
+          if (
+            row.parentSkus.length > 0 &&
+            (row.hubs ?? []).length > 0 &&
+            passedHubsChild.length === 0
+          ) {
+            errors.hubParentSku =
+              'No hub has all parent lines listed for this section (see Review for details)';
+          }
+          isValid =
+            Object.keys(errors).length === 0 &&
+            row.parentSkus.length > 0 &&
+            passedHubsChild.length > 0;
+        } else {
+          if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
+          isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
+        }
 
         if (!isValid) {
           const errorMessages = Object.values(errors).filter(Boolean);
@@ -427,7 +827,7 @@ export function useListingState(section: ListingSection) {
         return {
           ...row,
           isValid,
-          validationErrors: errors
+          validationErrors: errors,
         };
       });
 
@@ -453,16 +853,15 @@ export function useListingState(section: ListingSection) {
         return undefined;
       }
 
-      // Transform rows to API format — expand each row into one payload per selected hub
-      const productsToCreate = validRows.flatMap(row => {
-        const rowImages = (row.taggedImages?.length
-          ? row.taggedImages
-          : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : [])
-        ).map((img: { url: string }) => img.url);
+      // Transform rows to API format — expand each row into one payload per hub (child: only hubs that passed SKU checks)
+      const hubSkipMessages: string[] = [];
+      const productsToCreate = validRows.flatMap((row) => {
+        const rowImageUrls = getListingImageUrlsForRow(row, listingMode, allImages);
+        const qty = listingMode === 'parent' ? 1 : row.setQuantity;
         const basePayload = {
-          listingType: 'child',
+          listingType: listingMode,
           parentSkus: row.parentSkus,
-          parentItems: row.parentItems.map(item => ({
+          parentItems: row.parentItems.map((item) => ({
             parentSku: item.parentSku,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
@@ -476,9 +875,9 @@ export function useListingState(section: ListingSection) {
           size: row.size,
           type: row.type,
           description: row.description,
-          setQuantity: row.setQuantity,
+          setQuantity: listingMode === 'parent' ? 1 : row.setQuantity,
           potQuantity: row.potQuantity,
-          quantity: row.setQuantity,
+          quantity: qty,
           price: row.price,
           inventory_quantity: row.inventory_quantity,
           tags: row.tags?.length ? row.tags : undefined,
@@ -488,12 +887,29 @@ export function useListingState(section: ListingSection) {
           seller: row.seller,
           categories: row.categories,
           collectionIds: row.collectionIds,
-          images: rowImages,
+          images: rowImageUrls,
           status: 'draft',
         };
-        // One payload per hub — backend generates a unique SKU for each
-        return (row.hubs ?? []).map(hub => ({ ...basePayload, hub }));
+        if (listingMode === 'child') {
+          const passed = passedHubsFromChecks(
+            row.hubs ?? [],
+            row.parentItems,
+            row.hubParentChecks ?? []
+          );
+          const skipped = (row.hubs ?? []).filter((h) => !passed.includes(h));
+          if (skipped.length > 0) {
+            hubSkipMessages.push(`Row ${row.serial}: not saved for ${skipped.join(', ')} (parent SKU missing in listings)`);
+          }
+          return passed.map((hub) => ({ ...basePayload, hub }));
+        }
+        return (row.hubs ?? []).map((hub) => ({ ...basePayload, hub }));
       });
+
+      if (productsToCreate.length === 0) {
+        toast.error('Nothing to create — check validation and hub parent SKU checks.');
+        setState((prev) => ({ ...prev, isSaving: false }));
+        return undefined;
+      }
 
       // Bulk create
       const response = await fetch('/api/listing-product', {
@@ -505,18 +921,22 @@ export function useListingState(section: ListingSection) {
       const result = await response.json();
       
       if (result.success) {
-        // Mark rows as saved
-        setState(prev => ({
+        setState((prev) => ({
           ...prev,
-          productRows: prev.productRows.map(row =>
-            validRows.some(validRow => validRow.id === row.id)
-              ? { ...row, isSaved: true }
-              : row
+          productRows: prev.productRows.map((row) =>
+            validRows.some((validRow) => validRow.id === row.id) ? { ...row, isSaved: true } : row
           ),
-          isSaving: false
+          isSaving: false,
         }));
 
-        toast.success(`Successfully created ${validRows.length} listing product(s)`);
+        if (hubSkipMessages.length > 0) {
+          toast(hubSkipMessages.join(' · '), { duration: 8000, icon: '⚠️' });
+        }
+        toast.success(
+          `Successfully created ${productsToCreate.length} listing product(s)${
+            hubSkipMessages.length ? ' (some hubs skipped)' : ''
+          }`
+        );
         return validRows;
       } else {
         toast.error(result.message || 'Failed to create products');
@@ -537,11 +957,19 @@ export function useListingState(section: ListingSection) {
     const row = state.productRows.find((r) => r.id === activeRowId);
     if (!row || row.isSaved) return false;
 
-    const rowImages = row.taggedImages?.length
-      ? row.taggedImages
-      : (row.serial && allImages[row.serial - 1] ? [allImages[row.serial - 1]] : []);
+    const listingMode = stateRef.current.listingMode;
+    const imageUrls = getListingImageUrlsForRow(row, listingMode, allImages);
+    const passedHubsChild =
+      listingMode === 'child'
+        ? passedHubsFromChecks(row.hubs ?? [], row.parentItems, row.hubParentChecks ?? [])
+        : [];
+    const hubForForm =
+      listingMode === 'child'
+        ? passedHubsChild[0] ?? (row.hubs ?? [])[0] ?? ''
+        : (row.hubs ?? [])[0] ?? '';
+
     const formData = {
-      listingType: 'child' as const,
+      listingType: listingMode,
       parentSkus: row.parentSkus,
       section,
       plant: row.plant,
@@ -552,20 +980,42 @@ export function useListingState(section: ListingSection) {
       size: row.size,
       type: row.type,
       description: row.description,
-      quantity: row.setQuantity,
+      quantity: listingMode === 'parent' ? 1 : row.setQuantity,
       price: row.price,
       inventory_quantity: row.inventory_quantity,
-      hub: (row.hubs ?? [])[0] ?? '',
+      hub: hubForForm,
       seller: row.seller,
       categories: row.categories,
       collectionIds: row.collectionIds,
-      images: rowImages.map((img: { url: string }) => img.url),
+      images: imageUrls,
       status: 'draft' as const,
     };
     const selectedParents = row.parentItems.map((item) => item.parent).filter(Boolean) as ParentMaster[];
     const { errors } = validateStep('review', formData as any, selectedParents, section);
-    if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
-    const isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
+
+    let isValid: boolean;
+    if (listingMode === 'child') {
+      if (!stateRef.current.childContextHub?.trim()) {
+        errors.contextHub = 'Select the listing hub filter above';
+      }
+      if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
+      if (
+        row.parentSkus.length > 0 &&
+        (row.hubs ?? []).length > 0 &&
+        passedHubsChild.length === 0
+      ) {
+        errors.hubParentSku =
+          'No hub has all parent lines listed for this section (see Review for details)';
+      }
+      isValid =
+        Object.keys(errors).length === 0 &&
+        row.parentSkus.length > 0 &&
+        passedHubsChild.length > 0;
+    } else {
+      if ((row.hubs ?? []).length === 0) errors.hub = 'At least one hub is required';
+      isValid = Object.keys(errors).length === 0 && row.parentSkus.length > 0;
+    }
+
     if (!isValid) {
       toast.error(Object.values(errors).filter(Boolean)[0] || 'Please complete required fields');
       return false;
@@ -573,9 +1023,9 @@ export function useListingState(section: ListingSection) {
 
     setState((prev) => ({ ...prev, isSaving: true }));
     try {
-      // One payload per selected hub — backend generates a unique SKU for each
+      const qty = listingMode === 'parent' ? 1 : row.setQuantity;
       const basePayload = {
-        listingType: 'child',
+        listingType: listingMode,
         parentSkus: row.parentSkus,
         parentItems: row.parentItems.map((item) => ({
           parentSku: item.parentSku,
@@ -591,9 +1041,9 @@ export function useListingState(section: ListingSection) {
         size: row.size,
         type: row.type,
         description: row.description,
-        setQuantity: row.setQuantity,
+        setQuantity: listingMode === 'parent' ? 1 : row.setQuantity,
         potQuantity: row.potQuantity,
-        quantity: row.setQuantity,
+        quantity: qty,
         price: row.price,
         inventory_quantity: row.inventory_quantity,
         tags: row.tags?.length ? row.tags : undefined,
@@ -603,10 +1053,26 @@ export function useListingState(section: ListingSection) {
         seller: row.seller,
         categories: row.categories,
         collectionIds: row.collectionIds,
-        images: rowImages.map((img: { url: string }) => img.url),
+        images: imageUrls,
         status: 'draft',
       };
-      const payloads = (row.hubs ?? []).map(hub => ({ ...basePayload, hub }));
+      const hubsToSave = listingMode === 'child' ? passedHubsChild : row.hubs ?? [];
+      const skipped =
+        listingMode === 'child'
+          ? (row.hubs ?? []).filter((h) => !hubsToSave.includes(h))
+          : [];
+      if (skipped.length > 0) {
+        toast(`Not saving for: ${skipped.join(', ')} (parent SKU missing in listings)`, {
+          duration: 6000,
+          icon: '⚠️',
+        });
+      }
+      const payloads = hubsToSave.map((hub) => ({ ...basePayload, hub }));
+      if (payloads.length === 0) {
+        toast.error('No hubs to save');
+        setState((prev) => ({ ...prev, isSaving: false }));
+        return false;
+      }
       const response = await fetch('/api/listing-product', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -632,79 +1098,133 @@ export function useListingState(section: ListingSection) {
     }
   }, [state.productRows, section, allImages]);
 
-  // Clear all data
+  // Parent listing: debounced reload when SKU / name filters change
+  useEffect(() => {
+    if (state.listingMode !== 'parent') return;
+    if (skipNextParentFilterEffectRef.current) {
+      skipNextParentFilterEffectRef.current = false;
+      return;
+    }
+    const handle = setTimeout(() => {
+      void loadParentListingPage(1, false);
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [state.listingMode, state.parentSkuFilter, state.parentNameFilter, loadParentListingPage]);
+
+  // Clear all data (child: empty rows; parent: reload first page)
   const clearAll = useCallback(() => {
-    setState(prev => ({
+    const mode = stateRef.current.listingMode;
+    if (mode === 'parent') {
+      skipNextParentFilterEffectRef.current = true;
+      setState((prev) => ({
+        ...prev,
+        parentSkuFilter: '',
+        parentNameFilter: '',
+      }));
+      void loadParentListingPage(1, false, { parentSkuFilter: '', parentNameFilter: '' });
+      return;
+    }
+    skippedChildImageUrlsRef.current.clear();
+    setState((prev) => ({
       ...prev,
       selectedImages: [],
-      productRows: []
+      productRows: [],
+      ...(mode === 'child' ? { childContextHub: '' } : {}),
     }));
 
     // Reset all images to untagged
     setAllImages(prev => prev.map(img => ({ ...img, isTagged: false })));
-  }, []);
+  }, [loadParentListingPage]);
 
-  // Auto-create initial rows when images are loaded
+  // Debounced hub × parent SKU existence checks (child listing only)
   useEffect(() => {
-    if (allImages.length > 0 && state.productRows.length === 0) {
-      // Create 3 empty rows by default to show the table structure
-      const initialRows: ProductRow[] = [];
-      for (let i = 1; i <= Math.min(3, Math.max(1, allImages.length)); i++) {
-      const defaultImage = allImages[i - 1];
-      const emptyRow: ProductRow = {
-        id: `row_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 5)}`,
-        serial: i,
-        parentSkus: [],
-        parentItems: [],
-        selectedParent: undefined,
-        taggedImages: defaultImage ? [defaultImage] : [],
-          
-          // Empty product details
-          plant: '',
-          otherNames: '',
-          variety: '',
-          colour: '',
-          height: '',
-          size: '',
-          type: '',
-          description: '',
-          
-          // Default values
-          setQuantity: 1,
-          quantity: 1,
-          potQuantity: 0,
-          price: 0,
-          inventory_quantity: 0,
-          tags: [],
-          compare_at_price: undefined,
-          sort_order: 3000,
-          
-          // Metadata
-          hubs: [],
-          seller: '',
-          categories: [],
-          collectionIds: [],
-          
-          // Status
-          isValid: false,
-          isSaved: false,
-          validationErrors: { parent: 'Parent selection is required' },
-        };
-        initialRows.push(emptyRow);
+    if (state.listingMode !== 'child') return;
+
+    const timer = setTimeout(() => {
+      const rows = stateRef.current.productRows;
+      const byRowChecks = new Map<string, { hub: string; canonicalParentSku: string }[]>();
+      const dedupe = new Map<string, { hub: string; canonicalParentSku: string }>();
+
+      for (const row of rows) {
+        const p = buildChildHubParentChecksPayload(section, row.hubs ?? [], row.parentItems);
+        byRowChecks.set(row.id, p.checks);
+        for (const c of p.checks) {
+          dedupe.set(`${c.hub}\0${c.canonicalParentSku}`, c);
+        }
       }
 
-      setState(prev => ({
-        ...prev,
-        productRows: initialRows,
-      }));
-    }
-  }, [allImages.length, state.productRows.length]);
+      void (async () => {
+        if (dedupe.size === 0) {
+          setState((prev) => ({
+            ...prev,
+            productRows: prev.productRows.map((r) => ({ ...r, hubParentChecks: [] })),
+          }));
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/listing-product/verify-child-hub-parents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              section,
+              checks: Array.from(dedupe.values()),
+            }),
+          });
+          const json = await res.json();
+          if (!json.success || !Array.isArray(json.data)) {
+            console.error('[verify-child-hub-parents]', json.message);
+            return;
+          }
+
+          const resultByKey = new Map<
+            string,
+            { hub: string; canonicalParentSku: string; expectedSku: string; exists: boolean }
+          >(
+            json.data.map(
+              (r: {
+                hub: string;
+                canonicalParentSku: string;
+                expectedSku: string;
+                exists: boolean;
+              }) => [`${r.hub}\0${r.canonicalParentSku}`, r]
+            )
+          );
+
+          setState((prev) => ({
+            ...prev,
+            productRows: prev.productRows.map((r) => {
+              const checks = byRowChecks.get(r.id) ?? [];
+              if (checks.length === 0) {
+                return { ...r, hubParentChecks: [] };
+              }
+              const apiSlice = checks
+                .map((c) => resultByKey.get(`${c.hub}\0${c.canonicalParentSku}`))
+                .filter(Boolean) as {
+                hub: string;
+                canonicalParentSku: string;
+                expectedSku: string;
+                exists: boolean;
+              }[];
+              return { ...r, hubParentChecks: mergeVerifyResults(apiSlice) };
+            }),
+          }));
+        } catch (e) {
+          console.error('verify-child-hub-parents', e);
+        }
+      })();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [state.listingMode, state.productRows, section]);
 
   // Re-validate rows when row content or images change (keeps UI "Valid" in sync with save validation)
   const prevValidationInputRef = useRef<string>('');
   useEffect(() => {
     if (state.productRows.length === 0) return;
     const signature = JSON.stringify({
+      listingMode: state.listingMode,
+      childContextHub: state.childContextHub,
       rows: state.productRows.map(r => ({
         id: r.id,
         serial: r.serial,
@@ -712,24 +1232,101 @@ export function useListingState(section: ListingSection) {
         parentItems: r.parentItems,
         plant: r.plant,
         hubs: r.hubs,
+        hubParentChecks: r.hubParentChecks,
         seller: r.seller,
         categories: r.categories,
         setQuantity: r.setQuantity,
         price: r.price,
         inventory_quantity: r.inventory_quantity,
+        taggedUrls: (r.taggedImages ?? []).map((i) => i.url),
       })),
       images: allImages.map(img => ({ serial: img.serial, url: img.url })),
     });
     if (signature === prevValidationInputRef.current) return;
     prevValidationInputRef.current = signature;
     validateAllRows();
-  }, [state.productRows, allImages, validateAllRows]);
+  }, [state.productRows, state.listingMode, state.childContextHub, allImages, validateAllRows]);
 
   // Load data on mount
   useEffect(() => {
     loadImageCollections();
     loadAvailableParents();
   }, [loadImageCollections, loadAvailableParents]);
+
+  // Child listing: one row per photo from completed image collections (exclude listed + user-skipped).
+  // Photo rows are hidden until a global hub filter is selected (`childContextHub`).
+  useEffect(() => {
+    if (state.listingMode !== 'child') return;
+
+    setState((prev) => {
+      if (prev.listingMode !== 'child') return prev;
+
+      const manualRows = prev.productRows.filter((r) => !r.id.startsWith('child_'));
+
+      if (!prev.childContextHub?.trim()) {
+        let serial = 0;
+        const nextManualOnly = manualRows.map((r) => ({ ...r, serial: ++serial }));
+        if (
+          prev.productRows.length === nextManualOnly.length &&
+          prev.productRows.every(
+            (r, i) =>
+              r.id === nextManualOnly[i]?.id &&
+              r.serial === nextManualOnly[i]?.serial &&
+              r.parentSkus.join(',') === nextManualOnly[i]?.parentSkus.join(',')
+          )
+        ) {
+          return prev;
+        }
+        return { ...prev, productRows: nextManualOnly };
+      }
+
+      const skipped = skippedChildImageUrlsRef.current;
+      const imgs = allImages.filter((img) => !skipped.has(img.url));
+      const hub = prev.childContextHub.trim();
+
+      const imageRows: ProductRow[] = imgs.map((img, idx) => {
+        const id = childRowIdForImageUrl(img.url);
+        const existing =
+          prev.productRows.find((r) => r.id === id) ??
+          prev.productRows.find((r) => r.taggedImages?.[0]?.url === img.url);
+        if (existing) {
+          return {
+            ...existing,
+            id,
+            serial: idx + 1,
+            taggedImages: [img],
+            hubs: (existing.hubs ?? []).length > 0 ? existing.hubs : hub ? [hub] : [],
+          };
+        }
+        return {
+          ...buildChildRowFromImage(img, idx + 1),
+          hubs: hub ? [hub] : [],
+        };
+      });
+
+      let serial = 0;
+      const nextRows: ProductRow[] = [
+        ...imageRows.map((r) => ({ ...r, serial: ++serial })),
+        ...manualRows.map((r) => ({ ...r, serial: ++serial })),
+      ];
+
+      if (
+        prev.productRows.length === nextRows.length &&
+        prev.productRows.every(
+          (r, i) =>
+            r.id === nextRows[i]?.id &&
+            r.serial === nextRows[i]?.serial &&
+            r.taggedImages?.[0]?.url === nextRows[i]?.taggedImages?.[0]?.url &&
+            r.plant === nextRows[i]?.plant &&
+            r.parentSkus.join(',') === nextRows[i]?.parentSkus.join(',')
+        )
+      ) {
+        return prev;
+      }
+
+      return { ...prev, productRows: nextRows };
+    });
+  }, [allImages, state.listingMode, state.childContextHub]);
 
   // Merge allImages with selectedImages state for the ImagePanel
   const mergedImages = allImages.map(img => {
@@ -758,6 +1355,13 @@ export function useListingState(section: ListingSection) {
       clearAll,
       loadImageCollections,
       loadAvailableParents,
+      setListingMode,
+      setChildContextHub,
+      loadMoreParentListingPage,
+      refreshParentInRows,
+      uploadParentPhotoAndRefresh,
+      setParentListingSkuFilter,
+      setParentListingNameFilter,
     }
   };
 }

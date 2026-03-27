@@ -1,4 +1,34 @@
+import type { ProductType } from '@/models/parentMaster';
+
 export type StepId = 'product-info' | 'details' | 'pricing' | 'categories-images' | 'review';
+
+export type NonParentStepId = 'non-parent-info' | 'non-parent-review';
+
+/** Flow after user picks a product type on the add form */
+export type ProductFlowType = ProductType;
+
+export interface NonParentFormData {
+  plant: string;
+  vendorMasterId: string;
+  /** User-facing product code (API field `productCode`) */
+  productCode: string;
+  /** Base parent listing SKU to link to (API field `sku`) */
+  parentSku: string;
+  images: string[];
+}
+
+export const initialNonParentFormData: NonParentFormData = {
+  plant: '',
+  vendorMasterId: '',
+  productCode: '',
+  parentSku: '',
+  images: [],
+};
+
+export const SHORT_STEPS: { id: NonParentStepId; label: string; title: string }[] = [
+  { id: 'non-parent-info', label: 'Product details', title: 'Name, vendor, code, and link' },
+  { id: 'non-parent-review', label: 'Review', title: 'Review and create' },
+];
 
 export interface ProductFormData {
   plant: string;
@@ -14,6 +44,8 @@ export interface ProductFormData {
   categories: string[];
   collectionIds: string[];
   sellingPrice: number | '';
+  /** Compare-at price (optional; stored as `compare_at` on parent master) */
+  compare_at: number | '';
   inventory_quantity: number | '';
   images: string[];
   features: string;
@@ -23,7 +55,7 @@ export interface ProductFormData {
 export const STEPS: { id: StepId; label: string; title: string }[] = [
   { id: 'product-info', label: 'Product Info', title: 'Basic product information' },
   { id: 'details', label: 'Details', title: 'Attributes & description' },
-  { id: 'pricing', label: 'Pricing', title: 'Selling price' },
+  { id: 'pricing', label: 'Pricing', title: 'Selling & compare-at price' },
   { id: 'categories-images', label: 'Categories & images', title: 'Categories and product images' },
   { id: 'review', label: 'Review', title: 'Review and create' },
 ];
@@ -42,6 +74,7 @@ export const initialFormData: ProductFormData = {
   categories: [],
   collectionIds: [],
   sellingPrice: '',
+  compare_at: '',
   inventory_quantity: '',
   images: [],
   features: '',

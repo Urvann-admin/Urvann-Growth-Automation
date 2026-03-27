@@ -5,13 +5,35 @@ import type { CategoryFormData, FormRuleItem } from '../types';
 
 export interface StepReviewProps {
   data: CategoryFormData;
+  /** When present, rows for these keys show a red border and error message */
+  errors?: Record<string, string>;
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function Row({
+  label,
+  value,
+  errorKey,
+  errors,
+}: {
+  label: string;
+  value: React.ReactNode;
+  errorKey?: string;
+  errors?: Record<string, string>;
+}) {
+  const error = errorKey && errors?.[errorKey];
   return (
-    <div className="flex flex-wrap gap-2 py-2 border-b border-slate-100 last:border-0">
+    <div
+      className={`flex flex-wrap gap-2 py-2 border-b border-slate-100 last:border-0 rounded-lg px-2 -mx-2 ${
+        error ? 'border-2 border-red-400 bg-red-50/50' : ''
+      }`}
+    >
       <dt className="text-sm font-medium text-slate-500 min-w-[10rem] shrink-0">{label}</dt>
-      <dd className="text-sm text-slate-900">{value ?? '—'}</dd>
+      <dd className="text-sm text-slate-900 flex-1">{value ?? '—'}</dd>
+      {error && (
+        <dd className="text-sm text-red-600 w-full mt-1 min-w-0">
+          {error}
+        </dd>
+      )}
     </div>
   );
 }
@@ -30,7 +52,7 @@ function ruleItemsSummary(items: FormRuleItem[], op: string): string {
   return parts.join(` ${op} `);
 }
 
-export function StepReview({ data }: StepReviewProps) {
+export function StepReview({ data, errors }: StepReviewProps) {
   const selectedHubs = getSelectedHubsFromSubstores(data.substores);
   const conditionsSummary =
     data.type === 'Automatic' && data.ruleItems.length > 0
@@ -41,23 +63,40 @@ export function StepReview({ data }: StepReviewProps) {
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <p className="text-sm text-slate-600 mb-6">
         Please review your category details below. Click &quot;Create category&quot; to submit.
+        {errors && Object.keys(errors).length > 0 && (
+          <span className="block mt-2 text-red-600 font-medium">
+            Please fix the fields marked in red before saving.
+          </span>
+        )}
       </p>
       <dl className="space-y-0">
-        <Row label="Name" value={data.category || '—'} />
-        <Row label="Alias" value={data.alias || '—'} />
-        <Row label="Type of category" value={data.typeOfCategory || '—'} />
+        <Row label="Name" value={data.category || '—'} errorKey="category" errors={errors} />
+        <Row label="Alias" value={data.alias || '—'} errorKey="alias" errors={errors} />
+        <Row
+          label="Type of category"
+          value={data.typeOfCategory || '—'}
+          errorKey="typeOfCategory"
+          errors={errors}
+        />
         <Row label="Description" value={data.description || '—'} />
         <Row label="L1 parent" value={data.l1Parent || '—'} />
         <Row label="L2 parent" value={data.l2Parent || '—'} />
         <Row label="L3 parent" value={data.l3Parent || '—'} />
-        <Row label="Type" value={data.type} />
-        {data.type === 'Automatic' && conditionsSummary && (
-          <Row label="Conditions" value={conditionsSummary} />
+        <Row label="Type" value={data.type} errorKey="type" errors={errors} />
+        {data.type === 'Automatic' && (
+          <Row
+            label="Conditions"
+            value={conditionsSummary || '—'}
+            errorKey="rule"
+            errors={errors}
+          />
         )}
         <Row label="Publish" value={data.publish ? 'Yes' : 'No'} />
-        <Row label="Priority order" value={data.priorityOrder} />
+        <Row label="Priority order" value="10" />
         <Row
           label="Hubs"
+          errorKey="substores"
+          errors={errors}
           value={
             selectedHubs.length > 0 ? (
               <span className="flex flex-wrap gap-1.5">

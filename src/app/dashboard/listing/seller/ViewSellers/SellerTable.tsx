@@ -23,13 +23,16 @@ export function SellerTable({
               Seller name
             </th>
             <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
-              Place
+              Vendor code
+            </th>
+            <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
+              Vendor place
             </th>
             <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Multiplication factor
             </th>
             <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
-              Bill no.
+              Product type
             </th>
             <th className="text-left py-3.5 px-4 font-semibold text-slate-600 text-xs uppercase tracking-wider">
               Phone number
@@ -48,6 +51,9 @@ export function SellerTable({
               <td className="py-3.5 px-4 font-medium text-slate-900">
                 {seller.seller_name ?? '—'}
               </td>
+              <td className="py-3.5 px-4 text-slate-600 font-mono text-xs">
+                {seller.vendorCode ?? '—'}
+              </td>
               <td className="py-3.5 px-4 text-slate-600">
                 {seller.place ?? '—'}
               </td>
@@ -56,8 +62,10 @@ export function SellerTable({
                   ? seller.multiplicationFactor
                   : '—'}
               </td>
-              <td className="py-3.5 px-4 text-slate-600 font-mono text-xs">
-                {seller.billNo ?? '—'}
+              <td className="py-3.5 px-4 text-slate-600">
+                {Array.isArray(seller.productType) && seller.productType.length > 0
+                  ? seller.productType.join(', ')
+                  : '—'}
               </td>
               <td className="py-3.5 px-4 text-slate-600">
                 {seller.phoneNumber ?? '—'}

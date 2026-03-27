@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PurchaseMasterModel } from '@/models/purchaseMaster';
-import { ParentMasterModel } from '@/models/parentMaster';
+import { ParentMasterModel, isBaseParent } from '@/models/parentMaster';
+import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
 import { syncParentFromPurchases } from '../syncParent';
 
 export async function GET(
@@ -51,13 +52,36 @@ export async function PUT(
     const updateData = { ...body } as Record<string, unknown>;
     delete updateData._id;
     delete updateData.createdAt;
+    delete updateData.hub;
+
+    const sellerVal =
+      updateData.seller != null && typeof updateData.seller === 'string'
+        ? String(updateData.seller).trim()
+        : '';
+    if (sellerVal) {
+      const resolved = await ProcurementSellerMasterModel.resolveToStoredSellerRef(sellerVal);
+      if (!resolved) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Unknown seller: "${sellerVal}". Use procurement seller _id, vendor code, or seller name as in Procurement seller master.`,
+          },
+          { status: 400 }
+        );
+      }
+      updateData.seller = resolved;
+    }
 
     const newParentSkuVal = updateData.parentSku != null ? String(updateData.parentSku).trim() : null;
     if (newParentSkuVal) {
       const parent = await ParentMasterModel.findBySku(newParentSkuVal);
-      if (!parent) {
+      if (!parent || !isBaseParent(parent)) {
         return NextResponse.json(
-          { success: false, message: 'The selected parent SKU is not in our system. Please add this product in parent master first.' },
+          {
+            success: false,
+            message:
+              'The selected SKU must be a base (parent) product in product master. Add the plant parent first or pick a valid parent SKU.',
+          },
           { status: 400 }
         );
       }

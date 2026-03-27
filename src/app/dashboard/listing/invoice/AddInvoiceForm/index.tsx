@@ -37,7 +37,6 @@ function toDraftRow(parsed: Record<string, unknown>): DraftPurchaseRow {
     billNumber: String(parsed.billNumber ?? '').trim(),
     productCode: String(parsed.productCode ?? '').trim(),
     productName: String(parsed.productName ?? '').trim(),
-    itemType: String(parsed.itemType ?? '').trim() || undefined,
     quantity,
     productPrice,
     amount,
@@ -99,7 +98,7 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
 
   const fetchParents = useCallback(async () => {
     try {
-      const res = await fetch('/api/parent-master?limit=500');
+      const res = await fetch('/api/parent-master?limit=500&baseParentsOnly=true');
       const json = await res.json();
       if (json?.success && Array.isArray(json.data)) {
         setParents(json.data.filter((p: ParentOption) => p.sku && String(p.sku).trim()));
@@ -271,9 +270,11 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
         'Bill no.',
         'Product Code',
         'Product Name',
-        'Quantity',
+        'Product quantity',
         'Price',
         'Amount',
+        'Parent',
+        'Seller',
       ];
       const ws = XLSX.utils.aoa_to_sheet([headers]);
       const wb = XLSX.utils.book_new();
@@ -326,7 +327,6 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
           billNumber: r.billNumber,
           productCode: r.productCode,
           productName: r.productName?.trim() || undefined,
-          itemType: r.itemType?.trim() || undefined,
           quantity,
           productPrice,
           amount,
@@ -428,7 +428,6 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Bill no.</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Product code</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Product name</th>
-                    <th className="text-left py-2 px-2 font-semibold text-slate-700">Item Type</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Qty</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Amount</th>
                     <th className="text-left py-2 px-2 font-semibold text-slate-700">Price (amt ÷ qty)</th>
@@ -467,17 +466,6 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
                           className={inputClass}
                           placeholder="Product name"
                         />
-                      </td>
-                      <td className="py-1 px-2 min-w-[100px]">
-                        <select
-                          value={row.itemType ?? ''}
-                          onChange={(e) => updateRow(i, { itemType: e.target.value || undefined })}
-                          className={inputClass}
-                        >
-                          <option value="">Select</option>
-                          <option value="Product">Product</option>
-                          <option value="Consumable">Consumable</option>
-                        </select>
                       </td>
                       <td className="py-1 px-2">
                         <input
@@ -615,7 +603,7 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
         {rows.length === 0 && !parsing && (
           <p className="text-sm text-slate-500 py-4 mt-4">
             Upload an Excel file (.xlsx or .xls) with columns:{' '}
-            <strong>Bill no., Product Code, Product Name, Quantity, Price, Amount</strong>. Then choose item type, parent, and type in the table, add overhead (optional), and save.
+            <strong>Bill no., Product Code, Product Name, Quantity, Price, Amount</strong>. Then set parent and type in the table, add overhead (optional), and save.
           </p>
         )}
       </div>

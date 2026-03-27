@@ -71,7 +71,7 @@ export function ListingTopBar({
                   {tab?.label ?? 'Listing'}
                 </h1>
                 <p className={`text-[11px] ${isChristmasTheme ? 'text-slate-600' : 'text-slate-500'}`}>
-                  {tab?.subtitle ?? 'Category Master, Parent Master & Listing'}
+                  {tab?.subtitle ?? 'Category Master, Product Master & Listing'}
                 </p>
               </div>
             </div>

@@ -4,11 +4,17 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Check, ChevronDown, Search } from 'lucide-react';
 import type { Category } from '@/models/category';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
+import type { ProductType } from '@/models/parentMaster';
 import { CustomSelect } from '../../components/CustomSelect';
 import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, COLOUR_OPTIONS, FEATURES_OPTIONS, REDIRECTS_OPTIONS } from '../ProductMasterForm/types';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 
 interface EditParentForm {
+  productType: ProductType;
+  sku: string;
+  productCode: string;
+  vendorMasterId: string;
+  parentSku: string;
   plant: string;
   otherNames: string;
   variety: string;
@@ -22,6 +28,7 @@ interface EditParentForm {
   redirects: string;
   categories: string[];
   sellingPrice: number | '';
+  compare_at: number | '';
   images: string[];
 }
 
@@ -39,6 +46,12 @@ interface EditParentModalProps {
 function getCategoryName(categories: Category[], categoryId: string): string {
   const cat = categories.find((c) => c._id === categoryId || c.categoryId === categoryId);
   return cat?.category || categoryId;
+}
+
+function productTypeTitle(t: ProductType | undefined): string {
+  if (!t || t === 'parent') return 'Parent';
+  if (t === 'growing_product') return 'Growing product';
+  return 'Consumable';
 }
 
 export function EditParentModal({
@@ -72,6 +85,16 @@ export function EditParentModal({
     ...sellers.map((s) => ({ value: String(s._id), label: s.seller_name })),
   ];
 
+  const primaryVendorOptions = [
+    { value: '', label: 'Select primary vendor' },
+    ...sellers.map((s) => ({
+      value: String(s._id),
+      label: s.vendorCode ? `${s.seller_name} (${s.vendorCode})` : s.seller_name,
+    })),
+  ];
+
+  const isParentProduct = !editForm.productType || editForm.productType === 'parent';
+
   const filteredCategories = categories.filter((cat) =>
     categorySearch.trim()
       ? (cat.category ?? '').toLowerCase().includes(categorySearch.toLowerCase())
@@ -87,7 +110,57 @@ export function EditParentModal({
 
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="p-6 space-y-6">
-          <ModalSection title="Basics">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+            <span className="font-medium text-slate-700">Product type: </span>
+            <span className="text-slate-900">{productTypeTitle(editForm.productType)}</span>
+            <span className="text-slate-500"> (cannot be changed here)</span>
+          </div>
+
+          {!isParentProduct && (
+            <ModalSection title="Identifiers">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="block sm:col-span-2">
+                  <span className="block text-sm font-medium text-slate-700 mb-1.5">Name</span>
+                  <input
+                    type="text"
+                    value={editForm.plant}
+                    onChange={(e) => onChange({ ...editForm, plant: e.target.value })}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-sm font-medium text-slate-700 mb-1.5">Product code</span>
+                  <input
+                    type="text"
+                    value={editForm.productCode}
+                    onChange={(e) => onChange({ ...editForm, productCode: e.target.value })}
+                    className={inputClass}
+                  />
+                </label>
+                <CustomSelect
+                  label="Primary vendor (Vendor Master)"
+                  value={editForm.vendorMasterId}
+                  onChange={(v) => onChange({ ...editForm, vendorMasterId: v })}
+                  options={primaryVendorOptions}
+                  placeholder="Select vendor"
+                />
+                <label className="block sm:col-span-2">
+                  <span className="block text-sm font-medium text-slate-700 mb-1.5">Parent SKU</span>
+                  <input
+                    type="text"
+                    value={editForm.parentSku}
+                    onChange={(e) => onChange({ ...editForm, parentSku: e.target.value })}
+                    className={inputClass}
+                    placeholder="Base parent product SKU"
+                  />
+                </label>
+              </div>
+            </ModalSection>
+          )}
+
+          <ModalSection title={isParentProduct ? 'Basics' : 'Optional attributes'}>
+            {isParentProduct ? (
+            <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Plant name</span>
@@ -194,6 +267,77 @@ export function EditParentModal({
                 placeholder="Select Redirects"
               />
             </div>
+            </>
+            ) : (
+              <>
+                <p className="text-sm text-slate-500 mb-4">
+                  Optional plant-style attributes and procurement seller (if this product uses them).
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="block text-sm font-medium text-slate-700 mb-1.5">Other names</span>
+                    <input
+                      type="text"
+                      value={editForm.otherNames}
+                      onChange={(e) => onChange({ ...editForm, otherNames: e.target.value })}
+                      className={inputClass}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-sm font-medium text-slate-700 mb-1.5">Variety</span>
+                    <input
+                      type="text"
+                      value={editForm.variety}
+                      onChange={(e) => onChange({ ...editForm, variety: e.target.value })}
+                      className={inputClass}
+                    />
+                  </label>
+                  <CustomSelect
+                    label="Colour"
+                    value={editForm.colour}
+                    onChange={(v) => onChange({ ...editForm, colour: v })}
+                    options={COLOUR_OPTIONS}
+                    placeholder="Select Colour"
+                  />
+                  <CustomSelect
+                    label="Moss Stick"
+                    value={editForm.mossStick}
+                    onChange={(v) => onChange({ ...editForm, mossStick: v })}
+                    options={MOSS_STICK_OPTIONS}
+                    placeholder="Select Moss Stick"
+                  />
+                  <CustomSelect
+                    label="Pot Type"
+                    value={editForm.potType}
+                    onChange={(v) => onChange({ ...editForm, potType: v })}
+                    options={POT_TYPE_OPTIONS}
+                    placeholder="Select Pot Type"
+                  />
+                  <CustomSelect
+                    label="Procurement Seller"
+                    value={editForm.seller}
+                    onChange={(v) => onChange({ ...editForm, seller: v })}
+                    options={sellerOptions}
+                    placeholder="Select Procurement Seller"
+                  />
+                  <CustomSelect
+                    label="Features"
+                    value={editForm.features}
+                    onChange={(v) => onChange({ ...editForm, features: v })}
+                    options={FEATURES_OPTIONS}
+                    placeholder="Select Features"
+                    multiSelect
+                  />
+                  <CustomSelect
+                    label="Redirects"
+                    value={editForm.redirects}
+                    onChange={(v) => onChange({ ...editForm, redirects: v })}
+                    options={REDIRECTS_OPTIONS}
+                    placeholder="Select Redirects"
+                  />
+                </div>
+              </>
+            )}
           </ModalSection>
 
           <ModalSection title="Pricing">
@@ -214,7 +358,26 @@ export function EditParentModal({
                   className={inputClass}
                 />
               </label>
-              <p className="text-xs text-slate-500 self-end pb-2.5">Listing price is computed on save (selling price × procurement seller factor).</p>
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Compare-at price</span>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={editForm.compare_at}
+                  onChange={(e) =>
+                    onChange({
+                      ...editForm,
+                      compare_at: e.target.value ? parseFloat(e.target.value) : '',
+                    })
+                  }
+                  className={inputClass}
+                  placeholder="Optional"
+                />
+              </label>
+              <p className="text-xs text-slate-500 sm:col-span-2">
+                Listing price is computed on save (selling price × procurement seller factor).
+              </p>
             </div>
           </ModalSection>
 

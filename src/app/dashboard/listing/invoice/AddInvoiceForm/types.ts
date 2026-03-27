@@ -5,12 +5,11 @@ export interface DraftPurchaseRow {
   billNumber: string;
   productCode: string;
   productName: string;
-  itemType?: string;
   quantity: number;
   productPrice: number;
   amount: number;
   parentSku: string;
-  hub?: string;
+  seller?: string;
   type: PurchaseTypeBreakdown;
   overhead?: {
     overheadAmount: number;

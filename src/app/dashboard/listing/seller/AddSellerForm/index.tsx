@@ -8,14 +8,21 @@ import {
   setPersistedForm,
   removePersistedForm,
 } from '../../hooks/useFormPersistence';
+import { CustomSelect } from '../../components/CustomSelect';
 
 const FORM_STORAGE_KEY = 'listing_form_seller';
+
+const PRODUCT_TYPE_OPTIONS = [
+  { value: 'Product', label: 'Product' },
+  { value: 'saplings', label: 'Saplings' },
+  { value: 'consumables', label: 'Consumables' },
+];
 
 interface SellerFormState {
   seller_name: string;
   place: string;
   multiplicationFactor: string;
-  billNo: string;
+  productType: string;
   phoneNumber: string;
 }
 
@@ -33,9 +40,9 @@ export function AddSellerForm() {
     const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
     return saved?.multiplicationFactor ?? '';
   });
-  const [billNo, setBillNo] = useState(() => {
+  const [productType, setProductType] = useState(() => {
     const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
-    return saved?.billNo ?? '';
+    return saved?.productType ?? '';
   });
   const [phoneNumber, setPhoneNumber] = useState(() => {
     const saved = getPersistedForm<SellerFormState>(FORM_STORAGE_KEY);
@@ -52,10 +59,10 @@ export function AddSellerForm() {
       seller_name,
       place,
       multiplicationFactor,
-      billNo,
+      productType,
       phoneNumber,
     });
-  }, [seller_name, place, multiplicationFactor, billNo, phoneNumber]);
+  }, [seller_name, place, multiplicationFactor, productType, phoneNumber]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +83,9 @@ export function AddSellerForm() {
             multiplicationFactor.trim() !== ''
               ? Number(multiplicationFactor)
               : undefined,
-          billNo: billNo.trim() || undefined,
+          productType: productType
+            ? productType.split(',').map((s) => s.trim()).filter(Boolean)
+            : undefined,
           phoneNumber: phoneNumber.trim() || undefined,
         }),
       });
@@ -91,7 +100,7 @@ export function AddSellerForm() {
       setSeller_name('');
       setPlace('');
       setMultiplicationFactor('');
-      setBillNo('');
+      setProductType('');
       setPhoneNumber('');
     } catch {
       setMessage({ type: 'error', text: 'Network error. Please try again.' });
@@ -105,7 +114,7 @@ export function AddSellerForm() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-slate-900">Add Seller</h2>
+      <h2 className="text-xl font-semibold text-slate-900">Add Vendor</h2>
 
       {message && (
         <Notification
@@ -135,14 +144,14 @@ export function AddSellerForm() {
           </label>
           <label className="block">
             <span className="block text-sm font-medium text-slate-700 mb-1.5">
-              Place
+              Vendor place
             </span>
             <input
               type="text"
               value={place}
               onChange={(e) => setPlace(e.target.value)}
               className={inputClass}
-              placeholder="Place"
+              placeholder="Vendor place"
             />
           </label>
           <label className="block">
@@ -159,16 +168,14 @@ export function AddSellerForm() {
               placeholder="0"
             />
           </label>
-          <label className="block">
-            <span className="block text-sm font-medium text-slate-700 mb-1.5">
-              Bill no.
-            </span>
-            <input
-              type="text"
-              value={billNo}
-              onChange={(e) => setBillNo(e.target.value)}
-              className={inputClass}
-              placeholder="Bill number"
+          <label className="block sm:col-span-2">
+            <CustomSelect
+              label="Product type"
+              value={productType}
+              onChange={setProductType}
+              options={PRODUCT_TYPE_OPTIONS}
+              placeholder="Select product types..."
+              multiSelect
             />
           </label>
           <label className="block">
@@ -198,7 +205,7 @@ export function AddSellerForm() {
                 Saving...
               </span>
             ) : (
-              'Add Seller'
+              'Add Vendor'
             )}
           </button>
         </div>

@@ -2,6 +2,7 @@
 
 export interface StepPricingProps {
   sellingPrice: number | '';
+  compare_at: number | '';
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
   onClearError: (key: string) => void;
@@ -9,6 +10,7 @@ export interface StepPricingProps {
 
 export function StepPricing({
   sellingPrice,
+  compare_at,
   errors,
   onFieldChange,
   onClearError,
@@ -35,6 +37,24 @@ export function StepPricing({
         />
         {errors.sellingPrice && <p className="text-red-500 text-xs mt-1">{errors.sellingPrice}</p>}
         <p className="text-xs text-slate-500 mt-1">A single SKU (no hub letter) is generated when you create the product; parent is live in all hubs.</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Compare-at price</label>
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          value={compare_at}
+          onChange={(e) => {
+            onFieldChange('compare_at', e.target.value ? parseFloat(e.target.value) : '');
+            onClearError('compare_at');
+          }}
+          className={`${inputBase} ${errors.compare_at ? inputError : inputNormal}`}
+          placeholder="Optional — e.g. original / list price"
+        />
+        {errors.compare_at && <p className="text-red-500 text-xs mt-1">{errors.compare_at}</p>}
+        <p className="text-xs text-slate-500 mt-1">Shown as the “was” price when listing (optional).</p>
       </div>
     </div>
   );

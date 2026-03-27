@@ -109,7 +109,11 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const order = Number(priorityOrder);
+    // Default priorityOrder to 10 when not provided
+    const order =
+      priorityOrder === undefined || priorityOrder === null
+        ? 10
+        : Number(priorityOrder);
     if (Number.isNaN(order) || order < 0) {
       return NextResponse.json(
         { success: false, message: 'priorityOrder must be a non-negative number' },

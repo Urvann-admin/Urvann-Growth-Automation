@@ -5,7 +5,6 @@ import { FileText, Plus, Search, Calculator } from 'lucide-react';
 import type { PurchaseMaster, PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { Notification } from '@/components/ui/Notification';
 import { ConfirmDialog } from '../../shared';
-import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { PurchaseTable } from './PurchaseTable';
 import { EditPurchaseModal, type EditPurchaseForm } from './EditPurchaseModal';
 import { AddInvoiceModal } from './AddInvoiceModal';
@@ -93,11 +92,10 @@ const emptyForm: EditPurchaseForm = {
   billNumber: '',
   productCode: '',
   productName: '',
-  itemType: '',
   quantity: '',
   amount: '',
   parentSku: '',
-  hub: '',
+  seller: '',
   listing: '',
   revival: '',
   growth: '',
@@ -116,11 +114,10 @@ function toEditForm(p: PurchaseMaster): EditPurchaseForm {
     billNumber: p.billNumber ?? '',
     productCode: p.productCode ?? '',
     productName: p.productName ?? '',
-    itemType: p.itemType ?? '',
     quantity: String(p.quantity ?? ''),
     amount: String(p.amount ?? ''),
     parentSku: p.parentSku ?? '',
-    hub: (p as PurchaseMaster & { hub?: string }).hub ?? '',
+    seller: p.seller ?? '',
     listing: p.type?.listing != null ? String(p.type.listing) : '',
     revival: p.type?.revival != null ? String(p.type.revival) : '',
     growth: p.type?.growth != null ? String(p.type.growth) : '',
@@ -139,12 +136,13 @@ export function ViewInvoices() {
   const [deleteConfirm, setDeleteConfirm] = useState<PurchaseMaster | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [parents, setParents] = useState<ParentFromApi[]>([]);
+  const [sellers, setSellers] = useState<
+    { _id: string; seller_name: string; vendorCode?: string }[]
+  >([]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [overheadModalOpen, setOverheadModalOpen] = useState(false);
-  const [pendingEdits, setPendingEdits] = useState<
-    Record<string, { itemType?: string; type?: PurchaseTypeBreakdown }>
-  >({});
+  const [pendingEdits, setPendingEdits] = useState<Record<string, { type?: PurchaseTypeBreakdown }>>({});
   const [savingPending, setSavingPending] = useState(false);
 
   const fetchPurchases = useCallback(async () => {
@@ -169,10 +167,30 @@ export function ViewInvoices() {
 
   const fetchParents = useCallback(async () => {
     try {
-      const res = await fetch('/api/parent-master?limit=500');
+      const res = await fetch('/api/parent-master?limit=500&baseParentsOnly=true');
       const json = await res.json();
       if (json?.success && Array.isArray(json.data)) {
         setParents(json.data);
+      }
+    } catch {
+      // non-blocking
+    }
+  }, []);
+
+  const fetchSellers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/procurement-seller-master?limit=500');
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.data)) {
+        setSellers(
+          json.data
+            .filter((s: { _id?: unknown }) => s._id != null)
+            .map((s: { _id: string; seller_name?: string; vendorCode?: string }) => ({
+              _id: String(s._id),
+              seller_name: String(s.seller_name ?? '').trim(),
+              vendorCode: s.vendorCode ? String(s.vendorCode).trim() : undefined,
+            }))
+        );
       }
     } catch {
       // non-blocking
@@ -185,7 +203,8 @@ export function ViewInvoices() {
 
   useEffect(() => {
     fetchParents();
-  }, [fetchParents]);
+    fetchSellers();
+  }, [fetchParents, fetchSellers]);
 
   useEffect(() => {
     if (!editing) return;
@@ -211,9 +230,15 @@ export function ViewInvoices() {
       .map((sku) => ({ value: sku, label: sku }));
   }, [parents]);
 
-  const hubOptions = useMemo(
-    () => HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub })),
-    []
+  const sellerOptions = useMemo(
+    () =>
+      sellers.map((s) => ({
+        value: s._id,
+        label: s.vendorCode
+          ? `${s.seller_name} (${s.vendorCode})`
+          : s.seller_name || s._id,
+      })),
+    [sellers]
   );
 
   const billAnalytics = useMemo(() => computeBillAnalytics(purchases), [purchases]);
@@ -228,18 +253,12 @@ export function ViewInvoices() {
       const pe = pendingEdits[id];
       return {
         ...p,
-        itemType: pe?.itemType !== undefined ? pe.itemType : p.itemType,
         type: pe?.type !== undefined ? pe.type : p.type,
       };
     });
   }, [purchases, pendingEdits]);
 
   const pendingCount = Object.keys(pendingEdits).length;
-
-  const handlePendingItemType = useCallback((p: PurchaseMaster, itemType: string) => {
-    const id = String(p._id);
-    setPendingEdits((prev) => ({ ...prev, [id]: { ...prev[id], itemType } }));
-  }, []);
 
   const handlePendingType = useCallback(
     (p: PurchaseMaster, type: PurchaseTypeBreakdown | Record<string, never>) => {
@@ -259,8 +278,7 @@ export function ViewInvoices() {
     try {
       for (const id of Object.keys(pendingEdits)) {
         const pe = pendingEdits[id];
-        const body: { itemType?: string; type?: PurchaseTypeBreakdown } = {};
-        if (pe.itemType !== undefined) body.itemType = pe.itemType;
+        const body: { type?: PurchaseTypeBreakdown } = {};
         if (pe.type !== undefined) body.type = pe.type;
         if (Object.keys(body).length === 0) continue;
         const res = await fetch(`/api/purchase-master/${id}`, {
@@ -298,12 +316,11 @@ export function ViewInvoices() {
       billNumber: editForm.billNumber.trim(),
       productCode: editForm.productCode.trim(),
       productName: editForm.productName.trim() || undefined,
-      itemType: editForm.itemType.trim() || undefined,
       quantity,
       productPrice,
       amount,
       parentSku: editForm.parentSku.trim(),
-      ...(editForm.hub.trim() && { hub: editForm.hub.trim() }),
+      ...(editForm.seller.trim() && { seller: editForm.seller.trim() }),
       type: {
         listing: editForm.listing !== '' ? Number(editForm.listing) : undefined,
         revival: editForm.revival !== '' ? Number(editForm.revival) : undefined,
@@ -491,8 +508,8 @@ export function ViewInvoices() {
             purchases={displayPurchases}
             onEdit={openEdit}
             onDelete={setDeleteConfirm}
-            onPendingItemType={handlePendingItemType}
             onPendingType={handlePendingType}
+            procurementSellers={sellers}
           />
         )}
       </div>
@@ -502,7 +519,7 @@ export function ViewInvoices() {
         editForm={editForm}
         saving={saving}
         parentOptions={parentOptions}
-        hubOptions={hubOptions}
+        sellerOptions={sellerOptions}
         onClose={() => setEditing(null)}
         onSave={handleSaveEdit}
         onChange={setEditForm}

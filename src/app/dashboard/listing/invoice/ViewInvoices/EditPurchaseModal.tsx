@@ -6,11 +6,10 @@ export interface EditPurchaseForm {
   billNumber: string;
   productCode: string;
   productName: string;
-  itemType: string;
   quantity: string;
   amount: string;
   parentSku: string;
-  hub: string;
+  seller: string;
   listing: string;
   revival: string;
   growth: string;
@@ -22,7 +21,7 @@ interface EditPurchaseModalProps {
   editForm: EditPurchaseForm;
   saving: boolean;
   parentOptions: { value: string; label: string }[];
-  hubOptions: { value: string; label: string }[];
+  sellerOptions: { value: string; label: string }[];
   onClose: () => void;
   onSave: () => void;
   onChange: (form: EditPurchaseForm) => void;
@@ -33,7 +32,7 @@ export function EditPurchaseModal({
   editForm,
   saving,
   parentOptions,
-  hubOptions,
+  sellerOptions,
   onClose,
   onSave,
   onChange,
@@ -78,18 +77,6 @@ export function EditPurchaseModal({
                 />
               </label>
               <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Item Type</span>
-                <select
-                  value={editForm.itemType}
-                  onChange={(e) => onChange({ ...editForm, itemType: e.target.value })}
-                  className={inputClass}
-                >
-                  <option value="">Select</option>
-                  <option value="Product">Product</option>
-                  <option value="Consumable">Consumable</option>
-                </select>
-              </label>
-              <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Quantity</span>
                 <input
                   type="number"
@@ -125,14 +112,14 @@ export function EditPurchaseModal({
                 </select>
               </label>
               <label className="block sm:col-span-2">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Hub</span>
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Seller</span>
                 <select
-                  value={editForm.hub}
-                  onChange={(e) => onChange({ ...editForm, hub: e.target.value })}
+                  value={editForm.seller}
+                  onChange={(e) => onChange({ ...editForm, seller: e.target.value })}
                   className={inputClass}
                 >
                   <option value="">Select</option>
-                  {hubOptions.map((opt) => (
+                  {sellerOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>

@@ -14,7 +14,7 @@ const emptyForm: EditSellerForm = {
   seller_name: '',
   place: '',
   multiplicationFactor: '',
-  billNo: '',
+  productType: '',
   phoneNumber: '',
 };
 
@@ -26,7 +26,9 @@ function toEditForm(seller: ProcurementSellerMaster): EditSellerForm {
       seller.multiplicationFactor != null
         ? String(seller.multiplicationFactor)
         : '',
-    billNo: seller.billNo ?? '',
+    productType: Array.isArray(seller.productType)
+      ? seller.productType.join(', ')
+      : '',
     phoneNumber: seller.phoneNumber ?? '',
   };
 }
@@ -91,8 +93,9 @@ export function ViewSellers() {
     return (
       (s.seller_name ?? '').toLowerCase().includes(q) ||
       (s.place ?? '').toLowerCase().includes(q) ||
-      (s.billNo ?? '').toLowerCase().includes(q) ||
-      (s.phoneNumber ?? '').toLowerCase().includes(q)
+      (s.vendorCode ?? '').toLowerCase().includes(q) ||
+      (s.phoneNumber ?? '').toLowerCase().includes(q) ||
+      (Array.isArray(s.productType) && s.productType.some((t) => t.toLowerCase().includes(q)))
     );
   });
 
@@ -112,7 +115,9 @@ export function ViewSellers() {
         editForm.multiplicationFactor.trim() !== ''
           ? Number(editForm.multiplicationFactor)
           : undefined,
-      billNo: editForm.billNo.trim() || undefined,
+      productType: editForm.productType
+        ? editForm.productType.split(',').map((s) => s.trim()).filter(Boolean)
+        : undefined,
       phoneNumber: editForm.phoneNumber.trim() || undefined,
     };
 
@@ -186,7 +191,7 @@ export function ViewSellers() {
           value={search}
           onChange={setSearch}
           onSubmit={handleSearchSubmit}
-          placeholder="Search by seller name, place, bill no., phone..."
+          placeholder="Search by vendor name, place, code, product type, phone..."
           totalCount={filtered.length}
           entityName="Sellers"
         />

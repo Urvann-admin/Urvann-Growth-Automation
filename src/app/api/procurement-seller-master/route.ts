@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       query.$or = [
         { seller_name: regex },
         { place: regex },
-        { billNo: regex },
+        { vendorCode: regex },
         { phoneNumber: regex },
       ];
     }
@@ -66,7 +66,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const created = await ProcurementSellerMasterModel.create(validated.data!);
+    const count = await ProcurementSellerMasterModel.count({});
+    const vendorCode = generateVendorCode(validated.data!.seller_name, count + 1);
+    const created = await ProcurementSellerMasterModel.create({
+      ...validated.data!,
+      vendorCode,
+    });
     return NextResponse.json({ success: true, data: created });
   } catch (error) {
     console.error('[procurement-seller-master] POST error:', error);
@@ -158,12 +163,23 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
+const PRODUCT_TYPE_OPTIONS = ['Product', 'saplings', 'consumables'];
+
+function generateVendorCode(sellerName: string, nextIndex: number): string {
+  const slug = String(sellerName)
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '') || 'Vendor';
+  const num = String(nextIndex).padStart(4, '0');
+  return `${slug}${num}`;
+}
+
 function validateSellerData(data: unknown): {
   success: boolean;
   message?: string;
   data?: Omit<
     ProcurementSellerMaster,
-    '_id' | 'createdAt' | 'updatedAt'
+    '_id' | 'createdAt' | 'updatedAt' | 'vendorCode'
   >;
 } {
   if (!data || typeof data !== 'object') {
@@ -197,13 +213,25 @@ function validateSellerData(data: unknown): {
     };
   }
 
+  let productType: string[] | undefined;
+  if (d.productType != null) {
+    const arr = Array.isArray(d.productType)
+      ? d.productType
+      : [d.productType];
+    const valid = arr
+      .filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+      .map((v) => v.trim())
+      .filter((v) => PRODUCT_TYPE_OPTIONS.includes(v));
+    if (valid.length > 0) productType = valid;
+  }
+
   return {
     success: true,
     data: {
       seller_name: String(d.seller_name).trim(),
       place: d.place ? String(d.place).trim() : undefined,
       multiplicationFactor,
-      billNo: d.billNo ? String(d.billNo).trim() : undefined,
+      productType,
       phoneNumber: d.phoneNumber ? String(d.phoneNumber).trim() : undefined,
     },
   };
@@ -226,8 +254,15 @@ function sanitizeUpdateData(
     const n = Number(data.multiplicationFactor);
     sanitized.multiplicationFactor = Number.isFinite(n) ? n : undefined;
   }
-  if (data.billNo !== undefined) {
-    sanitized.billNo = String(data.billNo).trim() || undefined;
+  if (data.productType !== undefined) {
+    const arr = Array.isArray(data.productType)
+      ? data.productType
+      : [data.productType];
+    const valid = arr
+      .filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+      .map((v) => String(v).trim())
+      .filter((v) => PRODUCT_TYPE_OPTIONS.includes(v));
+    sanitized.productType = valid.length > 0 ? valid : undefined;
   }
   if (data.phoneNumber !== undefined) {
     sanitized.phoneNumber = String(data.phoneNumber).trim() || undefined;

@@ -8,7 +8,8 @@ export class SkuGenerationError extends Error {
   }
 }
 
-function getHubCode(hub: string): string {
+/** Single-letter hub code used on listing SKUs and hub-qualified parent SKUs (first word of hub name). */
+export function getHubCode(hub: string): string {
   const normalized = hub.trim();
   
   const hubMapping = HUB_MAPPINGS.find(
@@ -54,6 +55,64 @@ function getQtyCode(quantity: number): string {
     throw new SkuGenerationError('Quantity must be an integer between 1 and 99');
   }
   return quantity.toString().padStart(2, '0');
+}
+
+/**
+ * Parent listings: persist `parentItems[].parentSku` as hub letter + base parent SKU from Parent Master
+ * (e.g. Whitefield + TES000501 → WTES000501). Always prepends the hub letter even when the base
+ * already starts with that letter (e.g. Thanissandra T + TES000701 → TTES000701).
+ */
+export function appendHubLetterToParentSku(hub: string, canonicalParentSku: string): string {
+  const base = String(canonicalParentSku ?? '').trim();
+  if (!base) return base;
+  const code = getHubCode(hub);
+  return `${code}${base}`;
+}
+
+/**
+ * Maps stored parent listing `parentSku` back to Parent Master / purchase key (strip hub letter when it matches this listing's hub).
+ */
+export function toCanonicalParentSkuForPurchases(
+  listingType: 'parent' | 'child' | undefined,
+  hub: string | undefined,
+  storedParentSku: string
+): string {
+  const s = String(storedParentSku ?? '').trim();
+  /** Parent and child listings may persist hub letter + base SKU on parent lines when `hub` is set. */
+  if ((listingType !== 'parent' && listingType !== 'child') || !hub?.trim()) return s;
+  try {
+    const code = getHubCode(hub);
+    if (s.startsWith(code) && s.length > code.length) return s.slice(code.length);
+  } catch {
+    /* invalid hub */
+  }
+  return s;
+}
+
+/**
+ * For parent-type listings, `parentItems[0].parentSku` may be hub-prefixed. Collect possible
+ * base Parent Master SKUs so `findBySku` succeeds even if stored `hub` mismatches the prefix.
+ */
+export function candidateBaseParentSkusForParentListing(
+  storedParentSku: string,
+  hub?: string
+): string[] {
+  const r = String(storedParentSku ?? '').trim();
+  if (!r) return [];
+  const out: string[] = [];
+  out.push(toCanonicalParentSkuForPurchases('parent', hub, r));
+  out.push(r);
+  for (const mapping of HUB_MAPPINGS) {
+    try {
+      const code = getHubCode(mapping.hub);
+      if (r.startsWith(code) && r.length > code.length) {
+        out.push(r.slice(code.length));
+      }
+    } catch {
+      /* skip invalid mapping */
+    }
+  }
+  return [...new Set(out.filter(Boolean))];
 }
 
 export async function generateSKU(

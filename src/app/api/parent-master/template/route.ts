@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+/** Keep in sync with bulk-import column order and semantics. */
 const TEMPLATE_HEADERS = [
   'plant',
   'otherNames',
@@ -11,11 +12,24 @@ const TEMPLATE_HEADERS = [
   'potType',
   'description',
   'categories',
+  'collection',
   'sellingPrice',
   'seller',
+  'compare_at',
+  'features',
+  'redirects',
+  'inventory_quantity',
+  'image',
 ];
 
-/** One example row. potType: bag or pot. Parent is live in all hubs; SKUs are generated on import. */
+/**
+ * Example row (aligned with headers).
+ * - categories: comma-separated category aliases.
+ * - collection: comma-separated collection Mongo _id, alias, or name (from collection master).
+ * - seller: procurement_seller_master _id.
+ * - features / redirects: same option values as the product form dropdowns.
+ * - image: comma-separated http(s) URLs — each file is downloaded and re-uploaded to S3; stored URLs are S3.
+ */
 const EXAMPLE_ROW = [
   'Rose',
   'Rosa',
@@ -27,8 +41,14 @@ const EXAMPLE_ROW = [
   'pot',
   'Beautiful flowering plant',
   'indoor-plants,outdoor-plants',
+  '',
   '299',
   '',
+  '399',
+  'option-a',
+  'redirect-1',
+  '10',
+  'https://example.com/plant-photo.jpg',
 ];
 
 function escapeCsvField(value: string): string {

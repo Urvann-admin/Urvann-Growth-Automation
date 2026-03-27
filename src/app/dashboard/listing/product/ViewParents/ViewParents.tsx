@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { ParentMaster } from '@/models/parentMaster';
+import type { ParentMaster, ProductType } from '@/models/parentMaster';
 import type { Category } from '@/models/category';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { Notification } from '@/components/ui/Notification';
@@ -17,6 +17,12 @@ interface PaginationInfo {
 }
 
 interface EditParentForm {
+  productType: ProductType;
+  /** Base parent listing SKU (parent rows only) */
+  sku: string;
+  productCode: string;
+  vendorMasterId: string;
+  parentSku: string;
   plant: string;
   otherNames: string;
   variety: string;
@@ -30,6 +36,7 @@ interface EditParentForm {
   redirects: string;
   categories: string[];
   sellingPrice: number | '';
+  compare_at: number | '';
   images: string[];
 }
 
@@ -130,7 +137,34 @@ export function ViewParents() {
     setEditing(parent);
     const sellingPrice = (parent as any).sellingPrice ?? parent.price;
     const potType = (parent as any).potType ?? parent.type;
+    const pt: ProductType =
+      parent.productType === 'growing_product' || parent.productType === 'consumable'
+        ? parent.productType
+        : 'parent';
+    const legacyParentSku = (parent.parentSku ?? '').trim();
+    const skuVal = (parent.sku ?? '').trim();
+    const pcVal = (parent.productCode ?? '').trim();
+    let productCode = '';
+    let parentLink = '';
+    if (pt === 'parent') {
+      productCode = '';
+      parentLink = '';
+    } else if (pcVal) {
+      productCode = pcVal;
+      parentLink = skuVal;
+    } else if (legacyParentSku) {
+      productCode = skuVal;
+      parentLink = legacyParentSku;
+    } else {
+      productCode = skuVal;
+      parentLink = '';
+    }
     setEditForm({
+      productType: pt,
+      sku: pt === 'parent' ? skuVal : '',
+      productCode,
+      vendorMasterId: parent.vendorMasterId ?? '',
+      parentSku: parentLink,
       plant: parent.plant ?? '',
       otherNames: parent.otherNames ?? '',
       variety: parent.variety ?? '',
@@ -144,6 +178,8 @@ export function ViewParents() {
       redirects: (parent as any).redirects ?? '',
       categories: Array.isArray(parent.categories) ? parent.categories : [],
       sellingPrice: sellingPrice ?? '',
+      compare_at:
+        parent.compare_at != null && typeof parent.compare_at === 'number' ? parent.compare_at : '',
       images: Array.isArray(parent.images) ? parent.images : [],
     });
   };
@@ -154,7 +190,16 @@ export function ViewParents() {
     setSaving(true);
     setMessage(null);
     const id = String(editing._id);
+    const isNonParent =
+      editForm.productType === 'growing_product' || editForm.productType === 'consumable';
     const payload = {
+      ...(isNonParent
+        ? {
+            productCode: editForm.productCode.trim() || undefined,
+            sku: editForm.parentSku.trim() || undefined,
+          }
+        : { sku: editForm.sku.trim() || undefined }),
+      vendorMasterId: editForm.vendorMasterId.trim() || undefined,
       plant: editForm.plant.trim(),
       otherNames: editForm.otherNames.trim() || undefined,
       variety: editForm.variety.trim() || undefined,
@@ -168,6 +213,10 @@ export function ViewParents() {
       redirects: editForm.redirects || undefined,
       categories: editForm.categories,
       sellingPrice: editForm.sellingPrice !== '' ? Number(editForm.sellingPrice) : undefined,
+      compare_at:
+        editForm.compare_at !== '' && typeof editForm.compare_at === 'number'
+          ? editForm.compare_at
+          : null,
       images: editForm.images,
     };
 
@@ -226,7 +275,7 @@ export function ViewParents() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-slate-900">View Parent</h2>
+      <h2 className="text-xl font-semibold text-slate-900">View products</h2>
 
       {message && (
         <Notification
@@ -243,11 +292,11 @@ export function ViewParents() {
           onSubmit={handleSearchSubmit}
           placeholder="Search by plant, variety, type..."
           totalCount={pagination.total}
-          entityName="Parent products"
+          entityName="Products"
         />
 
         {loading ? (
-          <div className="py-12 text-center text-slate-500">Loading parent products...</div>
+          <div className="py-12 text-center text-slate-500">Loading products...</div>
         ) : (
           <>
             <ParentTable items={items} onEdit={openEdit} onDelete={setDeleteConfirm} />

@@ -3,21 +3,24 @@ import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
-// Excel format: Bill no., Product Code, Quantity, Price, Amount, Parent (or Parent SKU). No Hub column; user selects Hub after upload. Product name optional; when missing, filled from parent master on save.
-const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'quantity', 'productPrice', 'amount', 'parentSku', 'hub'] as const;
+// Excel format: Bill no., Product Code, Quantity, Price, Amount, Parent, optional Seller (procurement seller: name, vendor code, or Mongo _id). Product name optional.
+const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'quantity', 'productPrice', 'amount', 'parentSku', 'seller'] as const;
 const COLUMN_MAP: Record<string, (typeof EXCEL_COLUMNS)[number]> = {
   'bill number': 'billNumber',
   'bill no': 'billNumber',
   'bill no.': 'billNumber',
   'product code': 'productCode',
   'product name': 'productName',
+  'product quantity': 'quantity',
   'quantity': 'quantity',
   'price': 'productPrice',
   'amount': 'amount',
   'parent': 'parentSku',
   'parent sku': 'parentSku',
   'parent sku.': 'parentSku',
-  'hub': 'hub',
+  'seller': 'seller',
+  'seller id': 'seller',
+  'seller_id': 'seller',
 };
 
 function normalizeHeader(h: string): (typeof EXCEL_COLUMNS)[number] | null {

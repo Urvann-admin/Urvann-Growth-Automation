@@ -3,14 +3,16 @@ import { getCollection } from '@/lib/mongodb';
 
 export interface ProcurementSellerMaster {
   _id?: string | ObjectId;
-  /** Name of the seller */
+  /** Unique vendor code: slug(name) + 4-digit increment */
+  vendorCode?: string;
+  /** Name of the seller/vendor */
   seller_name: string;
-  /** Place / location */
+  /** Vendor place / location */
   place?: string;
   /** Multiplication factor (e.g. for pricing or quantity) */
   multiplicationFactor?: number;
-  /** Bill number */
-  billNo?: string;
+  /** Product types: Product, saplings, consumables */
+  productType?: string[];
   /** Phone number */
   phoneNumber?: string;
   createdAt?: Date;
@@ -98,5 +100,34 @@ export class ProcurementSellerMasterModel {
   static async count(query: Record<string, unknown> = {}) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.countDocuments(query);
+  }
+
+  /**
+   * Resolve CSV/UI input to the canonical procurement seller document _id (string).
+   * Tries: Mongo _id, vendorCode, seller_name (exact), seller_name (case-insensitive).
+   */
+  static async resolveToStoredSellerRef(raw: string): Promise<string | null> {
+    const t = String(raw ?? '').trim();
+    if (!t) return null;
+    const collection = await getCollection(COLLECTION_NAME);
+
+    if (ObjectId.isValid(t)) {
+      const byId = await collection.findOne({ _id: new ObjectId(t) });
+      if (byId?._id) return String(byId._id);
+    }
+
+    const byVendor = await collection.findOne({ vendorCode: t });
+    if (byVendor?._id) return String(byVendor._id);
+
+    const byName = await collection.findOne({ seller_name: t });
+    if (byName?._id) return String(byName._id);
+
+    const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const byNameCi = await collection.findOne({
+      seller_name: { $regex: new RegExp(`^${escaped}$`, 'i') },
+    });
+    if (byNameCi?._id) return String(byNameCi._id);
+
+    return null;
   }
 }

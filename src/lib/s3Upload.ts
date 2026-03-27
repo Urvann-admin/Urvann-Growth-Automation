@@ -21,21 +21,33 @@ export interface S3UploadResult {
   error?: string;
 }
 
-export async function uploadImageToS3(file: File, folder: string = 'products'): Promise<S3UploadResult> {
+function extensionFromContentType(contentType: string): string {
+  const base = (contentType || '').split(';')[0].trim().toLowerCase();
+  if (base === 'image/png') return 'png';
+  if (base === 'image/webp') return 'webp';
+  if (base === 'image/jpeg' || base === 'image/jpg') return 'jpg';
+  return 'jpg';
+}
+
+/** Upload raw image bytes (e.g. after fetching a remote URL). */
+export async function uploadImageBufferToS3(
+  buffer: Uint8Array,
+  contentType: string,
+  folder: string = 'products'
+): Promise<S3UploadResult> {
   try {
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 15);
-    const fileExtension = file.name.split('.').pop() || 'jpg';
-    const key = `${folder}/${timestamp}-${randomString}.${fileExtension}`;
-
-    const buffer = await file.arrayBuffer();
+    const ext = extensionFromContentType(contentType);
+    const key = `${folder}/${timestamp}-${randomString}.${ext}`;
+    const ct = (contentType || 'image/jpeg').split(';')[0].trim() || 'image/jpeg';
 
     await s3.send(
       new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: key,
-        Body: new Uint8Array(buffer),
-        ContentType: file.type,
+        Body: buffer,
+        ContentType: ct,
       })
     );
 
@@ -43,6 +55,19 @@ export async function uploadImageToS3(file: File, folder: string = 'products'): 
       success: true,
       url: getPublicUrl(key),
     };
+  } catch (error) {
+    console.error('S3 buffer upload error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+}
+
+export async function uploadImageToS3(file: File, folder: string = 'products'): Promise<S3UploadResult> {
+  try {
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    return uploadImageBufferToS3(buffer, file.type, folder);
   } catch (error) {
     console.error('S3 upload error:', error);
     return {

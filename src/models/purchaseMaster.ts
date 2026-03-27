@@ -54,8 +54,8 @@ export interface PurchaseMaster {
   listed_quantity?: number;
   /** Parent SKU */
   parentSku: string;
-  /** Hub (e.g. Whitefield, HSR) */
-  hub?: string;
+  /** Procurement seller: MongoDB _id of procurement_seller_master (same as parent master seller field) */
+  seller?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

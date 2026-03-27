@@ -1,6 +1,6 @@
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { PurchaseMasterModel } from '@/models/purchaseMaster';
-import { ParentMasterModel } from '@/models/parentMaster';
+import { ParentMasterModel, isBaseParent } from '@/models/parentMaster';
 
 /**
  * Recompute a parent's typeBreakdown and inventory_quantity from all purchase
@@ -43,7 +43,7 @@ export async function syncParentFromPurchases(parentSku: string): Promise<void> 
   }
 
   const parent = await ParentMasterModel.findBySku(sku);
-  if (!parent?._id) return;
+  if (!parent?._id || !isBaseParent(parent)) return;
 
   // Store exact integer quantities, not fractions
   const typeBreakdownIntegers: PurchaseTypeBreakdown = {

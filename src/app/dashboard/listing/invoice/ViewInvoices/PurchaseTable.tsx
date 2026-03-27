@@ -6,12 +6,6 @@ import { CustomSelect, type SelectOption } from '../../components/CustomSelect';
 
 export type TypeSlug = 'listing' | 'revival' | 'growth' | 'consumers';
 
-const ITEM_TYPE_OPTIONS: SelectOption[] = [
-  { value: '', label: 'Select' },
-  { value: 'Product', label: 'Product' },
-  { value: 'Consumable', label: 'Consumable' },
-];
-
 const TYPE_OPTIONS: SelectOption[] = [
   { value: '', label: 'Select' },
   { value: 'listing', label: 'Listing' },
@@ -24,12 +18,19 @@ function typeSlugToBreakdown(slug: TypeSlug, quantity: number): PurchaseTypeBrea
   return { [slug]: quantity };
 }
 
+interface ProcurementSellerLookup {
+  _id: string;
+  seller_name: string;
+  vendorCode?: string;
+}
+
 interface PurchaseTableProps {
   purchases: PurchaseMaster[];
   onEdit: (p: PurchaseMaster) => void;
   onDelete: (p: PurchaseMaster) => void;
-  onPendingItemType?: (p: PurchaseMaster, itemType: string) => void;
   onPendingType?: (p: PurchaseMaster, type: PurchaseTypeBreakdown | Record<string, never>) => void;
+  /** Resolve stored seller (Mongo id) to label for display */
+  procurementSellers?: ProcurementSellerLookup[];
 }
 
 function getListingDisplay(p: PurchaseMaster): string {
@@ -63,12 +64,26 @@ function formatNum(n: number | undefined): string {
   return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(n));
 }
 
-export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, onPendingType }: PurchaseTableProps) {
-  const handleItemTypeChange = (p: PurchaseMaster, value: string) => {
-    if (!onPendingItemType || !p._id) return;
-    onPendingItemType(p, value);
-  };
+function formatSellerCell(
+  sellerRef: string | undefined,
+  lookup: ProcurementSellerLookup[] | undefined
+): string {
+  if (!sellerRef?.trim()) return '—';
+  const id = sellerRef.trim();
+  const row = lookup?.find((s) => s._id === id);
+  if (row) {
+    return row.vendorCode ? `${row.seller_name} (${row.vendorCode})` : row.seller_name || id;
+  }
+  return id;
+}
 
+export function PurchaseTable({
+  purchases,
+  onEdit,
+  onDelete,
+  onPendingType,
+  procurementSellers,
+}: PurchaseTableProps) {
   const handleTypeChange = (p: PurchaseMaster, slug: TypeSlug | '') => {
     if (!onPendingType || !p._id) return;
     onPendingType(p, slug ? typeSlugToBreakdown(slug as TypeSlug, Number(p.quantity) || 0) : {});
@@ -83,7 +98,7 @@ export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, 
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Bill no.</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Product code</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Product name</th>
-            <th className="text-left py-3 px-3 font-semibold text-slate-700">Item Type</th>
+            <th className="text-left py-3 px-3 font-semibold text-slate-700">Seller</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Qty</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Price</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Amount</th>
@@ -103,18 +118,8 @@ export function PurchaseTable({ purchases, onEdit, onDelete, onPendingItemType, 
               <td className="py-3 px-3 text-slate-900">{p.billNumber ?? '—'}</td>
               <td className="py-3 px-3 text-slate-600">{p.productCode ?? '—'}</td>
               <td className="py-3 px-3 text-slate-600">{p.productName ?? '—'}</td>
-              <td className="py-3 px-3">
-                <div className="min-w-[120px]">
-                  <CustomSelect
-                    value={p.itemType ?? ''}
-                    onChange={(val) => handleItemTypeChange(p, val)}
-                    options={ITEM_TYPE_OPTIONS}
-                    placeholder="Select"
-                    disabled={!onPendingItemType}
-                    searchable={false}
-                    hideIndicatorWhenSelected
-                  />
-                </div>
+              <td className="py-3 px-3 text-slate-600 text-xs">
+                {formatSellerCell(p.seller, procurementSellers)}
               </td>
               <td className="py-3 px-3 text-slate-600">{formatNum(p.quantity)}</td>
               <td className="py-3 px-3 text-slate-600">{formatNum(p.productPrice)}</td>

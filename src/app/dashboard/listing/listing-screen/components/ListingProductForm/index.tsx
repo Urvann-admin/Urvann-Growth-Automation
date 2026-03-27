@@ -87,7 +87,9 @@ export function ListingProductForm({
       try {
         const parents: ParentMaster[] = [];
         for (const sku of formData.parentSkus) {
-          const response = await fetch(`/api/parent-master?search=${encodeURIComponent(sku)}&limit=1`);
+          const response = await fetch(
+            `/api/parent-master?search=${encodeURIComponent(sku)}&limit=1&baseParentsOnly=true`
+          );
           const result = await response.json();
           if (result.success && result.data.length > 0) {
             const parent = result.data.find((p: ParentMaster) => p.sku === sku);

@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
-import type { ListingParentItem } from '@/models/listingProduct';
+import type { ListingParentItem, ListingProductListingType } from '@/models/listingProduct';
+import { appendHubLetterToParentSku } from '@/lib/skuGenerator';
 
 /** Document shape for Inventory_Master.Sku_Master_New (synced from listing products) */
 export interface SkuMasterNewDocument {
@@ -43,14 +44,32 @@ export interface ListingProductSyncInput {
   sku?: string;
   inventory_quantity: number;
   parentItems?: ListingParentItem[];
+  hub?: string;
+  listingType?: ListingProductListingType;
 }
 
 /**
  * Builds a Sku_Master_New document from a listing product.
  * parent_Sku_1..10 and parent_qty_1..10 are filled from parentItems[0..9]; empty slots are null.
+ *
+ * With a hub, each stored parent line is normalized the same way as listing persistence: hub letter
+ * + base Parent Master SKU (idempotent if already prefixed). Child and parent listings both sync
+ * hub-qualified SKUs to inventory.
  */
+function parentSkuForSkuMasterRow(item: ListingParentItem, hub: string | undefined): string {
+  const raw = String(item.parentSku ?? '').trim();
+  if (!raw) return raw;
+  if (!hub?.trim()) return raw;
+  try {
+    return appendHubLetterToParentSku(hub, raw);
+  } catch {
+    return raw;
+  }
+}
+
 function buildSkuMasterNewDoc(input: ListingProductSyncInput): Omit<SkuMasterNewDocument, '_id'> {
   const parentItems = input.parentItems ?? [];
+  const hub = input.hub?.trim() || undefined;
   const doc: Omit<SkuMasterNewDocument, '_id'> = {
     SKU: String(input.sku ?? '').trim(),
     Inventory: typeof input.inventory_quantity === 'number' ? input.inventory_quantity : 0,
@@ -81,7 +100,7 @@ function buildSkuMasterNewDoc(input: ListingProductSyncInput): Omit<SkuMasterNew
     const skuKey = `parent_Sku_${i + 1}` as keyof typeof doc;
     const qtyKey = `parent_qty_${i + 1}` as keyof typeof doc;
     if (item && item.parentSku != null && item.parentSku !== '') {
-      (doc as Record<string, unknown>)[skuKey] = String(item.parentSku).trim();
+      (doc as Record<string, unknown>)[skuKey] = parentSkuForSkuMasterRow(item, hub);
       (doc as Record<string, unknown>)[qtyKey] =
         typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 0;
     }

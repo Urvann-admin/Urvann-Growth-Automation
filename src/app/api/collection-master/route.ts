@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
+    const limit = Math.min(500, Math.max(1, parseInt(searchParams.get('limit') || '20', 10)));
     const search = searchParams.get('search')?.trim() || '';
 
     const query: Record<string, unknown> = {};
@@ -142,7 +142,9 @@ export async function POST(request: NextRequest) {
         ? body.filters
         : [];
 
-    const alias = slug(name);
+    const aliasInput =
+      typeof body.alias === 'string' ? body.alias.trim() : '';
+    const alias = aliasInput ? slug(aliasInput) : slug(name);
 
     // ── Save to MongoDB first (with a placeholder storeHippoId) ────────────
     const mongoDoc: Record<string, unknown> = {

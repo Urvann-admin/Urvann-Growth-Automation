@@ -59,7 +59,7 @@ export const initialFormData: CategoryFormData = {
   type: 'Manual',
   ruleOperator: 'AND',
   ruleItems: [{ field: 'Plant', value: '' }],
-  priorityOrder: '0',
+  priorityOrder: '10', // Default applied in backend; not shown in form
   substores: [],
 };
 

@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { Download, Upload, X } from 'lucide-react';
+import { slug } from '@/lib/utils';
 import { HUB_MAPPINGS, getSubstoresByHub, getSelectedHubsFromSubstores } from '@/shared/constants/hubs';
 import { Notification } from '@/components/ui/Notification';
 import { CustomSelect } from '../../components/CustomSelect';
@@ -39,6 +40,7 @@ const initialRuleCondition: CollectionRuleCondition = {
 
 export function CollectionMasterForm() {
   const [name, setName] = useState('');
+  const [alias, setAlias] = useState('');
   const [type, setType] = useState<'manual' | 'dynamic'>('manual');
   const [publish, setPublish] = useState<number>(0);
   const [description, setDescription] = useState('');
@@ -55,6 +57,13 @@ export function CollectionMasterForm() {
     text: string;
   } | null>(null);
   const bulkImportInputRef = useRef<HTMLInputElement>(null);
+  const aliasManuallyEditedRef = useRef(false);
+
+  // Auto-fill alias from name (lowercase slug) when name changes, unless user has edited alias
+  useEffect(() => {
+    if (aliasManuallyEditedRef.current) return;
+    setAlias(name.trim() ? slug(name) : '');
+  }, [name]);
 
   const hubOptions = HUB_MAPPINGS.map((m) => ({
     value: m.hub,
@@ -100,6 +109,7 @@ export function CollectionMasterForm() {
     try {
       const body: Record<string, unknown> = {
         name: trimmedName,
+        alias: alias.trim() || undefined,
         type,
         publish,
         description: description.trim() || undefined,
@@ -139,6 +149,8 @@ export function CollectionMasterForm() {
       }
       setMessage({ type: 'success', text: 'Collection created successfully.' });
       setName('');
+      setAlias('');
+      aliasManuallyEditedRef.current = false;
       setType('manual');
       setPublish(0);
       setDescription('');
@@ -277,6 +289,21 @@ export function CollectionMasterForm() {
                 className={inputClass}
                 placeholder="Collection name"
                 required
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="block text-sm font-medium text-slate-700 mb-1.5">
+                Alias
+              </span>
+              <input
+                type="text"
+                value={alias}
+                onChange={(e) => {
+                  aliasManuallyEditedRef.current = true;
+                  setAlias(e.target.value);
+                }}
+                className={inputClass}
+                placeholder="Auto-filled from name (editable)"
               />
             </label>
             <div className="block">

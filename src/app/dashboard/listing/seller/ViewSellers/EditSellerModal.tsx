@@ -1,12 +1,19 @@
 'use client';
 
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
+import { CustomSelect } from '../../components/CustomSelect';
+
+const PRODUCT_TYPE_OPTIONS = [
+  { value: 'Product', label: 'Product' },
+  { value: 'saplings', label: 'Saplings' },
+  { value: 'consumables', label: 'Consumables' },
+];
 
 export interface EditSellerForm {
   seller_name: string;
   place: string;
   multiplicationFactor: string;
-  billNo: string;
+  productType: string;
   phoneNumber: string;
 }
 
@@ -56,7 +63,7 @@ export function EditSellerModal({
               </label>
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Place
+                  Vendor place
                 </span>
                 <input
                   type="text"
@@ -65,7 +72,7 @@ export function EditSellerModal({
                     onChange({ ...editForm, place: e.target.value })
                   }
                   className={inputClass}
-                  placeholder="Place"
+                  placeholder="Vendor place"
                 />
               </label>
               <label className="block">
@@ -87,18 +94,14 @@ export function EditSellerModal({
                   placeholder="0"
                 />
               </label>
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">
-                  Bill no.
-                </span>
-                <input
-                  type="text"
-                  value={editForm.billNo}
-                  onChange={(e) =>
-                    onChange({ ...editForm, billNo: e.target.value })
-                  }
-                  className={inputClass}
-                  placeholder="Bill number"
+              <label className="block sm:col-span-2">
+                <CustomSelect
+                  label="Product type"
+                  value={editForm.productType}
+                  onChange={(v) => onChange({ ...editForm, productType: v })}
+                  options={PRODUCT_TYPE_OPTIONS}
+                  placeholder="Select product types..."
+                  multiSelect
                 />
               </label>
               <label className="block">

@@ -109,7 +109,7 @@ export function validateListingProductForm(
   // Business logic validation
   if (formData.price < 0) {
     errors.price = 'Calculated price cannot be negative';
-  } else if (formData.price === 0 && selectedParents.length > 0) {
+  } else if (!isParentListing && formData.price === 0 && selectedParents.length > 0) {
     errors.price = 'Price calculation resulted in zero - check parent prices';
   }
 

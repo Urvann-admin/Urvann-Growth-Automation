@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ParentMasterModel } from '@/models/parentMaster';
-import type { ParentMaster } from '@/models/parentMaster';
+import { ParentMasterModel, isBaseParent, type ParentMaster } from '@/models/parentMaster';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
 import { deleteMultipleImagesFromS3 } from '@/lib/s3Upload';
-import { serializeParent } from '../route';
+import { serializeParent, sanitizeParentMasterUpdate } from '../route';
 
 export async function GET(
   request: NextRequest,
@@ -53,16 +52,65 @@ export async function PUT(
       );
     }
 
-    const updateData = { ...body } as Record<string, unknown>;
-    delete updateData._id;
-    delete updateData.createdAt;
-    delete updateData.compare_price;
-    delete updateData.sort_order;
-    delete updateData.publish;
-    delete updateData.inventoryQuantity;
-    delete updateData.inventory_management;
-    delete updateData.inventory_management_level;
-    delete updateData.inventory_allow_out_of_stock;
+    const raw = { ...body } as Record<string, unknown>;
+    delete raw._id;
+    delete raw.createdAt;
+    delete raw.compare_price;
+    delete raw.sort_order;
+    delete raw.publish;
+    delete raw.inventoryQuantity;
+    delete raw.inventory_management;
+    delete raw.inventory_management_level;
+    delete raw.inventory_allow_out_of_stock;
+
+    let updateData = sanitizeParentMasterUpdate(raw);
+
+    if (updateData.productCode !== undefined) {
+      const pcTrim = String(updateData.productCode).trim();
+      const other = await ParentMasterModel.findByProductCode(pcTrim);
+      if (other && String(other._id) !== String(id)) {
+        return NextResponse.json(
+          { success: false, message: 'A product with this product code already exists' },
+          { status: 409 }
+        );
+      }
+      updateData = { ...updateData, productCode: pcTrim || undefined };
+    }
+
+    if (updateData.sku !== undefined) {
+      const skuTrim = String(updateData.sku).trim();
+      const doc = await ParentMasterModel.findById(id);
+      const resolved = skuTrim ? await ParentMasterModel.findBySku(skuTrim) : null;
+      if (doc && isBaseParent(doc)) {
+        if (resolved && isBaseParent(resolved) && String(resolved._id) !== String(id)) {
+          return NextResponse.json(
+            { success: false, message: 'A base parent with this SKU already exists' },
+            { status: 409 }
+          );
+        }
+      } else if (doc && skuTrim && !isBaseParent(doc)) {
+        if (!resolved || !isBaseParent(resolved)) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: 'sku must be the SKU of an existing base (parent) product',
+            },
+            { status: 400 }
+          );
+        }
+      }
+      updateData = { ...updateData, sku: skuTrim };
+    }
+
+    if (updateData.parentSku !== undefined && updateData.parentSku) {
+      const linked = await ParentMasterModel.findBySku(String(updateData.parentSku).trim());
+      if (!linked || !isBaseParent(linked)) {
+        return NextResponse.json(
+          { success: false, message: 'parentSku must be the SKU of an existing base (parent) product' },
+          { status: 400 }
+        );
+      }
+    }
 
     const existing = await ParentMasterModel.findById(id);
     const updatingSeller = updateData.seller !== undefined;
@@ -73,7 +121,7 @@ export async function PUT(
       if (sellerId && priceVal != null && !isNaN(priceVal)) {
         const procurementSeller = await ProcurementSellerMasterModel.findById(sellerId);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
-        updateData.listing_price = priceVal * factor;
+        updateData = { ...updateData, listing_price: priceVal * factor };
       }
     }
 

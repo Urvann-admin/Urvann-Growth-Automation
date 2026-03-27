@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Trash2,
   AlertCircle,
@@ -17,12 +18,22 @@ import {
   Save,
   Loader2,
   Image as ImageIcon,
+  ChevronRight,
 } from 'lucide-react';
-import type { ProductRow, ParentItemRow, SelectedImage } from './types';
+import type {
+  ProductRow,
+  ParentItemRow,
+  SelectedImage,
+  ListingScreenMode,
+  ListingSourcedParentOption,
+} from './types';
 import type { ParentMaster } from '@/models/parentMaster';
-import type { ListingSection } from '@/models/listingProduct';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { CustomSelect } from '@/app/dashboard/listing/components/CustomSelect';
+import {
+  canonicalBaseSkuForParentItem,
+  passedHubsFromChecks,
+} from '@/lib/childListingHubSku';
 
 const TAG_OPTIONS = [
   { value: 'Bestseller', label: 'Bestseller' },
@@ -41,8 +52,172 @@ const STEPS = [
   { id: 'review', label: 'Review', icon: ClipboardCheck },
 ] as const;
 
+const REVIEW_STEP_INDEX = STEPS.length - 1;
+
 const proxyImageUrl = (url: string) =>
   url.startsWith('/') ? url : `/api/image-collection/proxy?url=${encodeURIComponent(url)}`;
+
+/** Plain text for read-only preview of rich-text description */
+function stripHtmlToPlain(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+type ParentListingDetailLine = { label: string; value: string; fullWidth?: boolean };
+
+function buildParentListingReadOnlyLines(
+  baseParent: ParentMaster,
+  row: ProductRow,
+  collectionNames: Record<string, string>,
+  sellerOptions: { value: string; label: string }[]
+): ParentListingDetailLine[] {
+  const lines: ParentListingDetailLine[] = [];
+
+  const add = (label: string, value: unknown, fullWidth?: boolean) => {
+    if (value == null) return;
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) return;
+      lines.push({ label, value: String(value), fullWidth });
+      return;
+    }
+    if (typeof value === 'string') {
+      const t = value.trim();
+      if (!t) return;
+      lines.push({ label, value: t, fullWidth });
+      return;
+    }
+    if (Array.isArray(value)) {
+      const t = value.map((x) => String(x).trim()).filter(Boolean);
+      if (t.length === 0) return;
+      lines.push({ label, value: t.join(', '), fullWidth });
+    }
+  };
+
+  const addMoney = (label: string, n: unknown) => {
+    if (n == null || n === '') return;
+    const v = Number(n);
+    if (!Number.isFinite(v)) return;
+    lines.push({ label, value: `₹${v.toLocaleString()}` });
+  };
+
+  const fn = baseParent.finalName?.trim();
+  const pl = baseParent.plant?.trim();
+  if (fn && fn !== pl) add('Final name', baseParent.finalName);
+  add('Plant', baseParent.plant);
+  add('Other names', baseParent.otherNames);
+  add('Variety', baseParent.variety);
+  add('Colour', baseParent.colour);
+  if (baseParent.height != null && Number.isFinite(Number(baseParent.height))) {
+    lines.push({ label: 'Height', value: `${baseParent.height} ft` });
+  }
+  if (baseParent.size != null && Number.isFinite(Number(baseParent.size))) {
+    lines.push({ label: 'Size', value: `${baseParent.size}" pot` });
+  }
+  add('Pot type', baseParent.potType || baseParent.type);
+  add('Moss stick', baseParent.mossStick);
+
+  const sku = baseParent.sku || row.parentSkus[0];
+  add('SKU', sku);
+  if (baseParent.productCode && baseParent.productCode !== sku) {
+    add('Product code', baseParent.productCode);
+  }
+
+  addMoney('Selling price (Parent Master)', baseParent.sellingPrice ?? baseParent.price);
+  addMoney('Listing price (Parent Master)', baseParent.listing_price);
+  if (typeof baseParent.compare_at === 'number' && Number.isFinite(baseParent.compare_at)) {
+    lines.push({ label: 'Compare-at (Parent Master)', value: `₹${baseParent.compare_at.toLocaleString()}` });
+  }
+  lines.push({ label: 'Price on this listing', value: `₹${row.price.toLocaleString()}` });
+  if (row.compare_at_price != null && Number.isFinite(Number(row.compare_at_price))) {
+    lines.push({
+      label: 'Compare-at (this listing)',
+      value: `₹${Number(row.compare_at_price).toLocaleString()}`,
+    });
+  }
+  if (row.tags?.length) add('Tags (this listing)', row.tags);
+  lines.push({ label: 'Stock (Parent Master)', value: String(baseParent.inventory_quantity ?? 0) });
+
+  const tb = baseParent.typeBreakdown;
+  if (tb && typeof tb === 'object') {
+    const bits: string[] = [];
+    if (tb.listing != null) bits.push(`Listing ${tb.listing}`);
+    if (tb.revival != null) bits.push(`Revival ${tb.revival}`);
+    if (tb.growth != null) bits.push(`Growth ${tb.growth}`);
+    if (tb.consumers != null) bits.push(`Consumers ${tb.consumers}`);
+    if (bits.length) lines.push({ label: 'Purchase type split', value: bits.join(' · ') });
+  }
+
+  add('Categories', baseParent.categories?.length ? baseParent.categories : row.categories);
+  const collectionIdList = baseParent.collectionIds?.length
+    ? baseParent.collectionIds.map((id) => String(id))
+    : row.collectionIds;
+  if (collectionIdList?.length) {
+    const resolved = collectionIdList.map((id) => collectionNames[id] ?? id);
+    lines.push({ label: 'Collections', value: resolved.join(', ') });
+  }
+
+  add('Features', baseParent.features);
+  add('Redirects', baseParent.redirects);
+  add('Hub (on parent)', baseParent.hub);
+  add('Substores', baseParent.substores);
+
+  const pt = baseParent.productType;
+  if (pt && pt !== 'parent') add('Product type', pt);
+
+  const imgCount = baseParent.images?.length ?? 0;
+  lines.push({ label: 'Photos on parent', value: String(imgCount) });
+
+  if (baseParent.seller) {
+    const sid = String(baseParent.seller);
+    const sellerLabel = sellerOptions.find((o) => o.value === sid)?.label ?? sid;
+    lines.push({ label: 'Default seller (parent)', value: sellerLabel });
+  }
+  if (baseParent.vendorMasterId) add('Vendor master ID', baseParent.vendorMasterId);
+  if (baseParent.storeHippoId) add('StoreHippo ID', String(baseParent.storeHippoId));
+  if (baseParent.product_id && baseParent.product_id !== baseParent.storeHippoId) {
+    add('Product ID', String(baseParent.product_id));
+  }
+
+  const descSource = (baseParent.description || row.description || '').trim();
+  if (descSource) {
+    const plain = stripHtmlToPlain(descSource);
+    if (plain) lines.push({ label: 'Description', value: plain, fullWidth: true });
+  }
+
+  return lines;
+}
+
+function resolveDisplayImage(
+  row: ProductRow,
+  index: number,
+  listingMode: ListingScreenMode,
+  allImages: SelectedImage[]
+): SelectedImage | null {
+  const tagged = row.taggedImages?.[0];
+  if (tagged) return tagged;
+  const masterUrl = row.parentItems[0]?.parent?.images?.[0];
+  if (masterUrl && typeof masterUrl === 'string') {
+    return {
+      url: masterUrl,
+      filename: 'Parent master',
+      collectionId: '',
+      isTagged: false,
+      size: 0,
+      uploadedAt: new Date(0),
+      serial: row.serial,
+    };
+  }
+  if (listingMode === 'child' && allImages[index]) {
+    return allImages[index] ?? null;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Shared sub-components
@@ -267,12 +442,12 @@ function HubMultiSelect({
 function ParentSearchSelect({
   value,
   onChange,
-  availableParents,
+  parentOptions,
   error,
 }: {
   value: string;
   onChange: (parentSku: string, parent?: ParentMaster) => void;
-  availableParents: ParentMaster[];
+  parentOptions: ListingSourcedParentOption[];
   error?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -281,17 +456,21 @@ function ParentSearchSelect({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const selectedParent = availableParents.find((p) => p.sku === value);
+  const selectedOption = parentOptions.find((o) => o.parent.sku === value);
+  const selectedParent = selectedOption?.parent;
 
   const filteredParents = useMemo(() => {
-    if (!searchQuery.trim()) return availableParents;
+    if (!searchQuery.trim()) return parentOptions;
     const query = searchQuery.toLowerCase();
-    return availableParents.filter(
-      (parent) =>
-        parent.plant.toLowerCase().includes(query) ||
-        (parent.sku && parent.sku.toLowerCase().includes(query))
-    );
-  }, [availableParents, searchQuery]);
+    return parentOptions.filter((opt) => {
+      const p = opt.parent;
+      return (
+        p.plant.toLowerCase().includes(query) ||
+        (p.sku && p.sku.toLowerCase().includes(query)) ||
+        (opt.listingSku && opt.listingSku.toLowerCase().includes(query))
+      );
+    });
+  }, [parentOptions, searchQuery]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -357,13 +536,15 @@ function ParentSearchSelect({
         </div>
         <div className="max-h-64 overflow-y-auto">
           {filteredParents.length === 0 ? (
-            <div className="p-3 text-sm text-slate-500 text-center">No parents found</div>
+            <div className="p-3 text-sm text-slate-500 text-center">No listed products found</div>
           ) : (
-            filteredParents.map((parent) => {
+            filteredParents.map((opt) => {
+              const parent = opt.parent;
               const isSelected = parent.sku === value;
+              const lineSku = opt.listingSku || parent.sku || '';
               return (
                 <button
-                  key={parent.sku}
+                  key={opt.listingId}
                   type="button"
                   onClick={() => {
                     onChange(parent.sku || '', parent);
@@ -377,7 +558,7 @@ function ParentSearchSelect({
                   <div>
                     <div className="font-medium">{parent.plant}</div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      {parent.sku} · ₹{parent.price} · {parent.inventory_quantity ?? 0} available
+                      {lineSku} · ₹{parent.price ?? 0} · {parent.inventory_quantity ?? 0} available
                     </div>
                   </div>
                   {isSelected && <Check className="w-4 h-4 text-[#E6007A] shrink-0" />}
@@ -442,15 +623,22 @@ function ReviewField({
 
 interface ProductTableProps {
   productRows: ProductRow[];
-  availableParents: ParentMaster[];
+  availableParents: ListingSourcedParentOption[];
   onUpdateRow: (rowId: string, updates: Partial<ProductRow>) => void;
   onRemoveRow: (rowId: string) => void;
-  section: ListingSection;
   isLoading: boolean;
   isSaving: boolean;
   allImages: SelectedImage[];
   onAssignImage: (rowId: string, image: SelectedImage) => void;
   onSaveRow: (rowId: string) => void;
+  listingMode: ListingScreenMode;
+  parentListPage: number;
+  parentListTotalPages: number;
+  parentListLoading: boolean;
+  onLoadMoreParents: () => void | Promise<void>;
+  onUploadParentPhoto: (rowId: string, file: File) => void | Promise<void>;
+  /** Child listing: global hub filter (parent picker options match this hub). */
+  childContextHub?: string;
 }
 
 export function ProductTable({
@@ -458,12 +646,18 @@ export function ProductTable({
   availableParents,
   onUpdateRow,
   onRemoveRow,
-  section,
   isLoading,
   isSaving,
   allImages,
   onAssignImage,
   onSaveRow,
+  listingMode,
+  parentListPage,
+  parentListTotalPages,
+  parentListLoading,
+  onLoadMoreParents,
+  onUploadParentPhoto,
+  childContextHub = '',
 }: ProductTableProps) {
   const hubOptions = useMemo(
     () => HUB_MAPPINGS.map((mapping) => ({ value: mapping.hub, label: mapping.hub })),
@@ -510,6 +704,14 @@ export function ProductTable({
     [collectionNames]
   );
 
+  const parentScrollRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: listingMode === 'parent' ? productRows.length : 0,
+    getScrollElement: () => parentScrollRef.current,
+    estimateSize: () => 720,
+    overscan: 2,
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -526,8 +728,81 @@ export function ProductTable({
             <Package className="w-8 h-8 text-pink-400" />
           </div>
           <h3 className="text-sm font-semibold text-slate-800 mb-1">No products yet</h3>
-          <p className="text-sm text-slate-500">Click &ldquo;+ Add Row&rdquo; to start creating products</p>
+          <p className="text-sm text-slate-500">
+            {listingMode === 'parent'
+              ? 'No base parents found in Parent Master, or still loading.'
+              : 'No unlisted photos in completed image collections. Add images under Image collections, or use “+ Add Row” for a blank line.'}
+          </p>
         </div>
+      </div>
+    );
+  }
+
+  const cardProps = {
+    allImages,
+    onAssignImage,
+    availableParents,
+    onUpdateRow,
+    onRemoveRow,
+    onSaveRow,
+    isSaving,
+    hubOptions,
+    sellerOptions,
+    collectionOptions,
+    collectionNames,
+    listingMode,
+    onUploadParentPhoto,
+    childContextHub,
+  };
+
+  if (listingMode === 'parent') {
+    const virtualItems = rowVirtualizer.getVirtualItems();
+    return (
+      <div className="space-y-4">
+        <div
+          ref={parentScrollRef}
+          className="h-[min(72vh,calc(100dvh-220px))] overflow-auto pr-1 rounded-xl"
+        >
+          <div
+            className="relative w-full"
+            style={{ height: rowVirtualizer.getTotalSize() }}
+          >
+            {virtualItems.map((vi) => {
+              const row = productRows[vi.index];
+              if (!row) return null;
+              const displayImage = resolveDisplayImage(row, vi.index, listingMode, allImages);
+              return (
+                <div
+                  key={row.id}
+                  data-index={vi.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="absolute left-0 top-0 w-full pb-6"
+                  style={{ transform: `translateY(${vi.start}px)` }}
+                >
+                  <ProductCard
+                    row={row}
+                    index={vi.index}
+                    displayImage={displayImage}
+                    {...cardProps}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {parentListPage < parentListTotalPages && (
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={() => void onLoadMoreParents()}
+              disabled={parentListLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {parentListLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              Load more parents
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -535,25 +810,14 @@ export function ProductTable({
   return (
     <div className="space-y-6">
       {productRows.map((row, index) => {
-        const displayImage = row.taggedImages?.[0] ?? allImages[index] ?? null;
+        const displayImage = resolveDisplayImage(row, index, listingMode, allImages);
         return (
           <ProductCard
             key={row.id}
             row={row}
             index={index}
             displayImage={displayImage}
-            allImages={allImages}
-            onAssignImage={onAssignImage}
-            availableParents={availableParents}
-            onUpdateRow={onUpdateRow}
-            onRemoveRow={onRemoveRow}
-            onSaveRow={onSaveRow}
-            section={section}
-            isSaving={isSaving}
-            hubOptions={hubOptions}
-            sellerOptions={sellerOptions}
-            collectionOptions={collectionOptions}
-            collectionNames={collectionNames}
+            {...cardProps}
           />
         );
       })}
@@ -571,16 +835,18 @@ interface ProductCardProps {
   displayImage: SelectedImage | null;
   allImages: SelectedImage[];
   onAssignImage: (rowId: string, image: SelectedImage) => void;
-  availableParents: ParentMaster[];
+  availableParents: ListingSourcedParentOption[];
   onUpdateRow: (rowId: string, updates: Partial<ProductRow>) => void;
   onRemoveRow: (rowId: string) => void;
   onSaveRow: (rowId: string) => void;
-  section: ListingSection;
   isSaving: boolean;
   hubOptions: { value: string; label: string }[];
   sellerOptions: { value: string; label: string }[];
   collectionOptions: { value: string; label: string }[];
   collectionNames: Record<string, string>;
+  listingMode: ListingScreenMode;
+  onUploadParentPhoto: (rowId: string, file: File) => void | Promise<void>;
+  childContextHub?: string;
 }
 
 function ProductCard({
@@ -593,15 +859,23 @@ function ProductCard({
   onUpdateRow,
   onRemoveRow,
   onSaveRow,
-  section,
   isSaving,
   hubOptions,
   sellerOptions,
   collectionOptions,
   collectionNames,
+  listingMode,
+  onUploadParentPhoto,
+  childContextHub = '',
 }: ProductCardProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showImagePicker, setShowImagePicker] = useState(false);
+
+  const parentPickerOptions = useMemo(() => {
+    const h = childContextHub?.trim();
+    if (!h) return [];
+    return availableParents.filter((o) => o.listingHub === h);
+  }, [availableParents, childContextHub]);
 
   // Per-card SKU preview for all selected hubs
   const selectedHubs = row.hubs ?? [];
@@ -628,7 +902,7 @@ function ProductCard({
   // Per-card rule-based categories (loaded when reaching review step)
   const [ruleBasedCategories, setRuleBasedCategories] = useState<string[]>([]);
   useEffect(() => {
-    if (currentStep !== 3 || !row.plant?.trim()) return;
+    if (currentStep !== REVIEW_STEP_INDEX || !row.plant?.trim()) return;
     const payload = {
       plant: row.plant.trim(),
       variety: row.variety?.trim() || undefined,
@@ -694,13 +968,39 @@ function ProductCard({
 
   const stepComplete = (step: number): boolean => {
     switch (step) {
-      case 0: return row.parentItems.length > 0 && row.parentItems.some((i) => i.parentSku);
-      case 1: return row.price > 0;
-      case 2: return (row.hubs ?? []).length > 0;
-      case 3: return row.isValid;
-      default: return false;
+      case 0:
+        return row.parentItems.length > 0 && row.parentItems.some((i) => i.parentSku);
+      case 1:
+        return listingMode === 'parent' ? row.price >= 0 : row.price > 0;
+      case 2:
+        return (row.hubs ?? []).length > 0;
+      case 3:
+        return row.isValid;
+      default:
+        return false;
     }
   };
+
+  const baseParent = row.parentItems[0]?.parent;
+  const typeBreakdown = baseParent?.typeBreakdown;
+  const pendingListingQty = Number(typeBreakdown?.listing ?? 0) || 0;
+  // Parent listing only: child listing flow should not show parent-inventory receipt banner
+  const showPendingListingBanner = listingMode === 'parent' && pendingListingQty > 0;
+  const listingReceivedRaw = baseParent?.updatedAt;
+  const listingReceivedDateLabel = (() => {
+    if (listingReceivedRaw == null) return null;
+    const d = new Date(listingReceivedRaw as string | number | Date);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  })();
+  const hasListingPhoto = !!(
+    row.taggedImages?.[0] ||
+    (baseParent?.images && baseParent.images.length > 0)
+  );
 
   // --- Parent item handlers ---
 
@@ -721,7 +1021,7 @@ function ProductCard({
 
   const handleAddParentItem = () => {
     const newItem: ParentItemRow = {
-      id: `parent_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: `pi_extra_${row.id}_${row.parentItems.length}`,
       parentSku: '',
       quantity: 1,
       unitPrice: 0,
@@ -735,7 +1035,7 @@ function ProductCard({
 
   const handleSelectFirstParent = (parent: ParentMaster) => {
     const newItem: ParentItemRow = {
-      id: `parent_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      id: `pi_${String(parent._id ?? parent.sku ?? 'p')}`,
       parentSku: parent.sku || '',
       quantity: 1,
       unitPrice: parent.price || 0,
@@ -839,19 +1139,50 @@ function ProductCard({
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className="flex min-h-[280px]">
+      {showPendingListingBanner && (
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3 border-b-2 border-amber-400/70 bg-gradient-to-r from-amber-50 via-amber-100 to-amber-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+          <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg bg-amber-400 text-amber-950 shadow-md ring-2 ring-amber-500/40">
+            Pending listing
+          </span>
+          <p className="text-sm text-amber-950 font-medium leading-snug min-w-0">
+            Inventory of{' '}
+            <span className="font-semibold tabular-nums">{pendingListingQty.toLocaleString()}</span>
+            {listingReceivedDateLabel ? (
+              <>
+                {' '}
+                received on <span className="font-semibold">{listingReceivedDateLabel}</span>.
+              </>
+            ) : (
+              <> is available to list.</>
+            )}
+          </p>
+        </div>
+      )}
+      <div
+        className={`flex ${listingMode === 'parent' ? 'items-start' : 'min-h-[280px]'}`}
+      >
         {/* Left: Photo */}
-        <div className="w-52 shrink-0 border-r border-slate-100 bg-slate-50 p-4 flex flex-col">
+        <div
+          className={`shrink-0 border-r border-slate-100 bg-slate-50 flex flex-col ${
+            listingMode === 'parent' ? 'w-[7.5rem] p-2' : 'w-52 p-4'
+          }`}
+        >
           <div
-            className="aspect-square w-full rounded-xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center cursor-pointer relative group"
+            className={`overflow-hidden border border-slate-200 bg-white flex items-center justify-center cursor-pointer relative group ${
+              listingMode === 'parent'
+                ? 'w-24 h-24 mx-auto rounded-lg shrink-0'
+                : 'aspect-square w-full rounded-xl'
+            }`}
             onClick={() => setShowImagePicker((v) => !v)}
           >
             {displayImage ? (
               <img src={proxyImageUrl(displayImage.url)} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div className="text-slate-300 flex flex-col items-center gap-1">
+              <div className="text-slate-300 flex flex-col items-center gap-1 px-2 text-center">
                 <ImageIcon className="w-10 h-10" />
-                <span className="text-[10px]">No photo</span>
+                <span className="text-[10px]">
+                  {listingMode === 'parent' ? 'Photo missing' : 'No photo'}
+                </span>
               </div>
             )}
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
@@ -860,9 +1191,35 @@ function ProductCard({
               </span>
             </div>
           </div>
-          <p className="text-[11px] text-slate-500 text-center mt-2 truncate">
-            #{index + 1}{displayImage ? ` · ${displayImage.filename}` : ''}
+          <p
+            className={`text-slate-500 text-center truncate ${
+              listingMode === 'parent' ? 'text-[9px] mt-1.5 leading-tight px-0.5' : 'text-[11px] mt-2'
+            }`}
+            title={displayImage?.filename}
+          >
+            #{index + 1}
+            {listingMode === 'child' && displayImage ? ` · ${displayImage.filename}` : ''}
           </p>
+          {listingMode === 'parent' && !hasListingPhoto && (
+            <p className="text-[9px] text-amber-800 text-center mt-1 leading-tight px-0.5">
+              Photo required — tap image or upload.
+            </p>
+          )}
+          {listingMode === 'parent' && baseParent?._id && (
+            <label className="mt-1.5 flex items-center justify-center w-full py-1 text-[10px] font-medium rounded-md border border-pink-200 text-[#E6007A] bg-pink-50 hover:bg-pink-100 cursor-pointer transition-colors">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void onUploadParentPhoto(row.id, f);
+                  e.target.value = '';
+                }}
+              />
+              Upload to parent
+            </label>
+          )}
 
           {/* Mini image picker */}
           {showImagePicker && allImages.length > 0 && (
@@ -892,8 +1249,95 @@ function ProductCard({
           )}
         </div>
 
-        {/* Right: Steps */}
+        {/* Right: multi-step wizard (child) or single-step list (parent) */}
         <div className="flex-1 min-w-0 flex flex-col">
+          {listingMode === 'parent' ? (
+            <div className="flex-1 min-h-0 overflow-auto px-3 py-2.5 sm:px-4 sm:py-3">
+              <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 mb-2">
+                <h3 className="text-sm font-semibold text-slate-900 leading-tight">List this parent</h3>
+                <p className="text-[10px] text-slate-500 leading-tight max-w-[16rem] sm:max-w-none sm:text-right">
+                  One SKU per hub · data from Parent Master
+                </p>
+              </div>
+
+              {baseParent && (
+                <div className="mb-3 rounded-lg border border-slate-200/90 bg-slate-50/90 p-2.5 sm:p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                    Parent Master (read-only)
+                  </p>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-5 gap-y-2 text-[11px]">
+                    {buildParentListingReadOnlyLines(baseParent, row, collectionNames, sellerOptions).map(
+                      (line, idx) => (
+                        <div
+                          key={`${line.label}-${idx}`}
+                          className={line.fullWidth ? 'sm:col-span-2 xl:col-span-3 min-w-0' : 'min-w-0'}
+                        >
+                          <dt className="text-slate-500 leading-tight">{line.label}</dt>
+                          <dd
+                            className={
+                              line.fullWidth
+                                ? 'mt-0.5 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-slate-800 leading-snug font-normal'
+                                : 'font-medium text-slate-900 break-words leading-snug'
+                            }
+                          >
+                            {line.value}
+                          </dd>
+                        </div>
+                      )
+                    )}
+                  </dl>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_minmax(0,14rem)] gap-2 sm:gap-3 items-start w-full">
+                <HubMultiSelect
+                  selectedHubs={row.hubs ?? []}
+                  hubOptions={hubOptions}
+                  onChange={(hubs) => onUpdateRow(row.id, { hubs })}
+                  error={row.validationErrors.hub}
+                />
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-500 mb-1">Seller</label>
+                  <CustomSelect
+                    value={row.seller ?? ''}
+                    onChange={(value) => onUpdateRow(row.id, { seller: value })}
+                    options={sellerOptions}
+                    placeholder="Seller"
+                    searchable={true}
+                  />
+                </div>
+              </div>
+
+              {(() => {
+                const otherErrs = Object.entries(row.validationErrors).filter(([k]) => k !== 'hub');
+                if (otherErrs.length === 0 || row.isValid) return null;
+                return (
+                  <p className="mt-2 text-[11px] text-red-600 leading-snug">
+                    {otherErrs.map(([, msg]) => msg).filter(Boolean).join(' · ')}
+                  </p>
+                );
+              })()}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSaveRow(row.id)}
+                  disabled={isSaving || row.isSaved}
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm hover:shadow"
+                  style={{ backgroundColor: '#E6007A' }}
+                >
+                  {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Package className="w-3.5 h-3.5" />}
+                  {row.isSaved ? 'Listed' : 'List product'}
+                </button>
+                {row.isSaved && (
+                  <span className="text-[11px] text-green-600 inline-flex items-center gap-1">
+                    <Check className="w-3 h-3 shrink-0" /> Done for selected hubs
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
           {/* Stepper */}
           <div className="px-4 py-3 border-b border-slate-100 shrink-0">
             <div className="flex items-center">
@@ -938,13 +1382,27 @@ function ProductCard({
 
           {/* Step content */}
           <div className="flex-1 min-h-0 overflow-auto p-5">
-            {/* Step 0: Parent Selection */}
+            {/* Step 0: Parent */}
             {currentStep === 0 && (
               <div className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-800">Parent Products</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Add parent products and specify quantities</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Choose a base parent from an existing listing on{' '}
+                    <span className="font-medium text-[#E6007A]">{childContextHub || '—'}</span>
+                    ; then set quantities
+                  </p>
                 </div>
+                {row.validationErrors.contextHub && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                    {row.validationErrors.contextHub}
+                  </p>
+                )}
+                {childContextHub && parentPickerOptions.length === 0 && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    No listing products found for this hub in this section.
+                  </p>
+                )}
                 <div className="space-y-3">
                   {(row.parentItems.length === 0
                     ? [{ id: 'empty_0', parentSku: '', quantity: 1, unitPrice: 0 } as ParentItemRow]
@@ -959,7 +1417,7 @@ function ProductCard({
                               ? handleSelectFirstParent(parent)
                               : handleParentChange(itemIdx, parentSku, parent)
                           }
-                          availableParents={availableParents}
+                          parentOptions={parentPickerOptions}
                           error={itemIdx === 0 ? row.validationErrors.parent : undefined}
                         />
                       </div>
@@ -1137,6 +1595,94 @@ function ProductCard({
                   )}
                 </div>
 
+                {(row.hubs ?? []).length > 0 &&
+                  row.parentItems.some((i) => canonicalBaseSkuForParentItem(i)) && (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-slate-700">Parent SKU in listings (per hub)</p>
+                      <p className="text-[11px] text-slate-500">
+                        Each cell checks that{' '}
+                        <span className="font-mono text-slate-700">[hub letter]+[base parent SKU]</span> exists on a
+                        listing product in this section. Only hubs that pass for every parent are saved.
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-[11px] border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-left text-slate-500">
+                              <th className="py-1.5 pr-2 font-medium">Hub</th>
+                              {row.parentItems
+                                .filter((i) => canonicalBaseSkuForParentItem(i))
+                                .map((item) => (
+                                  <th key={item.id} className="py-1.5 px-1 font-medium whitespace-nowrap">
+                                    {canonicalBaseSkuForParentItem(item)}
+                                  </th>
+                                ))}
+                              <th className="py-1.5 pl-2 font-medium">Hub OK</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(row.hubs ?? []).map((hub) => {
+                              const canonicals = row.parentItems
+                                .map((i) => canonicalBaseSkuForParentItem(i))
+                                .filter(Boolean);
+                              const allOk = canonicals.every((c) =>
+                                row.hubParentChecks?.some((ch) => ch.hub === hub && ch.canonicalParentSku === c && ch.ok)
+                              );
+                              return (
+                                <tr key={hub} className="border-b border-slate-100 last:border-0">
+                                  <td className="py-1.5 pr-2 font-medium text-slate-800">{hub}</td>
+                                  {row.parentItems
+                                    .filter((i) => canonicalBaseSkuForParentItem(i))
+                                    .map((item) => {
+                                      const c = canonicalBaseSkuForParentItem(item);
+                                      const cell = row.hubParentChecks?.find(
+                                        (ch) => ch.hub === hub && ch.canonicalParentSku === c
+                                      );
+                                      const ok = cell?.ok === true;
+                                      return (
+                                        <td key={item.id} className="py-1.5 px-1 align-top">
+                                          <div className="flex flex-col gap-0.5">
+                                            <span className="font-mono text-slate-700">{cell?.expectedSku ?? '—'}</span>
+                                            <span
+                                              className={
+                                                ok ? 'text-green-600 font-medium' : 'text-red-600 font-medium'
+                                              }
+                                            >
+                                              {ok ? 'Pass' : 'Fail'}
+                                            </span>
+                                          </div>
+                                        </td>
+                                      );
+                                    })}
+                                  <td className="py-1.5 pl-2">
+                                    {allOk ? (
+                                      <Check className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                      <AlertCircle className="w-4 h-4 text-red-500" />
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      {(() => {
+                        const passed = passedHubsFromChecks(
+                          row.hubs ?? [],
+                          row.parentItems,
+                          row.hubParentChecks ?? []
+                        );
+                        const skipped = (row.hubs ?? []).filter((h) => !passed.includes(h));
+                        if (skipped.length === 0) return null;
+                        return (
+                          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
+                            Will not save for: {skipped.join(', ')} until all parent lines pass for that hub.
+                          </p>
+                        );
+                      })()}
+                    </div>
+                  )}
+
                 <div className="grid grid-cols-2 gap-3">
                   <ReviewField label="Product Name" value={getFinalName()} />
                   <ReviewField
@@ -1295,39 +1841,75 @@ function ProductCard({
               </div>
             )}
           </div>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-slate-200 px-4 py-3 flex items-center justify-between bg-slate-50/50">
-        <button
-          onClick={() => onRemoveRow(row.id)}
-          className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          Remove
-        </button>
-
-        <div className="flex items-center gap-2">
-          {STEPS.map((_, idx) => (
+      {/* Footer: child keeps remove + step dots + save; parent uses single List button above */}
+      <div
+        className={`border-t border-slate-200 px-4 flex items-center justify-between bg-slate-50/50 ${
+          listingMode === 'parent' ? 'py-1.5' : 'py-3'
+        }`}
+      >
+        {listingMode === 'child' ? (
+          <>
             <button
-              key={idx}
-              onClick={() => setCurrentStep(idx)}
-              className={`w-2 h-2 rounded-full transition-all ${idx === currentStep ? 'w-5' : 'bg-slate-300 hover:bg-slate-400'}`}
-              style={idx === currentStep ? { backgroundColor: '#E6007A' } : undefined}
-            />
-          ))}
-        </div>
+              onClick={() => onRemoveRow(row.id)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Remove
+            </button>
 
-        <button
-          onClick={() => onSaveRow(row.id)}
-          disabled={isSaving}
-          className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-          style={{ backgroundColor: '#E6007A' }}
-        >
-          {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-          Save
-        </button>
+            <div className="flex items-center gap-2">
+              {STEPS.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setCurrentStep(idx)}
+                  className={`w-2 h-2 rounded-full transition-all ${idx === currentStep ? 'w-5' : 'bg-slate-300 hover:bg-slate-400'}`}
+                  style={idx === currentStep ? { backgroundColor: '#E6007A' } : undefined}
+                />
+              ))}
+            </div>
+
+            {currentStep < REVIEW_STEP_INDEX ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (currentStep === 0 && childContextHub?.trim()) {
+                    const h = childContextHub.trim();
+                    const merged = [...new Set([h, ...(row.hubs ?? [])])];
+                    onUpdateRow(row.id, { hubs: merged });
+                  }
+                  setCurrentStep((s) => Math.min(REVIEW_STEP_INDEX, s + 1));
+                }}
+                disabled={!stepComplete(currentStep)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                style={{ backgroundColor: '#E6007A' }}
+              >
+                Next
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onSaveRow(row.id)}
+                disabled={isSaving || row.isSaved || !row.isValid}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                style={{ backgroundColor: '#E6007A' }}
+              >
+                {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Save
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="text-[10px] text-slate-500 w-full text-center leading-tight">
+            From Parent Master — <span className="font-medium text-slate-600">List product</span> above
+          </p>
+        )}
       </div>
     </div>
   );

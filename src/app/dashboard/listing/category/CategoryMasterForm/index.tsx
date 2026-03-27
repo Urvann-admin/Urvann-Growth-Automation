@@ -163,9 +163,6 @@ function validateStep(stepId: StepId, data: CategoryFormData): Record<string, st
       }
       break;
     case 'publish-substores': {
-      const order = parseFloat(data.priorityOrder);
-      if (Number.isNaN(order) || order < 0)
-        err.priorityOrder = 'Enter a valid priority (0 or more, up to one decimal place)';
       if (data.substores.length === 0) err.substores = 'Select at least one hub';
       break;
     }
@@ -201,6 +198,20 @@ export function CategoryMasterForm() {
   const currentStep = STEPS[stepIndex];
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === STEPS.length - 1;
+
+  // Full validation for Review step: used to show errors on review and disable save
+  const allValidationErrors = useMemo(() => {
+    const all: Record<string, string> = {};
+    STEPS.forEach((s) => Object.assign(all, validateStep(s.id, data)));
+    return all;
+  }, [data]);
+  const hasValidationErrors = Object.keys(allValidationErrors).length > 0;
+
+  // Step is completed only when its validation passes (not just visited)
+  const stepCompleted = useMemo(
+    () => STEPS.map((step) => Object.keys(validateStep(step.id, data)).length === 0),
+    [data]
+  );
 
   const fetchCategories = useCallback(() => {
     fetch('/api/categories')
@@ -320,7 +331,7 @@ export function CategoryMasterForm() {
     });
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors);
-      setStepIndex(0);
+      // Stay on Review step so user sees red boundaries and can fix or jump to step
       return;
     }
     setSubmitting(true);
@@ -345,7 +356,7 @@ export function CategoryMasterForm() {
       publish: data.publish,
       type: data.type,
       rule,
-      priorityOrder: Math.max(0, Math.round((parseFloat(data.priorityOrder) || 0) * 10) / 10),
+      // priorityOrder is set to 10 by default in the backend
       substores: data.substores,
     };
 
@@ -446,33 +457,47 @@ export function CategoryMasterForm() {
           />
           <div className="relative flex justify-between px-2">
             {STEPS.map((step, i) => {
-              const isCompleted = i < stepIndex;
+              // Only mark a step completed if user has moved past it AND its validation passes
+              const isPast = i < stepIndex;
+              const isCompleted = isPast && stepCompleted[i];
+              const hasStepError = isPast && !stepCompleted[i];
               const isCurrent = i === stepIndex;
               return (
-                <div
+                <button
                   key={step.id}
-                  className="flex flex-col items-center flex-1 min-w-0"
+                  type="button"
+                  onClick={() => setStepIndex(i)}
+                  className="flex flex-col items-center flex-1 min-w-0 cursor-pointer bg-transparent border-0 p-0 text-left"
+                  aria-current={isCurrent ? 'step' : undefined}
+                  aria-label={`Go to step ${i + 1}: ${step.label}`}
                 >
                   <div
                     className={`flex items-center justify-center rounded-full w-10 h-10 text-sm font-semibold shrink-0 transition-colors ${
                       isCompleted
                         ? 'bg-emerald-500 text-white'
+                        : hasStepError
+                        ? 'bg-red-500 text-white'
                         : isCurrent
                         ? 'bg-emerald-500 text-white ring-2 ring-emerald-300 ring-offset-2'
                         : 'bg-slate-200 text-slate-500'
                     }`}
-                    aria-current={isCurrent ? 'step' : undefined}
                   >
                     {isCompleted ? <Check className="w-5 h-5" strokeWidth={2.5} /> : i + 1}
                   </div>
                   <span
-                    className={`text-xs font-medium mt-1.5 text-center truncate w-full max-w-[4.5rem] sm:max-w-none ${
-                      isCurrent ? 'text-slate-900' : isCompleted ? 'text-slate-700' : 'text-slate-400'
+                    className={`text-xs font-medium mt-1.5 text-center truncate w-full max-w-[4.5rem] sm:max-w-none block ${
+                      isCurrent
+                        ? 'text-slate-900'
+                        : isCompleted
+                        ? 'text-slate-700'
+                        : hasStepError
+                        ? 'text-red-500'
+                        : 'text-slate-400'
                     }`}
                   >
                     {step.label}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -534,11 +559,7 @@ export function CategoryMasterForm() {
           <div className="space-y-6">
             <StepPublishAndOrder
               publish={data.publish}
-              priorityOrder={data.priorityOrder}
-              errorPriorityOrder={errors.priorityOrder}
               onPublishChange={(v) => setField('publish', v)}
-              onPriorityOrderChange={(v) => setField('priorityOrder', v)}
-              onClearError={clearError}
             />
             <StepSubstores
               substores={data.substores}
@@ -558,7 +579,9 @@ export function CategoryMasterForm() {
             />
           </div>
         )}
-        {currentStep.id === 'review' && <StepReview data={data} />}
+        {currentStep.id === 'review' && (
+          <StepReview data={data} errors={hasValidationErrors ? allValidationErrors : undefined} />
+        )}
       </div>
 
       {message && (
@@ -591,7 +614,7 @@ export function CategoryMasterForm() {
           {isLast ? (
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || hasValidationErrors}
               onClick={() => { createButtonClickedRef.current = true; }}
               className="min-w-[160px] rounded-lg bg-[#E6007A] hover:bg-pink-600 px-5 py-2.5 text-sm font-medium text-white shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:pointer-events-none"
             >

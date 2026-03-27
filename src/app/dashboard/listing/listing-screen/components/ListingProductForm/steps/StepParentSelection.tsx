@@ -136,6 +136,7 @@ function SingleParentSelection({
           limit: '200',
           sortField: 'plant',
           sortOrder: 'asc',
+          baseParentsOnly: 'true',
         });
         const response = await fetch(`/api/parent-master?${params}`);
         const result = await response.json();

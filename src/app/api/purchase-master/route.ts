@@ -5,7 +5,12 @@ import {
   type PurchaseOverhead,
   type PurchaseTypeBreakdown,
 } from '@/models/purchaseMaster';
-import { ParentMasterModel } from '@/models/parentMaster';
+import { ParentMasterModel, isBaseParent } from '@/models/parentMaster';
+import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
+import {
+  recalculateListingChildrenInventory,
+  sendInventoryWebhook,
+} from './recalculateChildren';
 
 /** Add type breakdown amounts (existing + incoming); used to accumulate on parent when same SKU appears in multiple bills. Stores exact integer quantities. */
 function addTypeBreakdown(
@@ -41,6 +46,7 @@ export async function GET(request: NextRequest) {
         { productCode: regex },
         { productName: regex },
         { parentSku: regex },
+        { seller: regex },
       ];
     }
 
@@ -81,14 +87,22 @@ async function validateParentSkusExist(
 ): Promise<{ success: true } | { success: false; message: string }> {
   const uniqueSkus = [...new Set(items.map((i) => String(i.parentSku || '').trim()).filter(Boolean))];
   const missing: string[] = [];
+  const notBase: string[] = [];
   for (const sku of uniqueSkus) {
     const parent = await ParentMasterModel.findBySku(sku);
     if (!parent) missing.push(sku);
+    else if (!isBaseParent(parent)) notBase.push(sku);
   }
   if (missing.length > 0) {
     return {
       success: false,
-      message: `The following parent SKUs are not in our system. Please add them in parent master first: ${missing.join(', ')}`,
+      message: `The following parent SKUs are not in our system. Please add them in product master first: ${missing.join(', ')}`,
+    };
+  }
+  if (notBase.length > 0) {
+    return {
+      success: false,
+      message: `Purchase rows must use a base (parent) plant SKU. These are not base parents: ${notBase.join(', ')}`,
     };
   }
   return { success: true };
@@ -117,6 +131,22 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
+      for (const item of validated) {
+        const raw = item.seller?.trim();
+        if (raw) {
+          const resolved = await ProcurementSellerMasterModel.resolveToStoredSellerRef(raw);
+          if (!resolved) {
+            return NextResponse.json(
+              {
+                success: false,
+                message: `Unknown seller: "${raw}". Use procurement seller _id, vendor code, or seller name as in Procurement seller master.`,
+              },
+              { status: 400 }
+            );
+          }
+          item.seller = resolved;
+        }
+      }
       const result = await PurchaseMasterModel.createMany(validated);
       // Update parent master typeBreakdown and inventory_quantity (when type is Listing)
       const skuToType = new Map<string, PurchaseTypeBreakdown>();
@@ -136,7 +166,7 @@ export async function POST(request: NextRequest) {
       for (const [sku, incomingType] of skuToType) {
         try {
           const parent = await ParentMasterModel.findBySku(sku);
-          if (parent?._id) {
+          if (parent?._id && isBaseParent(parent)) {
             const newTypeBreakdown = addTypeBreakdown(parent.typeBreakdown, incomingType);
             const listingQtyDelta = skuToListingQuantity.get(sku) ?? 0;
             const newInventory =
@@ -152,6 +182,23 @@ export async function POST(request: NextRequest) {
           console.warn('[purchase-master] Failed to update parent typeBreakdown for sku:', sku, err);
         }
       }
+
+      // Recalculate listing children inventory and send webhook for updated parents
+      const updatedParentSkus = Array.from(skuToType.keys());
+      if (updatedParentSkus.length > 0) {
+        recalculateListingChildrenInventory(updatedParentSkus).catch((err) =>
+          console.error('[purchase-master] Child inventory recalculation failed:', err)
+        );
+        for (const [sku, ] of skuToListingQuantity) {
+          const delta = skuToListingQuantity.get(sku) ?? 0;
+          if (delta > 0) {
+            sendInventoryWebhook(sku, delta).catch((err) =>
+              console.error('[purchase-master] Webhook failed for', sku, err)
+            );
+          }
+        }
+      }
+
       return NextResponse.json({
         success: true,
         message: `Created ${result.insertedCount} purchase record(s)`,
@@ -173,13 +220,28 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const created = await PurchaseMasterModel.create(validated.data!);
+    const single = validated.data!;
+    const rawSeller = single.seller?.trim();
+    if (rawSeller) {
+      const resolved = await ProcurementSellerMasterModel.resolveToStoredSellerRef(rawSeller);
+      if (!resolved) {
+        return NextResponse.json(
+          {
+            success: false,
+            message: `Unknown seller: "${rawSeller}". Use procurement seller _id, vendor code, or seller name as in Procurement seller master.`,
+          },
+          { status: 400 }
+        );
+      }
+      single.seller = resolved;
+    }
+    const created = await PurchaseMasterModel.create(single);
     const data = validated.data!;
     const sku = String(data.parentSku || '').trim();
     if (sku && (data.type?.listing != null || data.type?.revival != null || data.type?.growth != null || data.type?.consumers != null)) {
       try {
         const parent = await ParentMasterModel.findBySku(sku);
-        if (parent?._id) {
+        if (parent?._id && isBaseParent(parent)) {
           const newTypeBreakdown = addTypeBreakdown(parent.typeBreakdown, data.type);
           const listingQty = data.type?.listing != null && data.type.listing > 0 ? (Number(data.quantity) || 0) : 0;
           const newInventory =
@@ -191,6 +253,19 @@ export async function POST(request: NextRequest) {
         }
       } catch (err) {
         console.warn('[purchase-master] Failed to update parent typeBreakdown for sku:', sku, err);
+      }
+
+      // Recalculate listing children inventory and send webhook
+      if (sku) {
+        recalculateListingChildrenInventory([sku]).catch((err) =>
+          console.error('[purchase-master] Child inventory recalculation failed:', err)
+        );
+        const listingDelta = data.type?.listing != null && data.type.listing > 0 ? (Number(data.quantity) || 0) : 0;
+        if (listingDelta > 0) {
+          sendInventoryWebhook(sku, listingDelta).catch((err) =>
+            console.error('[purchase-master] Webhook failed for', sku, err)
+          );
+        }
       }
     }
     return NextResponse.json({ success: true, data: created });
@@ -243,9 +318,9 @@ function validatePurchaseItem(data: unknown): {
     return { success: false, message: 'parentSku is required' };
   }
 
-  const hub =
-    d.hub != null && typeof d.hub === 'string' && String(d.hub).trim()
-      ? String(d.hub).trim()
+  const seller =
+    d.seller != null && typeof d.seller === 'string' && String(d.seller).trim()
+      ? String(d.seller).trim()
       : undefined;
 
   const q = Math.floor(quantity);
@@ -267,7 +342,7 @@ function validatePurchaseItem(data: unknown): {
       amount: amt,
       type,
       parentSku: String(d.parentSku).trim(),
-      ...(hub && { hub }),
+      ...(seller && { seller }),
       ...(overhead && { overhead }),
     },
   };

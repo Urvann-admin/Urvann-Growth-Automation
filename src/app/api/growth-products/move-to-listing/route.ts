@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PurchaseMasterModel } from '@/models/purchaseMaster';
-import { ParentMasterModel } from '@/models/parentMaster';
+import { ParentMasterModel, isBaseParent } from '@/models/parentMaster';
 import { syncParentFromPurchases } from '@/app/api/purchase-master/syncParent';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 
@@ -25,9 +25,9 @@ export async function POST(request: NextRequest) {
     }
 
     const parent = await ParentMasterModel.findBySku(parentSku);
-    if (!parent?._id) {
+    if (!parent?._id || !isBaseParent(parent)) {
       return NextResponse.json(
-        { success: false, message: 'Parent product not found' },
+        { success: false, message: 'Base parent product not found for this SKU' },
         { status: 404 }
       );
     }

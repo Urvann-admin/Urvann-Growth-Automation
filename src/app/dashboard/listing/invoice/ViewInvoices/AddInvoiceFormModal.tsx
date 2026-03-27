@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 import { Notification } from '@/components/ui/Notification';
-import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 
 interface ParentFromApi {
   _id: string;
@@ -19,7 +18,7 @@ export interface AddInvoiceFormState {
   quantity: string;
   amount: string;
   parentSku: string;
-  hub: string;
+  seller: string;
   listing: string;
   revival: string;
   growth: string;
@@ -33,7 +32,7 @@ const emptyForm: AddInvoiceFormState = {
   quantity: '',
   amount: '',
   parentSku: '',
-  hub: '',
+  seller: '',
   listing: '',
   revival: '',
   growth: '',
@@ -49,12 +48,15 @@ interface AddInvoiceFormModalProps {
 export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFormModalProps) {
   const [form, setForm] = useState<AddInvoiceFormState>(emptyForm);
   const [parents, setParents] = useState<ParentFromApi[]>([]);
+  const [sellers, setSellers] = useState<
+    { _id: string; seller_name: string; vendorCode?: string }[]
+  >([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const fetchParents = useCallback(async () => {
     try {
-      const res = await fetch('/api/parent-master?limit=500');
+      const res = await fetch('/api/parent-master?limit=500&baseParentsOnly=true');
       const json = await res.json();
       if (json?.success && Array.isArray(json.data)) {
         setParents(json.data);
@@ -75,18 +77,45 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       .map((sku) => ({ value: sku, label: sku }));
   }, [parents]);
 
-  const hubOptions = useMemo(
-    () => HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub })),
-    []
+  const sellerOptions = useMemo(
+    () =>
+      sellers.map((s) => ({
+        value: s._id,
+        label: s.vendorCode
+          ? `${s.seller_name} (${s.vendorCode})`
+          : s.seller_name || s._id,
+      })),
+    [sellers]
   );
+
+  const fetchSellers = useCallback(async () => {
+    try {
+      const res = await fetch('/api/procurement-seller-master?limit=500');
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.data)) {
+        setSellers(
+          json.data
+            .filter((s: { _id?: unknown }) => s._id != null)
+            .map((s: { _id: string; seller_name?: string; vendorCode?: string }) => ({
+              _id: String(s._id),
+              seller_name: String(s.seller_name ?? '').trim(),
+              vendorCode: s.vendorCode ? String(s.vendorCode).trim() : undefined,
+            }))
+        );
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to load procurement sellers' });
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
       setForm(emptyForm);
       setMessage(null);
       fetchParents();
+      fetchSellers();
     }
-  }, [isOpen, fetchParents]);
+  }, [isOpen, fetchParents, fetchSellers]);
 
   const handleSubmit = async () => {
     setMessage(null);
@@ -129,7 +158,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       productPrice,
       amount,
       parentSku: form.parentSku.trim(),
-      ...(form.hub.trim() && { hub: form.hub.trim() }),
+      ...(form.seller.trim() && { seller: form.seller.trim() }),
       type: {
         ...(listing > 0 && { listing }),
         ...(revival > 0 && { revival }),
@@ -257,14 +286,14 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
                 </select>
               </label>
               <label className="block sm:col-span-2">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Hub</span>
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Seller</span>
                 <select
-                  value={form.hub}
-                  onChange={(e) => setForm((f) => ({ ...f, hub: e.target.value }))}
+                  value={form.seller}
+                  onChange={(e) => setForm((f) => ({ ...f, seller: e.target.value }))}
                   className={inputClass}
                 >
                   <option value="">Select</option>
-                  {hubOptions.map((opt) => (
+                  {sellerOptions.map((opt) => (
                     <option key={opt.value} value={opt.value}>
                       {opt.label}
                     </option>

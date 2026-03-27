@@ -39,6 +39,7 @@ export function ParentSelector({
           limit: '100',
           sortField: 'plant',
           sortOrder: 'asc',
+          baseParentsOnly: 'true',
         });
 
         if (searchTerm) {

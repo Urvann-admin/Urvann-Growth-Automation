@@ -61,6 +61,7 @@ export function StepReview({ data, finalName, categories, selectedImageCount = 0
         <Row label="Redirects" value={data.redirects || '—'} />
         <Row label="Final name" value={finalName || '—'} />
         <Row label="Selling Price" value={data.sellingPrice !== '' ? data.sellingPrice : '—'} />
+        <Row label="Compare-at price" value={data.compare_at !== '' ? data.compare_at : '—'} />
         <Row label="Listing price" value={listingPrice != null ? listingPrice : '—'} />
         <Row
           label="Categories"
