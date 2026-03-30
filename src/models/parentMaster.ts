@@ -67,7 +67,9 @@ export interface ParentMaster {
   storeHippoId?: string;
   /** StoreHippo product _id - same as storeHippoId, canonical field for API mapping */
   product_id?: string;
-  /** Procurement seller _id from procurement_seller_master */
+  /** Procurement seller _id from procurement_seller_master (Vendor Master) */
+  vendor_id?: string;
+  /** Storefront seller: `seller_id` from sellerMaster (resolved from hub substores when creating hub-scoped parents) */
   seller?: string;
   /**
    * Hub name when this row is scoped to one hub (SKU from `generateParentSKU(hub, plant)`).

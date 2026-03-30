@@ -55,10 +55,10 @@ export function StepPricingInventory({
     label: hub.hub,
   }));
 
-  const sellerOptions = sellers.map(seller => ({
-    value: seller._id,
-    label: seller.seller_name,
-  }));
+  const sellerOptions = sellers.map((seller: { seller_id?: string; seller_name?: string }) => ({
+    value: String(seller.seller_id ?? '').trim(),
+    label: seller.seller_name || String(seller.seller_id ?? ''),
+  })).filter((o) => o.value);
 
   const quantity = isParentListing ? 1 : (Number(formData.quantity) || 0);
   const hasValidQuantity = quantity > 0;

@@ -113,7 +113,7 @@ export interface ListingProduct {
   section: ListingSection;
   /** Listing status */
   status: ListingStatus;
-  /** Procurement seller _id from procurement_seller_master */
+  /** Storefront seller: `seller_id` from sellerMaster (aligned with hub / parent row) */
   seller?: string;
   /** Hub name (e.g. Whitefield, HSR) for inventory/listing scope */
   hub?: string;

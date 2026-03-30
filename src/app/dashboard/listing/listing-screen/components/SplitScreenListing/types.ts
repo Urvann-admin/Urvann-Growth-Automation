@@ -82,6 +82,8 @@ export interface ProductRow {
   /** One or more hubs this product will be listed on. Each hub gets its own document + unique SKU on save. */
   hubs: string[];
   seller: string;
+  /** Child listing: `sellerMaster.seller_id` per hub (payload uses this when saving multiple hubs). */
+  sellersByHub?: Record<string, string>;
   categories: string[];
   collectionIds: string[];
   /** Generated listing name (computed from plant, variety, etc.); set after save */
@@ -150,6 +152,8 @@ export interface ListingState {
    * Parent picker options are limited to listing products for this hub.
    */
   childContextHub: string;
+  /** Child listing: `sellerMaster.seller_id` for `childContextHub` (after /api/sellers/by-hub resolves). */
+  childHubSellerId: string;
   availableParents: ListingSourcedParentOption[];
   selectedParent: ParentMaster | null;
   viewMode: ViewMode;

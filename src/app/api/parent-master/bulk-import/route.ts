@@ -444,10 +444,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const isMongoId = (s: string) => /^[a-f\d]{24}$/i.test(String(s).trim());
     for (let i = 0; i < validatedItems.length; i++) {
       const item = validatedItems[i];
-      if (item.seller && item.sellingPrice != null && item.sellingPrice >= 0) {
-        const procurementSeller = await ProcurementSellerMasterModel.findById(item.seller);
+      const vid =
+        item.vendor_id?.trim() ||
+        (isMongoId(String(item.seller ?? '')) ? String(item.seller).trim() : '');
+      if (vid && item.sellingPrice != null && item.sellingPrice >= 0) {
+        const procurementSeller = await ProcurementSellerMasterModel.findById(vid);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
         (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.sellingPrice) * factor;
       }

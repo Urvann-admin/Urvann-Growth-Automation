@@ -12,12 +12,29 @@ import {
 } from '@/app/api/listing-product/listingProductCore';
 import { syncListingProductToSkuMasterNew } from '@/models/skuMasterNew';
 import { ImageCollectionModel } from '@/app/dashboard/listing/image/models/imageCollection';
+import { SellerMasterModel } from '@/models/sellerMaster';
+
+function isMongoObjectIdString(s: string): boolean {
+  return /^[a-f\d]{24}$/i.test(String(s).trim());
+}
 
 /** Serialize parent for API response: add `price` for backward compatibility (sellingPrice → price) */
 export function serializeParent(doc: ParentMaster | null): (ParentMaster & { price?: number }) | null {
   if (!doc) return null;
   const price = doc.sellingPrice ?? doc.price;
-  return { ...doc, price };
+  const rawSeller = doc.seller != null ? String(doc.seller).trim() : '';
+  const rawVendor = doc.vendor_id != null ? String(doc.vendor_id).trim() : '';
+  const vendor_id =
+    rawVendor || (isMongoObjectIdString(rawSeller) ? rawSeller : undefined) || undefined;
+  let seller: string | undefined;
+  if (rawVendor) {
+    seller = isMongoObjectIdString(rawSeller) ? undefined : rawSeller || undefined;
+  } else if (isMongoObjectIdString(rawSeller)) {
+    seller = undefined;
+  } else {
+    seller = rawSeller || undefined;
+  }
+  return { ...doc, price, vendor_id, seller };
 }
 
 function normalizeProductType(d: Record<string, unknown>): 'parent' | 'growing_product' | 'consumable' {
@@ -180,8 +197,11 @@ export async function POST(request: NextRequest) {
             );
           }
         }
-        if (item.seller && item.sellingPrice != null) {
-          const procurementSeller = await ProcurementSellerMasterModel.findById(item.seller);
+        const bulkVid =
+          item.vendor_id?.trim() ||
+          (isMongoObjectIdString(String(item.seller ?? '')) ? String(item.seller).trim() : '');
+        if (bulkVid && item.sellingPrice != null) {
+          const procurementSeller = await ProcurementSellerMasterModel.findById(bulkVid);
           const factor = procurementSeller?.multiplicationFactor ?? 1;
           (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.sellingPrice) * factor;
         }
@@ -259,8 +279,9 @@ export async function POST(request: NextRequest) {
 
     if (pt === 'parent') {
       let listing_price: number | undefined;
-      if (data.seller && data.sellingPrice != null) {
-        const procurementSeller = await ProcurementSellerMasterModel.findById(data.seller);
+      const vendorIdForPrice = data.vendor_id?.trim();
+      if (vendorIdForPrice && data.sellingPrice != null) {
+        const procurementSeller = await ProcurementSellerMasterModel.findById(vendorIdForPrice);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
         listing_price = Number(data.sellingPrice) * factor;
       }
@@ -292,12 +313,25 @@ export async function POST(request: NextRequest) {
               );
             }
             const substores = getSubstoresByHub(hub);
+            const storefrontSellerId =
+              (await SellerMasterModel.resolveStorefrontSellerIdForHub(hub)) ?? undefined;
+            if (!storefrontSellerId) {
+              await rollbackParents();
+              return NextResponse.json(
+                {
+                  success: false,
+                  message: `No seller master with substores matching hub "${hub}". Add substores on a Seller Master row that overlap this hub (e.g. ${substores.slice(0, 3).join(', ')}).`,
+                },
+                { status: 400 }
+              );
+            }
             const dataToSave: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
               ...data,
               productType: 'parent',
               sku,
               productCode: sku,
               hub,
+              seller: storefrontSellerId,
               ...(substores.length > 0 ? { substores } : {}),
               ...(listing_price !== undefined && { listing_price }),
             };
@@ -461,10 +495,13 @@ export async function POST(request: NextRequest) {
     }
 
     let listing_price: number | undefined;
-    if (data.seller && data.sellingPrice != null) {
-      const procurementSeller = await ProcurementSellerMasterModel.findById(data.seller);
-      const factor = procurementSeller?.multiplicationFactor ?? 1;
-      listing_price = Number(data.sellingPrice) * factor;
+    if (data.sellingPrice != null) {
+      const procId = data.seller?.trim();
+      if (procId) {
+        const procurementSeller = await ProcurementSellerMasterModel.findById(procId);
+        const factor = procurementSeller?.multiplicationFactor ?? 1;
+        listing_price = Number(data.sellingPrice) * factor;
+      }
     }
 
     const finalName = data.finalName?.trim() || data.plant.trim();
@@ -556,26 +593,46 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const updatingSeller = sanitized.seller !== undefined || updateData.seller != null;
+    const updatingVendor =
+      sanitized.vendor_id !== undefined ||
+      updateData.vendor_id != null ||
+      sanitized.seller !== undefined ||
+      updateData.seller != null;
     const updatingPrice =
       sanitized.sellingPrice !== undefined ||
       updateData.sellingPrice != null ||
       updateData.price != null;
-    if (updatingSeller || updatingPrice) {
+    if (updatingVendor || updatingPrice) {
       const existing = await ParentMasterModel.findById(_id);
-      const sellerId =
-        (sanitized.seller ??
-          existing?.seller ??
-          (updateData.seller != null ? String(updateData.seller).trim() : null)) ??
-        null;
+      const rawSanVendor = sanitized.vendor_id != null ? String(sanitized.vendor_id).trim() : '';
+      const rawUpdVendor =
+        updateData.vendor_id != null ? String(updateData.vendor_id).trim() : '';
+      const existingVendor =
+        existing && 'vendor_id' in existing && (existing as ParentMaster).vendor_id
+          ? String((existing as ParentMaster).vendor_id).trim()
+          : '';
+      const existingSellerStr = existing?.seller != null ? String(existing.seller).trim() : '';
+      const legacyProcFromSeller =
+        !existingVendor && isMongoObjectIdString(existingSellerStr) ? existingSellerStr : '';
+      const vendorKey =
+        rawSanVendor ||
+        rawUpdVendor ||
+        existingVendor ||
+        legacyProcFromSeller ||
+        (sanitized.seller && isMongoObjectIdString(String(sanitized.seller))
+          ? String(sanitized.seller).trim()
+          : '') ||
+        (updateData.seller != null && isMongoObjectIdString(String(updateData.seller))
+          ? String(updateData.seller).trim()
+          : '');
       const priceVal =
         sanitized.sellingPrice ??
         (existing && 'sellingPrice' in existing ? Number(existing.sellingPrice) : null) ??
         (existing && 'price' in existing ? Number(existing.price) : null) ??
         (updateData.sellingPrice != null ? Number(updateData.sellingPrice) : null) ??
         (updateData.price != null ? Number(updateData.price) : null);
-      if (sellerId != null && sellerId !== '' && priceVal != null && !isNaN(priceVal)) {
-        const procurementSeller = await ProcurementSellerMasterModel.findById(sellerId);
+      if (vendorKey && priceVal != null && !isNaN(priceVal)) {
+        const procurementSeller = await ProcurementSellerMasterModel.findById(vendorKey);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
         sanitized = { ...sanitized, listing_price: priceVal * factor };
       }
@@ -793,6 +850,19 @@ function validateParentMasterData(data: unknown): {
     description: seoDescIn || seoDefaults.description,
   };
 
+  const rawSellerIn = d.seller != null ? String(d.seller).trim() : '';
+  const rawVendorIn = d.vendor_id != null ? String(d.vendor_id).trim() : '';
+  let sellerField: string | undefined;
+  let vendorIdField: string | undefined;
+  if (productType === 'parent') {
+    vendorIdField = rawVendorIn || (isMongoObjectIdString(rawSellerIn) ? rawSellerIn : undefined);
+    sellerField =
+      rawSellerIn && !isMongoObjectIdString(rawSellerIn) ? rawSellerIn : undefined;
+  } else {
+    sellerField = rawSellerIn || undefined;
+    vendorIdField = rawVendorIn || undefined;
+  }
+
   const validated: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
     productType,
     plant: String(d.plant).trim(),
@@ -803,7 +873,8 @@ function validateParentMasterData(data: unknown): {
     mossStick: d.mossStick ? String(d.mossStick).trim() : undefined,
     size: typeof d.size === 'number' ? d.size : undefined,
     potType: potTypeVal || undefined,
-    seller: d.seller ? String(d.seller).trim() : undefined,
+    seller: sellerField,
+    vendor_id: vendorIdField,
     vendorMasterId:
       d.vendorMasterId != null && String(d.vendorMasterId).trim()
         ? String(d.vendorMasterId).trim()
@@ -883,6 +954,10 @@ export function sanitizeParentMasterUpdate(data: Record<string, unknown>): Parti
   }
   if (data.finalName !== undefined) {
     sanitized.finalName = String(data.finalName).trim();
+  }
+  if (data.vendor_id !== undefined) {
+    const v = String(data.vendor_id).trim();
+    sanitized.vendor_id = v || undefined;
   }
   if (data.seller !== undefined) {
     sanitized.seller = String(data.seller).trim();

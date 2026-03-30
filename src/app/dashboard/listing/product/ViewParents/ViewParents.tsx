@@ -177,7 +177,12 @@ export function ViewParents() {
       mossStick: parent.mossStick ?? '',
       size: parent.size ?? '',
       potType: potType ?? '',
-      seller: parent.seller ?? '',
+      seller:
+        (parent.vendor_id?.trim() ||
+          (/^[a-f\d]{24}$/i.test(String(parent.seller ?? '').trim())
+            ? String(parent.seller).trim()
+            : '')) ||
+        '',
       features: (parent as any).features ?? '',
       redirects: (parent as any).redirects ?? '',
       categories: Array.isArray(parent.categories) ? parent.categories : [],
@@ -229,7 +234,9 @@ export function ViewParents() {
       mossStick: editForm.mossStick || undefined,
       size: editForm.size !== '' ? Number(editForm.size) : undefined,
       potType: editForm.potType || undefined,
-      seller: editForm.seller || undefined,
+      ...(isNonParent
+        ? { seller: editForm.seller || undefined }
+        : { vendor_id: editForm.seller.trim() || undefined }),
       features: editForm.features || undefined,
       redirects: editForm.redirects || undefined,
       categories: editForm.categories,

@@ -664,22 +664,27 @@ export function ProductTable({
     []
   );
 
+  /** Storefront sellers (sellerMaster.seller_id) — listing `seller` field, not procurement. */
   const [sellerOptions, setSellerOptions] = useState<{ value: string; label: string }[]>([]);
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/procurement-seller-master?limit=500')
+    fetch('/api/sellers')
       .then((res) => res.json())
       .then((data) => {
         if (cancelled || !data.success || !Array.isArray(data.data)) return;
         setSellerOptions(
-          data.data.map((s: { _id: string; seller_name: string }) => ({
-            value: String(s._id),
-            label: s.seller_name || String(s._id),
-          }))
+          data.data
+            .map((s: { seller_id?: string; seller_name?: string }) => ({
+              value: String(s.seller_id ?? '').trim(),
+              label: s.seller_name || String(s.seller_id ?? ''),
+            }))
+            .filter((o: { value: string }) => o.value)
         );
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const [collectionNames, setCollectionNames] = useState<Record<string, string>>({});
@@ -819,6 +824,39 @@ export function ProductTable({
             displayImage={displayImage}
             {...cardProps}
           />
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Child listing: seller comes from sellerMaster via hub → substore (not procurement).
+// ---------------------------------------------------------------------------
+
+function ChildListingSellerSummary({ row }: { row: ProductRow }) {
+  const hubs = row.hubs ?? [];
+  if (hubs.length === 0) {
+    return (
+      <p className="text-xs text-slate-500">
+        Select listing hubs — seller_id is taken from Seller Master using each hub’s substore codes.
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 space-y-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        Store seller ID (Seller Master)
+      </p>
+      {hubs.map((h) => {
+        const sid =
+          row.sellersByHub?.[h] ?? (hubs.length === 1 ? row.seller : undefined);
+        const display = sid?.trim() ? sid : '—';
+        return (
+          <p key={h} className="text-xs text-slate-800">
+            <span className="font-medium text-slate-600">{h}:</span>{' '}
+            <span className="font-mono">{display}</span>
+          </p>
         );
       })}
     </div>
@@ -1052,7 +1090,7 @@ function ProductCard({
       colour: parent.colour || row.colour,
       height: parent.height ?? row.height,
       hubs: (row.hubs ?? []).length > 0 ? row.hubs : [],
-      seller: row.seller || parent.seller || '',
+      seller: listingMode === 'child' ? row.seller : row.seller || parent.seller || '',
       categories: Array.from(new Set([...(row.categories || []), ...(parent.categories || [])])),
       collectionIds: Array.from(
         new Set([...(row.collectionIds || []), ...(parent.collectionIds?.map((id) => String(id)) || [])])
@@ -1113,7 +1151,7 @@ function ProductCard({
               colour: parent.colour || row.colour,
               height: parent.height ?? row.height,
               hubs: (row.hubs ?? []).length > 0 ? row.hubs : [],
-              seller: row.seller || parent.seller || '',
+              seller: listingMode === 'child' ? row.seller : row.seller || parent.seller || '',
               categories: Array.from(combinedCategories),
               collectionIds: Array.from(combinedCollectionIds),
             }
@@ -1559,13 +1597,7 @@ function ProductCard({
                   />
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">Seller</label>
-                    <CustomSelect
-                      value={row.seller ?? ''}
-                      onChange={(value) => onUpdateRow(row.id, { seller: value })}
-                      options={sellerOptions}
-                      placeholder="Seller"
-                      searchable={true}
-                    />
+                    <ChildListingSellerSummary row={row} />
                   </div>
                 </div>
               </div>
@@ -1728,13 +1760,7 @@ function ProductCard({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">Seller</label>
-                    <CustomSelect
-                      value={row.seller ?? ''}
-                      onChange={(value) => onUpdateRow(row.id, { seller: value })}
-                      options={sellerOptions}
-                      placeholder="Seller"
-                      searchable={true}
-                    />
+                    <ChildListingSellerSummary row={row} />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">Price (₹)</label>

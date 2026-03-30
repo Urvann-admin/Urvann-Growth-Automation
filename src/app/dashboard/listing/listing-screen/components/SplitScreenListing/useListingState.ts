@@ -22,6 +22,21 @@ import { normalizeListingImageUrlForMatch } from '@/lib/listingImageUrl';
 
 const PARENT_LIST_PAGE_LIMIT = 40;
 
+async function fetchSellerIdForHub(hub: string): Promise<string> {
+  const h = String(hub ?? '').trim();
+  if (!h) return '';
+  try {
+    const res = await fetch(`/api/sellers/by-hub?hub=${encodeURIComponent(h)}`);
+    const j = await res.json();
+    if (j.success && typeof j.seller_id === 'string' && j.seller_id.trim()) {
+      return j.seller_id.trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
 /** URLs to send to listing API / validation: tagged row images plus parent master images (parent mode). */
 function getListingImageUrlsForRow(
   row: ProductRow,
@@ -85,10 +100,13 @@ function buildChildRowFromImage(img: SelectedImage, serial: number): ProductRow 
 }
 
 export function useListingState(section: ListingSection) {
+  const childHubSelectSeqRef = useRef(0);
+
   const [state, setState] = useState<ListingState>({
     selectedImages: [],
     productRows: [],
     childContextHub: '',
+    childHubSellerId: '',
     availableParents: [],
     selectedParent: null,
     viewMode: 'product-table',
@@ -417,6 +435,7 @@ export function useListingState(section: ListingSection) {
           ...prev,
           listingMode: 'child',
           childContextHub: '',
+          childHubSellerId: '',
           productRows: [],
           parentListPage: 0,
           parentListTotalPages: 0,
@@ -560,7 +579,9 @@ export function useListingState(section: ListingSection) {
         // Metadata
         hubParentChecks: [],
         hubs: [ctxHub],
-        seller: '',
+        seller: prev.childHubSellerId || '',
+        sellersByHub:
+          ctxHub && prev.childHubSellerId ? { [ctxHub]: prev.childHubSellerId } : {},
         categories: [],
         collectionIds: [],
         
@@ -580,9 +601,11 @@ export function useListingState(section: ListingSection) {
   /** Child listing: change global hub filter; clears parent composition on every row (new hub = new picker scope). */
   const setChildContextHub = useCallback((hub: string) => {
     const h = String(hub ?? '').trim();
+    const seq = ++childHubSelectSeqRef.current;
     setState((prev) => ({
       ...prev,
       childContextHub: h,
+      childHubSellerId: '',
       productRows: prev.productRows.map((row) => ({
         ...row,
         parentItems: [],
@@ -604,18 +627,92 @@ export function useListingState(section: ListingSection) {
         hubParentChecks: [],
         hubs: h ? [h] : [],
         seller: '',
+        sellersByHub: {},
         isSaved: false,
         validationErrors: { parent: 'Parent selection is required' },
       })),
     }));
+
+    void (async () => {
+      if (!h) return;
+      const sellerId = await fetchSellerIdForHub(h);
+      if (seq !== childHubSelectSeqRef.current) return;
+      if (!sellerId) {
+        toast.error(
+          'No Seller Master row found for this hub’s substores. Add seller_id matching a substore code from hub mappings.',
+          { duration: 6500 }
+        );
+        return;
+      }
+      setState((prev) => ({
+        ...prev,
+        childHubSellerId: sellerId,
+        productRows: prev.productRows.map((row) => ({
+          ...row,
+          seller: sellerId,
+          sellersByHub: { ...(row.sellersByHub ?? {}), [h]: sellerId },
+        })),
+      }));
+    })();
   }, []);
 
   // Update product row
   const updateProductRow = useCallback((rowId: string, updates: Partial<ProductRow>) => {
+    const mode = stateRef.current.listingMode;
+    const row = stateRef.current.productRows.find((r) => r.id === rowId);
+
+    if (mode === 'child' && updates.hubs && row) {
+      const newHubs = updates.hubs;
+      const prevMap = { ...(row.sellersByHub ?? {}) };
+      const pruned: Record<string, string> = {};
+      for (const hub of newHubs) {
+        if (prevMap[hub]) pruned[hub] = prevMap[hub];
+      }
+      setState((prev) => ({
+        ...prev,
+        productRows: prev.productRows.map((r) =>
+          r.id === rowId
+            ? {
+                ...r,
+                ...updates,
+                sellersByHub: pruned,
+                seller: newHubs.length === 1 ? pruned[newHubs[0]] ?? r.seller : r.seller,
+                isSaved: false,
+              }
+            : r
+        ),
+      }));
+
+      const hubsKey = [...newHubs].sort().join('\0');
+      void (async () => {
+        const additions = { ...pruned };
+        for (const hub of newHubs) {
+          if (additions[hub]) continue;
+          const sid = await fetchSellerIdForHub(hub);
+          if (sid) additions[hub] = sid;
+        }
+        setState((prev) => ({
+          ...prev,
+          productRows: prev.productRows.map((r) => {
+            if (r.id !== rowId) return r;
+            const hubsNow = r.hubs ?? [];
+            if ([...hubsNow].sort().join('\0') !== hubsKey) return r;
+            return {
+              ...r,
+              sellersByHub: { ...additions },
+              seller: hubsNow.length === 1 ? additions[hubsNow[0]] ?? '' : r.seller,
+              isSaved: false,
+            };
+          }),
+        }));
+      })();
+      return;
+    }
+
     setState((prev) => ({
       ...prev,
-      productRows: prev.productRows.map((row) =>
-        row.id === rowId ? { ...row, ...updates, isSaved: false } : row
+      productRows: prev.productRows.map((r) =>
+        r.id === rowId ? { ...r, ...updates, isSaved: false } : r
       ),
     }));
   }, []);
@@ -916,7 +1013,11 @@ export function useListingState(section: ListingSection) {
           if (skipped.length > 0) {
             hubSkipMessages.push(`Row ${row.serial}: not saved for ${skipped.join(', ')} (parent SKU missing in listings)`);
           }
-          return passed.map((hub) => ({ ...basePayload, hub }));
+          return passed.map((hub) => ({
+            ...basePayload,
+            hub,
+            seller: row.sellersByHub?.[hub] ?? row.seller,
+          }));
         }
         return (row.hubs ?? []).map((hub) => ({ ...basePayload, hub }));
       });
@@ -1083,7 +1184,14 @@ export function useListingState(section: ListingSection) {
           icon: '⚠️',
         });
       }
-      const payloads = hubsToSave.map((hub) => ({ ...basePayload, hub }));
+      const payloads =
+        listingMode === 'child'
+          ? hubsToSave.map((hub) => ({
+              ...basePayload,
+              hub,
+              seller: row.sellersByHub?.[hub] ?? row.seller,
+            }))
+          : hubsToSave.map((hub) => ({ ...basePayload, hub }));
       if (payloads.length === 0) {
         toast.error('No hubs to save');
         setState((prev) => ({ ...prev, isSaving: false }));
@@ -1145,7 +1253,7 @@ export function useListingState(section: ListingSection) {
       ...prev,
       selectedImages: [],
       productRows: [],
-      ...(mode === 'child' ? { childContextHub: '' } : {}),
+      ...(mode === 'child' ? { childContextHub: '', childHubSellerId: '' } : {}),
     }));
 
     // Reset all images to untagged
@@ -1250,6 +1358,7 @@ export function useListingState(section: ListingSection) {
         hubs: r.hubs,
         hubParentChecks: r.hubParentChecks,
         seller: r.seller,
+        sellersByHub: r.sellersByHub,
         categories: r.categories,
         setQuantity: r.setQuantity,
         price: r.price,
@@ -1261,7 +1370,7 @@ export function useListingState(section: ListingSection) {
     if (signature === prevValidationInputRef.current) return;
     prevValidationInputRef.current = signature;
     validateAllRows();
-  }, [state.productRows, state.listingMode, state.childContextHub, allImages, validateAllRows]);
+  }, [state.productRows, state.listingMode, state.childContextHub, state.childHubSellerId, allImages, validateAllRows]);
 
   // Load data on mount
   useEffect(() => {
@@ -1306,17 +1415,31 @@ export function useListingState(section: ListingSection) {
           prev.productRows.find((r) => r.id === id) ??
           prev.productRows.find((r) => r.taggedImages?.[0]?.url === img.url);
         if (existing) {
+          const hubsForRow = (existing.hubs ?? []).length > 0 ? existing.hubs : hub ? [hub] : [];
+          const ctxSid = prev.childHubSellerId || '';
+          const nextSellersByHub = { ...(existing.sellersByHub ?? {}) };
+          if (ctxSid && hub && hubsForRow.length === 1 && hubsForRow[0] === hub) {
+            nextSellersByHub[hub] = ctxSid;
+          }
+          const nextSeller =
+            hubsForRow.length === 1
+              ? (nextSellersByHub[hubsForRow[0]] ?? ctxSid) || existing.seller
+              : existing.seller;
           return {
             ...existing,
             id,
             serial: idx + 1,
             taggedImages: [img],
-            hubs: (existing.hubs ?? []).length > 0 ? existing.hubs : hub ? [hub] : [],
+            hubs: hubsForRow,
+            seller: nextSeller,
+            sellersByHub: nextSellersByHub,
           };
         }
         return {
           ...buildChildRowFromImage(img, idx + 1),
           hubs: hub ? [hub] : [],
+          seller: hub && prev.childHubSellerId ? prev.childHubSellerId : '',
+          sellersByHub: hub && prev.childHubSellerId ? { [hub]: prev.childHubSellerId } : {},
         };
       });
 
@@ -1334,7 +1457,9 @@ export function useListingState(section: ListingSection) {
             r.serial === nextRows[i]?.serial &&
             r.taggedImages?.[0]?.url === nextRows[i]?.taggedImages?.[0]?.url &&
             r.plant === nextRows[i]?.plant &&
-            r.parentSkus.join(',') === nextRows[i]?.parentSkus.join(',')
+            r.parentSkus.join(',') === nextRows[i]?.parentSkus.join(',') &&
+            r.seller === nextRows[i]?.seller &&
+            JSON.stringify(r.sellersByHub ?? {}) === JSON.stringify(nextRows[i]?.sellersByHub ?? {})
         )
       ) {
         return prev;
@@ -1342,7 +1467,7 @@ export function useListingState(section: ListingSection) {
 
       return { ...prev, productRows: nextRows };
     });
-  }, [allImages, state.listingMode, state.childContextHub]);
+  }, [allImages, state.listingMode, state.childContextHub, state.childHubSellerId]);
 
   // Merge allImages with selectedImages state for the ImagePanel
   const mergedImages = allImages.map(img => {

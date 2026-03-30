@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ParentMasterModel, isBaseParent, type ParentMaster } from '@/models/parentMaster';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
+import { SellerMasterModel } from '@/models/sellerMaster';
 import { deleteMultipleImagesFromS3 } from '@/lib/s3Upload';
 import { serializeParent, sanitizeParentMasterUpdate } from '../route';
+
+function isMongoObjectIdString(s: string): boolean {
+  return /^[a-f\d]{24}$/i.test(String(s).trim());
+}
 
 export async function GET(
   request: NextRequest,
@@ -113,13 +118,47 @@ export async function PUT(
     }
 
     const existing = await ParentMasterModel.findById(id);
-    const updatingSeller = updateData.seller !== undefined;
+    const hubAfter =
+      updateData.hub !== undefined && updateData.hub !== null && String(updateData.hub).trim()
+        ? String(updateData.hub).trim()
+        : existing && (existing as ParentMaster).hub
+          ? String((existing as ParentMaster).hub).trim()
+          : '';
+    if (existing && isBaseParent(existing as ParentMaster) && hubAfter) {
+      const sid = await SellerMasterModel.resolveStorefrontSellerIdForHub(hubAfter);
+      if (sid) {
+        updateData = { ...updateData, seller: sid };
+      }
+    }
+
+    const updatingVendor =
+      updateData.vendor_id !== undefined || updateData.seller !== undefined;
     const updatingPrice = updateData.sellingPrice !== undefined || updateData.price !== undefined;
-    if (updatingSeller || updatingPrice) {
-      const sellerId = (updateData.seller ?? existing?.seller) != null ? String(updateData.seller ?? existing?.seller).trim() : null;
-      const priceVal = updateData.sellingPrice != null ? Number(updateData.sellingPrice) : (updateData.price != null ? Number(updateData.price) : (existing && 'sellingPrice' in existing ? Number((existing as ParentMaster).sellingPrice) : null) ?? (existing && 'price' in existing ? Number((existing as ParentMaster).price) : null));
-      if (sellerId && priceVal != null && !isNaN(priceVal)) {
-        const procurementSeller = await ProcurementSellerMasterModel.findById(sellerId);
+    if (updatingVendor || updatingPrice) {
+      const rawV = updateData.vendor_id != null ? String(updateData.vendor_id).trim() : '';
+      const exV =
+        existing && (existing as ParentMaster).vendor_id
+          ? String((existing as ParentMaster).vendor_id).trim()
+          : '';
+      const exS = existing?.seller != null ? String(existing.seller).trim() : '';
+      const legacyProc = !exV && isMongoObjectIdString(exS) ? exS : '';
+      const fromBodySeller =
+        updateData.seller != null && isMongoObjectIdString(String(updateData.seller))
+          ? String(updateData.seller).trim()
+          : '';
+      const vendorKey = rawV || exV || legacyProc || fromBodySeller;
+      const priceVal =
+        updateData.sellingPrice != null
+          ? Number(updateData.sellingPrice)
+          : updateData.price != null
+            ? Number(updateData.price)
+            : existing && 'sellingPrice' in existing
+              ? Number((existing as ParentMaster).sellingPrice)
+              : existing && 'price' in existing
+                ? Number((existing as ParentMaster).price)
+                : null;
+      if (vendorKey && priceVal != null && !isNaN(priceVal)) {
+        const procurementSeller = await ProcurementSellerMasterModel.findById(vendorKey);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
         updateData = { ...updateData, listing_price: priceVal * factor };
       }

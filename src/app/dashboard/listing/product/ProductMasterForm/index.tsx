@@ -544,7 +544,7 @@ export function ProductMasterForm() {
           mossStick: formData.mossStick || undefined,
           size: typeof formData.size === 'number' ? formData.size : undefined,
           potType: formData.potType || undefined,
-          seller: formData.seller || undefined,
+          vendor_id: formData.seller || undefined,
           features: formData.features || undefined,
           redirects: formData.redirects || undefined,
           description: formData.description.trim() || undefined,
