@@ -1,7 +1,7 @@
 'use client';
 
 import { CustomSelect } from '../../../components/CustomSelect';
-import { COLOUR_OPTIONS } from '../types';
+import { COLOUR_OPTIONS, PARENT_KIND_OPTIONS } from '../types';
 
 export interface StepProductInfoProps {
   plant: string;
@@ -10,6 +10,7 @@ export interface StepProductInfoProps {
   colour: string;
   height: number | '';
   size: number | '';
+  parentKind: string;
   finalName: string;
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
@@ -23,6 +24,7 @@ export function StepProductInfo({
   colour,
   height,
   size,
+  parentKind,
   finalName,
   errors,
   onFieldChange,
@@ -72,6 +74,13 @@ export function StepProductInfo({
           onChange={(v) => onFieldChange('colour', v)}
           options={COLOUR_OPTIONS}
           placeholder="Select Colour"
+        />
+        <CustomSelect
+          label="Parent type (optional)"
+          value={parentKind}
+          onChange={(v) => onFieldChange('parentKind', v)}
+          options={PARENT_KIND_OPTIONS}
+          placeholder="Plant or pot"
         />
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-2">Height (feet)</label>

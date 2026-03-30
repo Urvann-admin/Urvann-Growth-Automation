@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Save, AlertCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { ListingStepId, ListingFormData } from './types';
-import { LISTING_STEPS, initialListingFormData } from './types';
+import { LISTING_STEPS, initialListingFormData, buildDefaultSeoTitle, buildDefaultSeoDescription } from './types';
 import type { ListingSection } from '@/models/listingProduct';
 import type { ParentMaster } from '@/models/parentMaster';
 import { StepListingType } from './steps/StepListingType';
@@ -107,7 +107,7 @@ export function ListingProductForm({
     fetchParentDetails();
   }, [formData.parentSkus]);
 
-  // Auto-calculate price and inventory when parents or quantity change
+  // Auto-calculate price, inventory, tax, redirect, features, and SEO when parents or quantity change
   useEffect(() => {
     if (selectedParents.length > 0 && formData.quantity) {
       const quantity = Number(formData.quantity);
@@ -139,16 +139,59 @@ export function ListingProductForm({
           }
         });
 
+        // Tax: take the maximum tax value across all parents
+        const taxValues = selectedParents
+          .map(p => p.tax ? Number(p.tax) : 0)
+          .filter(v => v > 0);
+        const maxTax = taxValues.length > 0 ? Math.max(...taxValues) : 0;
+        const derivedTax = maxTax > 0 ? String(maxTax) : '';
+
+        // Redirects: combine unique redirects from all parents
+        const combinedRedirects = new Set<string>();
+        selectedParents.forEach(parent => {
+          const r = (parent as any).redirects;
+          if (r && typeof r === 'string') {
+            r.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((v: string) => combinedRedirects.add(v));
+          }
+        });
+        // Only pre-fill redirect if not already set by user
+        const derivedRedirect = Array.from(combinedRedirects).join(', ');
+
+        // Features: combine unique features, but only from plant parents (ignore pot parents)
+        // If all parents are pots, use all; if mix, use only plant parents' features
+        const plantParents = selectedParents.filter(p => (p as any).parentKind !== 'pot');
+        const featureSourceParents = plantParents.length > 0 ? plantParents : selectedParents;
+        const combinedFeatures = new Set<string>();
+        featureSourceParents.forEach(parent => {
+          const f = (parent as any).features;
+          if (f && typeof f === 'string') {
+            f.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((v: string) => combinedFeatures.add(v));
+          }
+        });
+
         setFormData(prev => ({
           ...prev,
           price: totalPrice,
           inventory_quantity: minInventoryQuantity === Infinity ? 0 : minInventoryQuantity,
           categories: Array.from(combinedCategories),
           collectionIds: Array.from(combinedCollectionIds),
+          tax: derivedTax || prev.tax,
+          redirect: prev.redirect || derivedRedirect,
+          features: combinedFeatures.size > 0 ? Array.from(combinedFeatures) : prev.features,
         }));
       }
     }
   }, [selectedParents, formData.quantity, section]);
+
+  // Auto-generate SEO fields when plant name changes (only if not manually edited)
+  useEffect(() => {
+    if (!formData.plant) return;
+    setFormData(prev => ({
+      ...prev,
+      seoTitle: prev.seoTitle || buildDefaultSeoTitle(formData.plant),
+      seoDescription: prev.seoDescription || buildDefaultSeoDescription(formData.plant),
+    }));
+  }, [formData.plant]);
 
   const updateFormData = useCallback((updates: Partial<ListingFormData>) => {
     setFormData(prev => ({ ...prev, ...updates }));
@@ -190,6 +233,14 @@ export function ListingProductForm({
         quantity: formData.listingType === 'parent' ? 1 : Number(formData.quantity),
         height: formData.height ? Number(formData.height) : undefined,
         size: formData.size ? Number(formData.size) : undefined,
+        SEO: (formData.seoTitle || formData.seoDescription)
+          ? { title: formData.seoTitle, description: formData.seoDescription }
+          : undefined,
+        redirects: formData.redirect
+          ? formData.redirect.split(',').map((s: string) => s.trim()).filter(Boolean)
+          : undefined,
+        features: formData.features.length > 0 ? formData.features : undefined,
+        tax: formData.tax || undefined,
       };
 
       const response = await fetch('/api/listing-product', {

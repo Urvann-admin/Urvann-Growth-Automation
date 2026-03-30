@@ -37,6 +37,10 @@ interface EditParentForm {
   categories: string[];
   sellingPrice: number | '';
   compare_at: number | '';
+  tax: string;
+  parentKind: string;
+  seoTitle: string;
+  seoDescription: string;
   images: string[];
 }
 
@@ -180,6 +184,16 @@ export function ViewParents() {
       sellingPrice: sellingPrice ?? '',
       compare_at:
         parent.compare_at != null && typeof parent.compare_at === 'number' ? parent.compare_at : '',
+      tax:
+        parent.tax === '5' || parent.tax === '18'
+          ? parent.tax
+          : '',
+      parentKind:
+        pt === 'parent' && (parent.parentKind === 'plant' || parent.parentKind === 'pot')
+          ? parent.parentKind
+          : '',
+      seoTitle: pt === 'parent' ? (parent.SEO?.title ?? '') : '',
+      seoDescription: pt === 'parent' ? (parent.SEO?.description ?? '') : '',
       images: Array.isArray(parent.images) ? parent.images : [],
     });
   };
@@ -192,6 +206,13 @@ export function ViewParents() {
     const id = String(editing._id);
     const isNonParent =
       editForm.productType === 'growing_product' || editForm.productType === 'consumable';
+    const compareAtPayload =
+      editForm.compare_at !== '' && typeof editForm.compare_at === 'number'
+        ? editForm.compare_at
+        : editForm.sellingPrice !== '' && typeof editForm.sellingPrice === 'number'
+          ? editForm.sellingPrice * 4
+          : null;
+
     const payload = {
       ...(isNonParent
         ? {
@@ -213,10 +234,20 @@ export function ViewParents() {
       redirects: editForm.redirects || undefined,
       categories: editForm.categories,
       sellingPrice: editForm.sellingPrice !== '' ? Number(editForm.sellingPrice) : undefined,
-      compare_at:
-        editForm.compare_at !== '' && typeof editForm.compare_at === 'number'
-          ? editForm.compare_at
-          : null,
+      compare_at: compareAtPayload,
+      tax: editForm.tax === '5' || editForm.tax === '18' ? editForm.tax : null,
+      ...(!isNonParent
+        ? {
+            parentKind:
+              editForm.parentKind === 'plant' || editForm.parentKind === 'pot'
+                ? editForm.parentKind
+                : null,
+            SEO: {
+              title: editForm.seoTitle.trim(),
+              description: editForm.seoDescription.trim(),
+            },
+          }
+        : {}),
       images: editForm.images,
     };
 

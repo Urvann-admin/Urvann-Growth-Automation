@@ -1,8 +1,10 @@
 'use client';
 
+import type { ListingSection } from '@/models/listingProduct';
 import { CustomSelect } from '../../../components/CustomSelect';
 import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, FEATURES_OPTIONS, REDIRECTS_OPTIONS } from '../types';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { ReviewHubListingSection } from './ReviewHubListingSection';
 
 export interface StepDetailsProps {
   mossStick: string;
@@ -12,6 +14,11 @@ export interface StepDetailsProps {
   redirects: string;
   description: string;
   sellerOptions: { value: string; label: string }[];
+  listingHubs: string[];
+  listingSection: ListingSection;
+  onListingHubToggle: (hub: string) => void;
+  onListingSectionChange: (section: ListingSection) => void;
+  listingHubsError?: string;
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
   onClearError: (key: string) => void;
@@ -25,6 +32,11 @@ export function StepDetails({
   redirects,
   description,
   sellerOptions,
+  listingHubs,
+  listingSection,
+  onListingHubToggle,
+  onListingSectionChange,
+  listingHubsError,
   errors,
   onFieldChange,
   onClearError,
@@ -72,6 +84,7 @@ export function StepDetails({
           placeholder="Select Redirects"
         />
       </div>
+
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-2">Description</label>
         <RichTextEditor
@@ -83,6 +96,14 @@ export function StepDetails({
         />
         {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
       </div>
+
+      <ReviewHubListingSection
+        listingHubs={listingHubs}
+        listingSection={listingSection}
+        onListingHubToggle={onListingHubToggle}
+        onListingSectionChange={onListingSectionChange}
+        listingHubsError={listingHubsError}
+      />
     </div>
   );
 }

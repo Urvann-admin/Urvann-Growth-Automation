@@ -18,6 +18,7 @@ import {
   mergeVerifyResults,
   passedHubsFromChecks,
 } from '@/lib/childListingHubSku';
+import { normalizeListingImageUrlForMatch } from '@/lib/listingImageUrl';
 
 const PARENT_LIST_PAGE_LIMIT = 40;
 
@@ -121,11 +122,21 @@ export function useListingState(section: ListingSection) {
   const [imageCollections, setImageCollections] = useState<ImageCollection[]>([]);
   const [allImages, setAllImages] = useState<SelectedImage[]>([]);
 
-  // Load image collections
+  // Load image collections (hide images already used on listed/published products in this section)
   const loadImageCollections = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true }));
     try {
-      const response = await fetch('/api/image-collection?status=completed&limit=100');
+      const [listedRes, response] = await Promise.all([
+        fetch(`/api/listing-product/listed-image-urls?section=${encodeURIComponent(section)}`),
+        fetch('/api/image-collection?status=completed&limit=100'),
+      ]);
+      const listedJson = await listedRes.json().catch(() => ({}));
+      const listedUrlKeys = new Set<string>(
+        listedJson.success && Array.isArray(listedJson.urls)
+          ? listedJson.urls.map((u: string) => normalizeListingImageUrlForMatch(String(u)))
+          : []
+      );
+
       const result = await response.json();
       if (result.success) {
         // Transform collections to include individual images
@@ -135,9 +146,14 @@ export function useListingState(section: ListingSection) {
               const detailResponse = await fetch(`/api/image-collection/${collection._id}?excludeListed=true`);
               const detailResult = await detailResponse.json();
               if (detailResult.success && detailResult.data.images) {
+                const images = (detailResult.data.images as ImageItem[]).filter((image) => {
+                  const key = normalizeListingImageUrlForMatch(image.url);
+                  return key && !listedUrlKeys.has(key);
+                });
                 return {
                   ...collection,
-                  images: detailResult.data.images
+                  images,
+                  imageCount: images.length,
                 };
               }
               return { ...collection, images: [] };
@@ -174,7 +190,7 @@ export function useListingState(section: ListingSection) {
     } finally {
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, []);
+  }, [section]);
 
   // Load available parents — fetch all, no section filter so pots/zero-inventory items appear
   const loadAvailableParents = useCallback(async () => {

@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { getCollection } from '@/lib/mongodb';
+import { normalizeListingImageUrlForMatch } from '@/lib/listingImageUrl';
 import {
   candidateBaseParentSkusForParentListing,
   toCanonicalParentSkuForPurchases,
@@ -13,6 +14,12 @@ export type ListingStatus = 'draft' | 'listed' | 'published';
 
 /** Whether the listing row lists a single base parent vs a composed child product */
 export type ListingProductListingType = 'parent' | 'child';
+
+/** Store-style SEO block (e.g. StoreHippo) */
+export interface ListingProductSEO {
+  title: string;
+  description: string;
+}
 
 /**
  * Snapshot of how a listing line item is composed from parent SKUs.
@@ -116,6 +123,10 @@ export interface ListingProduct {
   tags?: string[];
   /** Compare-at price shown as original/strikethrough price */
   compare_at_price?: number;
+  /** GST / tax rate: 5 or 18 (stored as number); derived as max of parent tax values */
+  tax?: number;
+  /** SEO title and description for storefront */
+  SEO?: ListingProductSEO;
   /** Display sort order; defaults to 3000 */
   sort_order?: number;
   /** Publish status: 1 = published, 0 = unpublished. Auto-set based on inventory_quantity. */
@@ -172,6 +183,28 @@ export class ListingProductModel {
   static async findByStatus(status: ListingStatus) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.find({ status }).toArray();
+  }
+
+  /**
+   * Image URLs attached to listing products that are live (listed or published) in a section.
+   * Used to hide those photos from the child listing queue. URLs are normalized for matching.
+   */
+  static async listImageUrlsFromListedOrPublished(section: ListingSection): Promise<string[]> {
+    const collection = await getCollection(COLLECTION_NAME);
+    const cursor = collection.find(
+      { section, status: { $in: ['listed', 'published'] as const } },
+      { projection: { images: 1 } }
+    );
+    const keys = new Set<string>();
+    for await (const doc of cursor) {
+      const images = (doc as ListingProduct).images;
+      if (!Array.isArray(images)) continue;
+      for (const u of images) {
+        const n = normalizeListingImageUrlForMatch(String(u));
+        if (n) keys.add(n);
+      }
+    }
+    return [...keys];
   }
 
   static async findByParentSku(parentSku: string) {

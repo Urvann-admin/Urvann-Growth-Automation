@@ -29,12 +29,24 @@ export interface ListingFormData {
   quantity: number | '';
   price: number; // Calculated automatically
   inventory_quantity: number; // Calculated automatically
+  /** Tax rate derived from parent(s): max of parent tax values ('5' or '18'). */
+  tax: string;
   
   // Categories and images
   categories: string[]; // Auto-populated + manual
   collectionIds: string[]; // Auto-populated from parents
   images: string[];
   
+  // SEO fields (auto-generated from plant name; editable on review)
+  seoTitle: string;
+  seoDescription: string;
+
+  // Redirect: combined unique redirects from parents; only one allowed per product (editable on review)
+  redirect: string;
+
+  // Features: combined unique features from plant parents (pot features ignored); editable on review
+  features: string[];
+
   // Other fields
   seller: string;
   hub: string;
@@ -66,13 +78,28 @@ export const initialListingFormData: ListingFormData = {
   quantity: '',
   price: 0,
   inventory_quantity: 0,
+  tax: '',
   categories: [],
   collectionIds: [],
   images: [],
+  seoTitle: '',
+  seoDescription: '',
+  redirect: '',
+  features: [],
   seller: '',
   hub: '',
   status: 'draft',
 };
+
+export function buildDefaultSeoTitle(plantName: string): string {
+  const n = plantName.trim() || 'plant';
+  return `Free Next Day Delivery | ${n}`;
+}
+
+export function buildDefaultSeoDescription(plantName: string): string {
+  const n = plantName.trim() || 'plant';
+  return `Buy ${n} at Urvann. Choose from 10000+ plants, gardening products and essentials. Order now to get free next day home delivery.`;
+}
 
 export const MOSS_STICK_OPTIONS = [
   { value: '', label: 'Select Moss Stick' },

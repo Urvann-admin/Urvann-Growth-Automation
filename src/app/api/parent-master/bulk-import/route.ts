@@ -24,6 +24,7 @@ const TEMPLATE_HEADERS = [
   'sellingPrice',
   'seller',
   'compare_at',
+  'tax',
   'features',
   'redirects',
   'inventory_quantity',
@@ -52,6 +53,7 @@ const HEADER_ALIAS_GROUPS: { key: (typeof TEMPLATE_HEADERS)[number]; aliases: st
     key: 'compare_at',
     aliases: ['compare_at', 'compareat', 'compare_at_price', 'compare at price', 'compare-at price'],
   },
+  { key: 'tax', aliases: ['tax', 'gst', 'tax_rate', 'tax rate'] },
   { key: 'features', aliases: ['features', 'feature'] },
   { key: 'redirects', aliases: ['redirects', 'redirect'] },
   {
@@ -258,6 +260,17 @@ function rowToParsedBulkRow(
     compare_at = c;
   }
 
+  const taxStr = get('tax');
+  let tax: '5' | '18' | undefined;
+  if (taxStr) {
+    const raw = taxStr.trim();
+    const norm = raw === '5%' || raw === '5' ? '5' : raw === '18%' || raw === '18' ? '18' : '';
+    if (!norm) {
+      return { success: false, message: `Invalid tax for row (plant: ${plant}); use 5, 18, 5%, or 18%` };
+    }
+    tax = norm;
+  }
+
   const invStr = get('inventory_quantity');
   let inventory_quantity: number | undefined;
   if (invStr) {
@@ -317,6 +330,7 @@ function rowToParsedBulkRow(
     ...(collectionIds ? { collectionIds } : {}),
     ...(sellingPrice !== undefined && { sellingPrice }),
     ...(compare_at !== undefined && { compare_at }),
+    ...(tax ? { tax } : {}),
     features: get('features') || undefined,
     redirects: get('redirects') || undefined,
     ...(inventory_quantity !== undefined && { inventory_quantity }),

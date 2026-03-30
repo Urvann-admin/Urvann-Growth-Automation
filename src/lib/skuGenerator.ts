@@ -70,6 +70,32 @@ export function appendHubLetterToParentSku(hub: string, canonicalParentSku: stri
 }
 
 /**
+ * Parent Master row is hub-scoped when `parentHubField` matches `hub` and `skuFromParent` already starts
+ * with that hub letter (e.g. Whitefield + WTES000501). Then use as-is on listing lines.
+ * Otherwise treat `skuFromParent` as global / canonical and prepend hub letter (legacy one-parent-all-hubs).
+ */
+export function parentListingLineParentSku(
+  hub: string,
+  skuFromParent: string,
+  parentHubField: string | undefined
+): string {
+  const base = String(skuFromParent ?? '').trim();
+  if (!base) return base;
+  const h = hub.trim();
+  if (!h) return base;
+  try {
+    const code = getHubCode(h);
+    const ph = String(parentHubField ?? '').trim();
+    if (ph.toLowerCase() === h.toLowerCase() && base.startsWith(code) && base.length > code.length) {
+      return base;
+    }
+  } catch {
+    /* fall through */
+  }
+  return appendHubLetterToParentSku(h, base);
+}
+
+/**
  * Maps stored parent listing `parentSku` back to Parent Master / purchase key (strip hub letter when it matches this listing's hub).
  */
 export function toCanonicalParentSkuForPurchases(

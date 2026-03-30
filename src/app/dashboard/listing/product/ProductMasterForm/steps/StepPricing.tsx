@@ -1,8 +1,15 @@
 'use client';
 
+import { CustomSelect } from '../../../components/CustomSelect';
+import { TAX_OPTIONS } from '../types';
+
 export interface StepPricingProps {
   sellingPrice: number | '';
-  compare_at: number | '';
+  /** When set with `compareAtEditable`, allows overriding the default selling × 4 */
+  compare_at?: number | '';
+  /** On review step, allow editing compare-at; otherwise show selling × 4 only */
+  compareAtEditable?: boolean;
+  tax: string;
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
   onClearError: (key: string) => void;
@@ -10,7 +17,9 @@ export interface StepPricingProps {
 
 export function StepPricing({
   sellingPrice,
-  compare_at,
+  compare_at = '',
+  compareAtEditable = false,
+  tax,
   errors,
   onFieldChange,
   onClearError,
@@ -41,21 +50,61 @@ export function StepPricing({
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-2">Compare-at price</label>
-        <input
-          type="number"
-          min={0}
-          step={0.01}
-          value={compare_at}
-          onChange={(e) => {
-            onFieldChange('compare_at', e.target.value ? parseFloat(e.target.value) : '');
-            onClearError('compare_at');
-          }}
-          className={`${inputBase} ${errors.compare_at ? inputError : inputNormal}`}
-          placeholder="Optional — e.g. original / list price"
-        />
-        {errors.compare_at && <p className="text-red-500 text-xs mt-1">{errors.compare_at}</p>}
-        <p className="text-xs text-slate-500 mt-1">Shown as the “was” price when listing (optional).</p>
+        {compareAtEditable ? (
+          <>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={compare_at}
+              onChange={(e) => {
+                onFieldChange('compare_at', e.target.value ? parseFloat(e.target.value) : '');
+                onClearError('compare_at');
+              }}
+              className={`${inputBase} ${errors.compare_at ? inputError : inputNormal}`}
+              placeholder={
+                typeof sellingPrice === 'number' && !Number.isNaN(sellingPrice)
+                  ? `Default ${(sellingPrice * 4).toFixed(2)} (selling × 4)`
+                  : 'Selling × 4 when selling price set'
+              }
+            />
+            {errors.compare_at && <p className="text-red-500 text-xs mt-1">{errors.compare_at}</p>}
+            <p className="text-xs text-slate-500 mt-1">
+              Default is <strong>selling price × 4</strong>. Leave empty on save to use that value.
+            </p>
+          </>
+        ) : (
+          <>
+            <div
+              className={`${inputBase} bg-slate-50 text-slate-800 font-medium ${
+                errors.compare_at ? inputError : inputNormal
+              }`}
+            >
+              {typeof sellingPrice === 'number' && !Number.isNaN(sellingPrice) ? (
+                <span>{(sellingPrice * 4).toFixed(2)}</span>
+              ) : (
+                <span className="text-slate-400 font-normal">Enter selling price — compare-at is selling × 4</span>
+              )}
+            </div>
+            {errors.compare_at && <p className="text-red-500 text-xs mt-1">{errors.compare_at}</p>}
+            <p className="text-xs text-slate-500 mt-1">
+              Compare-at is <strong>selling price × 4</strong>. Override on the final review step if needed.
+            </p>
+          </>
+        )}
       </div>
+
+      <CustomSelect
+        label="Tax (optional)"
+        value={tax}
+        onChange={(v) => {
+          onFieldChange('tax', v);
+          onClearError('tax');
+        }}
+        options={TAX_OPTIONS}
+        placeholder="Select tax rate"
+      />
+      {errors.tax && <p className="text-red-500 text-xs mt-1">{errors.tax}</p>}
     </div>
   );
 }

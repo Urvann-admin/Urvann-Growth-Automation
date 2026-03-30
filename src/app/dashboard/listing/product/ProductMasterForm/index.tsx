@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Check, Save, Download, Upload } from 'lucide-react';
 import type { ParentMaster, ProductType } from '@/models/parentMaster';
+import type { ListingSection } from '@/models/listingProduct';
 import type { Category } from '@/models/category';
 import type { CollectionMaster } from '@/models/collectionMaster';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
@@ -18,6 +19,8 @@ import {
   SHORT_STEPS,
   initialFormData,
   initialNonParentFormData,
+  buildDefaultSeoTitle,
+  buildDefaultSeoDescription,
   type StepId,
   type ProductFormData,
   type NonParentFormData,
@@ -27,7 +30,7 @@ import {
   StepDetails,
   StepPricing,
   StepCategoriesAndImages,
-  StepReview,
+  StepSeoFields,
   StepSelectProductType,
   StepNonParentProductInfo,
   StepNonParentReview,
@@ -107,6 +110,7 @@ function validateStep(stepId: StepId, data: ProductFormData): Record<string, str
       if (!data.plant.trim()) err.plant = 'Plant name is required';
       break;
     case 'details':
+      if (data.listingHubs.length === 0) err.listingHubs = 'Select at least one hub';
       break;
     case 'pricing':
       if (data.sellingPrice !== '' && typeof data.sellingPrice === 'number' && data.sellingPrice < 0) {
@@ -185,6 +189,34 @@ export function ProductMasterForm() {
   const isNonParentLast = phase === 'non-parent' && nonParentStepIndex === SHORT_STEPS.length - 1;
   const finalName = useMemo(() => computeFinalName(formData), [formData]);
 
+  /** On the parent review step, copy calculated defaults into state so every field shows a real value (not placeholders). */
+  useEffect(() => {
+    if (phase !== 'parent' || STEPS[stepIndex]?.id !== 'review') return;
+    setFormData((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      if (
+        next.compare_at === '' &&
+        typeof next.sellingPrice === 'number' &&
+        !Number.isNaN(next.sellingPrice)
+      ) {
+        next.compare_at = next.sellingPrice * 4;
+        changed = true;
+      }
+      if (next.plant.trim()) {
+        if (!next.seoTitle.trim()) {
+          next.seoTitle = buildDefaultSeoTitle(next.plant);
+          changed = true;
+        }
+        if (!next.seoDescription.trim()) {
+          next.seoDescription = buildDefaultSeoDescription(next.plant);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [phase, stepIndex]);
+
   const activeSteps = phase === 'non-parent' ? SHORT_STEPS : STEPS;
   const activeStepIndex = phase === 'non-parent' ? nonParentStepIndex : stepIndex;
 
@@ -257,6 +289,35 @@ export function ProductMasterForm() {
   };
 
   const handleFieldChange = (field: string, value: string | number | '' | boolean) => {
+    if (field === 'sellingPrice') {
+      setFormData((prev) => {
+        const sp = value as ProductFormData['sellingPrice'];
+        const next = { ...prev, sellingPrice: sp };
+        if (typeof sp === 'number' && !Number.isNaN(sp)) {
+          next.compare_at = sp * 4;
+        } else if (sp === '') {
+          next.compare_at = '';
+        }
+        return next;
+      });
+      return;
+    }
+    if (field === 'plant') {
+      const newPlant = String(value);
+      setFormData((prev) => {
+        const next = { ...prev, plant: newPlant };
+        const oldTitle = buildDefaultSeoTitle(prev.plant);
+        const oldDesc = buildDefaultSeoDescription(prev.plant);
+        if (!prev.seoTitle.trim() || prev.seoTitle === oldTitle) {
+          next.seoTitle = buildDefaultSeoTitle(newPlant);
+        }
+        if (!prev.seoDescription.trim() || prev.seoDescription === oldDesc) {
+          next.seoDescription = buildDefaultSeoDescription(newPlant);
+        }
+        return next;
+      });
+      return;
+    }
     setField(field as keyof ProductFormData, value as ProductFormData[keyof ProductFormData]);
   };
 
@@ -291,6 +352,20 @@ export function ProductMasterForm() {
       ...prev,
       collectionIds: prev.collectionIds.filter((id) => id !== collectionId),
     }));
+  };
+
+  const handleListingHubToggle = (hub: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      listingHubs: prev.listingHubs.includes(hub)
+        ? prev.listingHubs.filter((h) => h !== hub)
+        : [...prev.listingHubs, hub],
+    }));
+    clearError('listingHubs');
+  };
+
+  const handleListingSectionChange = (section: ListingSection) => {
+    setFormData((prev) => ({ ...prev, listingSection: section }));
   };
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,7 +524,17 @@ export function ProductMasterForm() {
         if (selectedImages.length > 0) uploadedUrls = await uploadImages();
         const allImageUrls = [...formData.images, ...uploadedUrls];
 
-        const submitData: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
+        const compareAtResolved =
+          formData.compare_at !== '' && typeof formData.compare_at === 'number'
+            ? formData.compare_at
+            : formData.sellingPrice !== '' && typeof formData.sellingPrice === 'number'
+              ? formData.sellingPrice * 4
+              : undefined;
+
+        const submitData: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> & {
+          seoTitle?: string;
+          seoDescription?: string;
+        } = {
           productType: 'parent',
           plant: formData.plant.trim(),
           otherNames: formData.otherNames.trim() || undefined,
@@ -470,10 +555,13 @@ export function ProductMasterForm() {
             formData.sellingPrice !== '' && typeof formData.sellingPrice === 'number'
               ? formData.sellingPrice
               : undefined,
-          compare_at:
-            formData.compare_at !== '' && typeof formData.compare_at === 'number'
-              ? formData.compare_at
-              : undefined,
+          ...(compareAtResolved !== undefined ? { compare_at: compareAtResolved } : {}),
+          ...(formData.tax === '5' || formData.tax === '18' ? { tax: formData.tax } : {}),
+          ...(formData.parentKind === 'plant' || formData.parentKind === 'pot'
+            ? { parentKind: formData.parentKind }
+            : {}),
+          seoTitle: formData.seoTitle.trim(),
+          seoDescription: formData.seoDescription.trim(),
           inventory_quantity:
             formData.inventory_quantity !== '' && typeof formData.inventory_quantity === 'number'
               ? formData.inventory_quantity
@@ -481,18 +569,37 @@ export function ProductMasterForm() {
           images: allImageUrls.length > 0 ? allImageUrls : undefined,
         };
 
+        if (formData.listingHubs.length > 0 && allImageUrls.length === 0) {
+          setMessage({
+            type: 'error',
+            text: 'Add at least one product image — hub listings require images.',
+          });
+          setSubmitting(false);
+          return;
+        }
+
         const response = await fetch('/api/parent-master', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(submitData),
+          body: JSON.stringify({
+            ...submitData,
+            listingHubs: formData.listingHubs,
+            listingSection: formData.listingSection,
+          }),
         });
         const result = await response.json();
 
         if (result.success) {
           removePersistedForm(FORM_STORAGE_KEY);
+          const listingNote =
+            typeof result.listingCreatedCount === 'number' && result.listingCreatedCount > 0
+              ? ` ${result.listingCreatedCount} hub listing(s) created.`
+              : '';
           setMessage({
             type: 'success',
-            text: result.warning ? `Product created with warning: ${result.warning}` : 'Product created successfully!',
+            text: result.warning
+              ? `Product created with warning: ${result.warning}`
+              : (result.message || 'Product created successfully!') + listingNote,
           });
           setFormData(initialFormData);
           setSelectedImages([]);
@@ -740,6 +847,7 @@ export function ProductMasterForm() {
                 colour={formData.colour}
                 height={formData.height}
                 size={formData.size}
+                parentKind={formData.parentKind}
                 finalName={finalName}
                 errors={errors}
                 onFieldChange={handleFieldChange}
@@ -755,6 +863,11 @@ export function ProductMasterForm() {
                 redirects={formData.redirects}
                 description={formData.description}
                 sellerOptions={sellerOptions}
+                listingHubs={formData.listingHubs}
+                listingSection={formData.listingSection}
+                onListingHubToggle={handleListingHubToggle}
+                onListingSectionChange={handleListingSectionChange}
+                listingHubsError={errors.listingHubs}
                 errors={errors}
                 onFieldChange={handleFieldChange}
                 onClearError={clearError}
@@ -763,7 +876,7 @@ export function ProductMasterForm() {
             {phase === 'parent' && currentStep.id === 'pricing' && (
               <StepPricing
                 sellingPrice={formData.sellingPrice}
-                compare_at={formData.compare_at}
+                tax={formData.tax}
                 errors={errors}
                 onFieldChange={handleFieldChange}
                 onClearError={clearError}
@@ -790,14 +903,99 @@ export function ProductMasterForm() {
               />
             )}
             {phase === 'parent' && currentStep.id === 'review' && (
-              <StepReview
-                data={formData}
-                finalName={finalName}
-                categories={categories}
-                collections={collections}
-                selectedImageCount={selectedImages.length}
-                procurementSellers={sellers}
-              />
+              <div className="space-y-10">
+                <p className="text-sm text-slate-600">
+                  Review and edit any section below before creating the product.
+                </p>
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">
+                    Product info
+                  </h2>
+                  <StepProductInfo
+                    plant={formData.plant}
+                    otherNames={formData.otherNames}
+                    variety={formData.variety}
+                    colour={formData.colour}
+                    height={formData.height}
+                    size={formData.size}
+                    parentKind={formData.parentKind}
+                    finalName={finalName}
+                    errors={errors}
+                    onFieldChange={handleFieldChange}
+                    onClearError={clearError}
+                  />
+                </section>
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">
+                    Details
+                  </h2>
+                  <StepDetails
+                    mossStick={formData.mossStick}
+                    potType={formData.potType}
+                    seller={formData.seller}
+                    features={formData.features}
+                    redirects={formData.redirects}
+                    description={formData.description}
+                    sellerOptions={sellerOptions}
+                    listingHubs={formData.listingHubs}
+                    listingSection={formData.listingSection}
+                    onListingHubToggle={handleListingHubToggle}
+                    onListingSectionChange={handleListingSectionChange}
+                    listingHubsError={errors.listingHubs}
+                    errors={errors}
+                    onFieldChange={handleFieldChange}
+                    onClearError={clearError}
+                  />
+                </section>
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">
+                    Pricing
+                  </h2>
+                  <StepPricing
+                    sellingPrice={formData.sellingPrice}
+                    compare_at={formData.compare_at}
+                    compareAtEditable
+                    tax={formData.tax}
+                    errors={errors}
+                    onFieldChange={handleFieldChange}
+                    onClearError={clearError}
+                  />
+                </section>
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">
+                    Categories &amp; images
+                  </h2>
+                  <StepCategoriesAndImages
+                    categories={categories}
+                    collections={collections}
+                    selectedCategoryIds={formData.categories}
+                    selectedCollectionIds={formData.collectionIds}
+                    selectedImages={selectedImages}
+                    uploadedImageUrls={formData.images}
+                    errors={errors}
+                    fileInputRef={fileInputRef}
+                    onCategoryToggle={handleCategoryToggle}
+                    onRemoveCategory={handleRemoveCategory}
+                    onCollectionToggle={handleCollectionToggle}
+                    onRemoveCollection={handleRemoveCollection}
+                    onImageSelect={handleImageSelect}
+                    onRemoveSelectedImage={removeSelectedImage}
+                    onRemoveUploadedImage={removeUploadedImage}
+                    onClearError={clearError}
+                  />
+                </section>
+                <section className="space-y-3">
+                  <h2 className="text-sm font-semibold text-slate-800 border-b border-slate-200 pb-2">
+                    SEO
+                  </h2>
+                  <StepSeoFields
+                    plantName={formData.plant}
+                    seoTitle={formData.seoTitle}
+                    seoDescription={formData.seoDescription}
+                    onFieldChange={handleFieldChange}
+                  />
+                </section>
+              </div>
             )}
 
             {phase === 'non-parent' && SHORT_STEPS[nonParentStepIndex].id === 'non-parent-info' && (

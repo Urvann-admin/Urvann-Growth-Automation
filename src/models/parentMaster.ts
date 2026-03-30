@@ -1,6 +1,11 @@
 import { ObjectId } from 'mongodb';
 import { getCollection } from '@/lib/mongodb';
+import type { ListingProductSEO } from '@/models/listingProduct';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
+import {
+  candidateBaseParentSkusForParentListing,
+  toCanonicalParentSkuForPurchases,
+} from '@/lib/skuGenerator';
 
 export type ProductType = 'parent' | 'growing_product' | 'consumable';
 
@@ -46,6 +51,12 @@ export interface ParentMaster {
   sellingPrice?: number;
   /** Compare-at / “was” price for merchandising (optional; `null` in DB means explicitly cleared) */
   compare_at?: number | null;
+  /** GST / tax rate: 5% or 18% (stored as `5` or `18`); `null` clears when updating */
+  tax?: '5' | '18' | null;
+  /** Parent merchandising type: plant vs pot (optional) */
+  parentKind?: 'plant' | 'pot';
+  /** Store-style SEO (same shape as listing product `SEO`) */
+  SEO?: ListingProductSEO;
   /** Listing price: sellingPrice × procurement seller multiplicationFactor (computed on save) */
   listing_price?: number;
   /** AWS S3 image URLs (optional in form; default [] when omitted) */
@@ -58,7 +69,10 @@ export interface ParentMaster {
   product_id?: string;
   /** Procurement seller _id from procurement_seller_master */
   seller?: string;
-  /** Hub name (optional; when parent is live in all hubs, SKU has no hub letter) */
+  /**
+   * Hub name when this row is scoped to one hub (SKU from `generateParentSKU(hub, plant)`).
+   * Omitted for legacy/global parent rows (SKU from `generateParentSKUGlobal`).
+   */
   hub?: string;
   /**
    * For base `parent` rows: generated listing SKU (same as `productCode`).
@@ -129,6 +143,39 @@ export class ParentMasterModel {
     });
     if (base) return base;
     return collection.findOne({ sku: trimmed });
+  }
+
+  /**
+   * Resolve which Parent Master row to update for inventory sync: exact SKU, then canonical / candidate
+   * variants (hub-prefixed listing line + global parent row, or hub-scoped parent row).
+   */
+  static async findBaseParentForInventorySync(
+    hub: string | undefined,
+    lineOrPurchaseSku: string
+  ): Promise<ParentMaster | null> {
+    const raw = String(lineOrPurchaseSku ?? '').trim();
+    if (!raw) return null;
+
+    const trySku = async (s: string) => {
+      const doc = await this.findBySku(s);
+      return doc && isBaseParent(doc) ? (doc as ParentMaster) : null;
+    };
+
+    const direct = await trySku(raw);
+    if (direct) return direct;
+
+    const candidates = new Set<string>(candidateBaseParentSkusForParentListing(raw, hub));
+    const h = hub?.trim();
+    if (h) {
+      const canon = toCanonicalParentSkuForPurchases('parent', h, raw);
+      if (canon) candidates.add(canon);
+    }
+    for (const c of candidates) {
+      if (!c || c === raw) continue;
+      const doc = await trySku(c);
+      if (doc) return doc;
+    }
+    return null;
   }
 
   static async findByProductCode(productCode: string) {

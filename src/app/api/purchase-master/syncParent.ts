@@ -7,7 +7,7 @@ import { ParentMasterModel, isBaseParent } from '@/models/parentMaster';
  * rows for that parentSku, then update the parent. Call this after creating or
  * updating purchases so the parent stays in sync.
  */
-export async function syncParentFromPurchases(parentSku: string): Promise<void> {
+export async function syncParentFromPurchases(parentSku: string, hub?: string): Promise<void> {
   const sku = String(parentSku || '').trim();
   if (!sku) return;
 
@@ -42,7 +42,7 @@ export async function syncParentFromPurchases(parentSku: string): Promise<void> 
     }
   }
 
-  const parent = await ParentMasterModel.findBySku(sku);
+  const parent = await ParentMasterModel.findBaseParentForInventorySync(hub, sku);
   if (!parent?._id || !isBaseParent(parent)) return;
 
   // Store exact integer quantities, not fractions

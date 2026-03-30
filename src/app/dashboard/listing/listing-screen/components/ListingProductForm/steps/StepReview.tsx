@@ -1,7 +1,8 @@
 'use client';
 
-import { Package, Tag, Image as ImageIcon, DollarSign, Hash, MapPin } from 'lucide-react';
+import { Package, Tag, Image as ImageIcon, DollarSign, Hash, MapPin, Search, RotateCcw, X, Plus } from 'lucide-react';
 import type { ListingFormData } from '../types';
+import { buildDefaultSeoTitle, buildDefaultSeoDescription } from '../types';
 import type { ListingSection } from '@/models/listingProduct';
 import type { ParentMaster } from '@/models/parentMaster';
 
@@ -15,6 +16,7 @@ export interface StepReviewProps {
 
 export function StepReview({
   formData,
+  updateFormData,
   selectedParents,
   section,
 }: StepReviewProps) {
@@ -31,6 +33,17 @@ export function StepReview({
   };
 
   const finalName = generateFinalName();
+
+  const handleFeatureRemove = (feature: string) => {
+    updateFormData({ features: formData.features.filter(f => f !== feature) });
+  };
+
+  const handleFeatureAdd = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed && !formData.features.includes(trimmed)) {
+      updateFormData({ features: [...formData.features, trimmed] });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -215,6 +228,184 @@ export function StepReview({
               {category}
             </span>
           ))}
+        </div>
+      </div>
+
+      {/* SEO Fields */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+          <Search className="h-4 w-4" />
+          SEO
+        </h5>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">SEO Title</label>
+            <input
+              type="text"
+              value={formData.seoTitle}
+              onChange={(e) => updateFormData({ seoTitle: e.target.value })}
+              placeholder={buildDefaultSeoTitle(formData.plant)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            />
+            {!formData.seoTitle && (
+              <p className="mt-1 text-xs text-gray-400">Will use: {buildDefaultSeoTitle(formData.plant)}</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">SEO Description</label>
+            <textarea
+              value={formData.seoDescription}
+              onChange={(e) => updateFormData({ seoDescription: e.target.value })}
+              placeholder={buildDefaultSeoDescription(formData.plant)}
+              rows={3}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y"
+            />
+            {!formData.seoDescription && (
+              <p className="mt-1 text-xs text-gray-400">Will use: {buildDefaultSeoDescription(formData.plant)}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => updateFormData({
+              seoTitle: buildDefaultSeoTitle(formData.plant),
+              seoDescription: buildDefaultSeoDescription(formData.plant),
+            })}
+            className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset to defaults
+          </button>
+        </div>
+      </div>
+
+      {/* Tax */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+          <DollarSign className="h-4 w-4" />
+          Tax
+        </h5>
+        <div className="flex items-center gap-4">
+          <select
+            value={formData.tax}
+            onChange={(e) => updateFormData({ tax: e.target.value })}
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          >
+            <option value="">No tax</option>
+            <option value="5">5%</option>
+            <option value="18">18%</option>
+          </select>
+          <p className="text-xs text-gray-500">
+            {selectedParents.length > 0
+              ? `Derived from parent(s): max tax = ${
+                  Math.max(0, ...selectedParents.map(p => p.tax ? Number(p.tax) : 0))
+                }%`
+              : 'Set tax rate for this product'}
+          </p>
+        </div>
+      </div>
+
+      {/* Redirect */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+          <Hash className="h-4 w-4" />
+          Redirect
+        </h5>
+        <div className="space-y-2">
+          <input
+            type="text"
+            value={formData.redirect}
+            onChange={(e) => updateFormData({ redirect: e.target.value })}
+            placeholder="Enter redirect URL or slug"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          />
+          <p className="text-xs text-gray-500">
+            Only one redirect per product. Combined unique redirects from parents are shown above — edit to keep just one.
+          </p>
+          {selectedParents.some(p => (p as any).redirects) && (
+            <div className="mt-2">
+              <p className="text-xs font-medium text-gray-600 mb-1">Parent redirects (for reference):</p>
+              <div className="flex flex-wrap gap-1">
+                {Array.from(new Set(
+                  selectedParents.flatMap(p => {
+                    const r = (p as any).redirects;
+                    return r ? r.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+                  })
+                )).map((r: string) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => updateFormData({ redirect: r })}
+                    className="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded hover:bg-emerald-100 hover:text-emerald-800 transition-colors"
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Click a redirect to use it</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Features */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+          <Tag className="h-4 w-4" />
+          Features ({formData.features.length})
+        </h5>
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {formData.features.map((feature) => (
+              <span
+                key={feature}
+                className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-100 text-emerald-800 text-xs rounded-full"
+              >
+                {feature}
+                <button
+                  type="button"
+                  onClick={() => handleFeatureRemove(feature)}
+                  className="ml-0.5 hover:text-emerald-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {formData.features.length === 0 && (
+              <p className="text-xs text-gray-400">No features added yet</p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Add a feature and press Enter"
+              className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleFeatureAdd((e.target as HTMLInputElement).value);
+                  (e.target as HTMLInputElement).value = '';
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                const input = (e.currentTarget.previousElementSibling as HTMLInputElement);
+                handleFeatureAdd(input.value);
+                input.value = '';
+              }}
+              className="px-3 py-1.5 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+          {selectedParents.length > 0 && (
+            <p className="text-xs text-gray-500">
+              {selectedParents.some(p => (p as any).parentKind === 'pot') && selectedParents.some(p => (p as any).parentKind !== 'pot')
+                ? 'Features are from plant parents only (pot parent features are excluded).'
+                : 'Combined unique features from all parents.'}
+            </p>
+          )}
         </div>
       </div>
 

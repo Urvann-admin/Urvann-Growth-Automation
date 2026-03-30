@@ -6,7 +6,17 @@ import type { Category } from '@/models/category';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import type { ProductType } from '@/models/parentMaster';
 import { CustomSelect } from '../../components/CustomSelect';
-import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, COLOUR_OPTIONS, FEATURES_OPTIONS, REDIRECTS_OPTIONS } from '../ProductMasterForm/types';
+import {
+  MOSS_STICK_OPTIONS,
+  POT_TYPE_OPTIONS,
+  COLOUR_OPTIONS,
+  FEATURES_OPTIONS,
+  REDIRECTS_OPTIONS,
+  TAX_OPTIONS,
+  PARENT_KIND_OPTIONS,
+  buildDefaultSeoTitle,
+  buildDefaultSeoDescription,
+} from '../ProductMasterForm/types';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 
 interface EditParentForm {
@@ -29,6 +39,10 @@ interface EditParentForm {
   categories: string[];
   sellingPrice: number | '';
   compare_at: number | '';
+  tax: string;
+  parentKind: string;
+  seoTitle: string;
+  seoDescription: string;
   images: string[];
 }
 
@@ -195,6 +209,13 @@ export function EditParentModal({
                 onChange={(v) => onChange({ ...editForm, colour: v })}
                 options={COLOUR_OPTIONS}
                 placeholder="Select Colour"
+              />
+              <CustomSelect
+                label="Parent type (optional)"
+                value={editForm.parentKind}
+                onChange={(v) => onChange({ ...editForm, parentKind: v })}
+                options={PARENT_KIND_OPTIONS}
+                placeholder="Plant or pot"
               />
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Height (feet)</span>
@@ -372,14 +393,52 @@ export function EditParentModal({
                     })
                   }
                   className={inputClass}
-                  placeholder="Optional"
+                  placeholder={
+                    editForm.sellingPrice !== '' && typeof editForm.sellingPrice === 'number'
+                      ? `Default ${(editForm.sellingPrice * 4).toFixed(2)} (selling × 4)`
+                      : 'Selling × 4 if empty'
+                  }
                 />
               </label>
+              <CustomSelect
+                label="Tax (optional)"
+                value={editForm.tax}
+                onChange={(v) => onChange({ ...editForm, tax: v })}
+                options={TAX_OPTIONS}
+                placeholder="Select tax rate"
+              />
               <p className="text-xs text-slate-500 sm:col-span-2">
                 Listing price is computed on save (selling price × procurement seller factor).
               </p>
             </div>
           </ModalSection>
+
+          {isParentProduct && (
+            <ModalSection title="SEO">
+              <div className="grid grid-cols-1 gap-4">
+                <label className="block">
+                  <span className="block text-sm font-medium text-slate-700 mb-1.5">SEO title</span>
+                  <input
+                    type="text"
+                    value={editForm.seoTitle}
+                    onChange={(e) => onChange({ ...editForm, seoTitle: e.target.value })}
+                    className={inputClass}
+                    placeholder={buildDefaultSeoTitle(editForm.plant)}
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-sm font-medium text-slate-700 mb-1.5">SEO description</span>
+                  <textarea
+                    value={editForm.seoDescription}
+                    onChange={(e) => onChange({ ...editForm, seoDescription: e.target.value })}
+                    className={`${inputClass} min-h-[88px] py-2 resize-y`}
+                    rows={3}
+                    placeholder={buildDefaultSeoDescription(editForm.plant)}
+                  />
+                </label>
+              </div>
+            </ModalSection>
+          )}
 
           <ModalSection title="Categories">
             {editForm.categories.length > 0 && (

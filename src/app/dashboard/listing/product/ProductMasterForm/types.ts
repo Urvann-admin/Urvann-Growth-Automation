@@ -1,4 +1,5 @@
 import type { ProductType } from '@/models/parentMaster';
+import type { ListingSection } from '@/models/listingProduct';
 
 export type StepId = 'product-info' | 'details' | 'pricing' | 'categories-images' | 'review';
 
@@ -46,10 +47,22 @@ export interface ProductFormData {
   sellingPrice: number | '';
   /** Compare-at price (optional; stored as `compare_at` on parent master) */
   compare_at: number | '';
+  /** Tax rate: `5` or `18` (labels 5% / 18%); empty = not set */
+  tax: string;
+  /** Parent type: plant or pot (optional) */
+  parentKind: string;
+  /** SEO title (defaults from plant name; editable on review) */
+  seoTitle: string;
+  /** SEO description (defaults from plant name; editable on review) */
+  seoDescription: string;
   inventory_quantity: number | '';
   images: string[];
   features: string;
   redirects: string;
+  /** Hubs where a parent-type listing row is created (same flow as former Listing → Parent listing). */
+  listingHubs: string[];
+  /** Inventory / listing section for those rows (default main Listing). */
+  listingSection: ListingSection;
 }
 
 export const STEPS: { id: StepId; label: string; title: string }[] = [
@@ -75,10 +88,16 @@ export const initialFormData: ProductFormData = {
   collectionIds: [],
   sellingPrice: '',
   compare_at: '',
+  tax: '',
+  parentKind: '',
+  seoTitle: '',
+  seoDescription: '',
   inventory_quantity: '',
   images: [],
   features: '',
   redirects: '',
+  listingHubs: [],
+  listingSection: 'listing',
 };
 
 /** Placeholder options – define exact values later */
@@ -118,3 +137,25 @@ export const POT_TYPE_OPTIONS = [
   { value: 'bag', label: 'Bag' },
   { value: 'pot', label: 'Pot' },
 ];
+
+export const TAX_OPTIONS = [
+  { value: '', label: 'Select tax (optional)' },
+  { value: '5', label: '5%' },
+  { value: '18', label: '18%' },
+];
+
+export const PARENT_KIND_OPTIONS = [
+  { value: '', label: 'Select parent type (optional)' },
+  { value: 'plant', label: 'Plant' },
+  { value: 'pot', label: 'Pot' },
+];
+
+export function buildDefaultSeoTitle(plantName: string): string {
+  const n = plantName.trim() || 'plant';
+  return `Free Next Day Delivery | ${n}`;
+}
+
+export function buildDefaultSeoDescription(plantName: string): string {
+  const n = plantName.trim() || 'plant';
+  return `Buy ${n} at Urvann. Choose from 10000+ plants, gardening products and essentials. Order now to get free next day home delivery.`;
+}

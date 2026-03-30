@@ -16,6 +16,7 @@ const TEMPLATE_HEADERS = [
   'sellingPrice',
   'seller',
   'compare_at',
+  'tax',
   'features',
   'redirects',
   'inventory_quantity',
@@ -27,6 +28,7 @@ const TEMPLATE_HEADERS = [
  * - categories: comma-separated category aliases.
  * - collection: comma-separated collection Mongo _id, alias, or name (from collection master).
  * - seller: procurement_seller_master _id.
+ * - tax: optional 5, 18, 5%, or 18%.
  * - features / redirects: same option values as the product form dropdowns.
  * - image: comma-separated http(s) URLs — each file is downloaded and re-uploaded to S3; stored URLs are S3.
  */
@@ -45,6 +47,7 @@ const EXAMPLE_ROW = [
   '299',
   '',
   '399',
+  '5',
   'option-a',
   'redirect-1',
   '10',
