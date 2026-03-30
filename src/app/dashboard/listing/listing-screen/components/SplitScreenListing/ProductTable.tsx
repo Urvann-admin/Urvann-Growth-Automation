@@ -34,6 +34,7 @@ import {
   canonicalBaseSkuForParentItem,
   passedHubsFromChecks,
 } from '@/lib/childListingHubSku';
+import { compareAtFromFirstParentLine } from '@/lib/childListingCompareAt';
 
 const TAG_OPTIONS = [
   { value: 'Bestseller', label: 'Bestseller' },
@@ -1054,6 +1055,9 @@ function ProductCard({
       inventory_quantity: inventory,
       setQuantity: setQty,
       quantity: setQty,
+      ...(listingMode === 'child'
+        ? { compare_at_price: compareAtFromFirstParentLine(cleanedItems) }
+        : {}),
     });
   };
 
@@ -1099,6 +1103,7 @@ function ProductCard({
       inventory_quantity: inventory,
       setQuantity: setQty,
       quantity: setQty,
+      ...(listingMode === 'child' ? { compare_at_price: compareAtFromFirstParentLine([newItem]) } : {}),
     });
   };
 
@@ -1123,6 +1128,9 @@ function ProductCard({
       inventory_quantity: inventory,
       setQuantity: setQty,
       quantity: setQty,
+      ...(listingMode === 'child'
+        ? { compare_at_price: compareAtFromFirstParentLine(updatedItems) }
+        : {}),
     });
   };
 
@@ -1167,6 +1175,9 @@ function ProductCard({
         inventory_quantity: inventory,
         setQuantity: setQty,
         quantity: setQty,
+        ...(listingMode === 'child'
+          ? { compare_at_price: compareAtFromFirstParentLine(tempRow.parentItems) }
+          : {}),
       });
     } else {
       handleParentItemChange(itemIndex, { parentSku });
@@ -1531,7 +1542,7 @@ function ProductCard({
                     onChange={(value) => onUpdateRow(row.id, { compare_at_price: value === '' ? undefined : Number(value) })}
                     type="number"
                     placeholder="Compare at price"
-                    label="Compare at Price (₹)"
+                    label="Compare at Price (₹) (auto from parent)"
                   />
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">Tags</label>
@@ -1780,7 +1791,7 @@ function ProductCard({
                     onChange={(value) => onUpdateRow(row.id, { compare_at_price: value === '' ? undefined : Number(value) })}
                     type="number"
                     placeholder="Compare at price"
-                    label="Compare at Price (₹)"
+                    label="Compare at Price (₹) (auto from parent)"
                   />
                   <InlineInput
                     value={row.sort_order ?? 3000}

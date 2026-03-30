@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-    const seller_id = await SellerMasterModel.findSellerIdForHub(hub);
+    const seller_id = await SellerMasterModel.resolveStorefrontSellerIdForHub(hub);
     return NextResponse.json({
       success: true,
       hub,

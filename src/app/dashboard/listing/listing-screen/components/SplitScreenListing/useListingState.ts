@@ -18,6 +18,7 @@ import {
   mergeVerifyResults,
   passedHubsFromChecks,
 } from '@/lib/childListingHubSku';
+import { compareAtFromFirstParentLine } from '@/lib/childListingCompareAt';
 import { normalizeListingImageUrlForMatch } from '@/lib/listingImageUrl';
 
 const PARENT_LIST_PAGE_LIMIT = 40;
@@ -466,13 +467,18 @@ export function useListingState(section: ListingSection) {
           const first = row.parentItems[0];
           const pid = first?.parent?._id;
           if (!pid || String(pid) !== String(parentId)) return row;
+          const nextItems = row.parentItems.map((item) =>
+            item.parent && String(item.parent._id) === String(parentId)
+              ? { ...item, parent: p, parentSku: String(p.sku || item.parentSku) }
+              : item
+          );
+          const firstStillThisParent = String(nextItems[0]?.parent?._id) === String(parentId);
           return {
             ...row,
-            parentItems: row.parentItems.map((item) =>
-              item.parent && String(item.parent._id) === String(parentId)
-                ? { ...item, parent: p, parentSku: String(p.sku || item.parentSku) }
-                : item
-            ),
+            parentItems: nextItems,
+            ...(prev.listingMode === 'child' && firstStillThisParent
+              ? { compare_at_price: compareAtFromFirstParentLine(nextItems) }
+              : {}),
           };
         }),
         availableParents: prev.availableParents.map((opt) =>

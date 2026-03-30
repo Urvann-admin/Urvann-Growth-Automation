@@ -73,15 +73,23 @@ export class SellerMasterModel {
     return null;
   }
 
-  /** First seller whose `substores` overlaps hub substores (e.g. Whitefield → bgl-e, bgl-e2). */
+  /**
+   * First seller whose `substores` overlaps hub substores (e.g. Whitefield → bgl-e, bgl-e2).
+   * Match is case-insensitive so DB values like `BGL-E` still align with `HUB_MAPPINGS`.
+   */
   static async findForHub(hubName: string): Promise<SellerMaster | null> {
     const hub = String(hubName ?? '').trim();
     if (!hub) return null;
     const hubSubstores = getSubstoresByHub(hub);
     if (hubSubstores.length === 0) return null;
+    const pattern = hubSubstores
+      .map((s) => escapeRegex(String(s).trim()))
+      .filter(Boolean)
+      .join('|');
+    if (!pattern) return null;
     const collection = await getCollection(COLLECTION_NAME);
     const doc = await collection.findOne({
-      substores: { $in: hubSubstores },
+      substores: { $regex: new RegExp(`^(${pattern})$`, 'i') },
     });
     return doc as SellerMaster | null;
   }

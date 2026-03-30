@@ -26,9 +26,15 @@ export function serializeParent(doc: ParentMaster | null): (ParentMaster & { pri
   const rawVendor = doc.vendor_id != null ? String(doc.vendor_id).trim() : '';
   const vendor_id =
     rawVendor || (isMongoObjectIdString(rawSeller) ? rawSeller : undefined) || undefined;
+  /** Hub-scoped parent rows: `seller` is always storefront seller_id from sellerMaster (never procurement _id). */
+  const hasHub = doc.hub != null && String(doc.hub).trim() !== '';
   let seller: string | undefined;
   if (rawVendor) {
-    seller = isMongoObjectIdString(rawSeller) ? undefined : rawSeller || undefined;
+    if (hasHub) {
+      seller = rawSeller || undefined;
+    } else {
+      seller = isMongoObjectIdString(rawSeller) ? undefined : rawSeller || undefined;
+    }
   } else if (isMongoObjectIdString(rawSeller)) {
     seller = undefined;
   } else {
