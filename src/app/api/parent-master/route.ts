@@ -403,7 +403,7 @@ export async function POST(request: NextRequest) {
             categories: parentDoc.categories ?? [],
             collectionIds: parentDoc.collectionIds?.map((id) => String(id)),
             images: imageUrls,
-            status: 'draft' as const,
+            status: 'listed' as const,
             ...(compareAt !== undefined ? { compare_at_price: compareAt } : {}),
             ...(parentDoc.SEO && (parentDoc.SEO.title || parentDoc.SEO.description)
               ? { SEO: { title: parentDoc.SEO.title, description: parentDoc.SEO.description } }

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCollection } from '@/lib/mongodb';
 import type { ListingProduct, ListingSection } from '@/models/listingProduct';
 import { ParentMasterModel, type ParentMaster } from '@/models/parentMaster';
-import { toCanonicalParentSkuForPurchases } from '@/lib/skuGenerator';
 
 const LISTING_PRODUCT_COLLECTION = 'listingProduct';
 
@@ -68,11 +67,10 @@ export async function GET(request: NextRequest) {
       if (!first?.parentSku) continue;
 
       const hub = doc.hub ? String(doc.hub).trim() : undefined;
-      const lt: 'parent' | 'child' = doc.listingType === 'parent' ? 'parent' : 'child';
-      const canonical = toCanonicalParentSkuForPurchases(lt, hub, first.parentSku);
-      if (!canonical) continue;
-
-      const base = await ParentMasterModel.findBySku(canonical);
+      const base = await ParentMasterModel.findBaseParentForInventorySync(
+        hub,
+        String(first.parentSku).trim()
+      );
       if (!base) continue;
 
       const price = typeof doc.price === 'number' ? doc.price : Number(doc.price) || 0;
