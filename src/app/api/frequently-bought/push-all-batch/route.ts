@@ -200,7 +200,7 @@ export async function POST(request: Request) {
                   sortBy: { count: -1 }
                 }
               },
-              limit * 3 // Get more candidates for filtering
+              50 // Get many more candidates to find available pairings
             ]
           }
         }
@@ -214,28 +214,66 @@ export async function POST(request: Request) {
     const skuPairingsMap = new Map<string, Array<{ pairedSku: string; count: number }>>();
     const allPairedSkusSet = new Set<string>();
     
-    console.log(`[Push All Batch] Aggregation returned ${pairingsAggregation.length} SKUs with pairings`);
+    console.log(`[Push All Batch] ⚡ DIAGNOSTIC: Aggregation returned ${pairingsAggregation.length} SKUs with pairings out of ${validSkuList.length} valid batch SKUs`);
+    
+    // SKUs that the aggregation found pairings for
+    const skusWithPairings = new Set<string>();
     
     for (const result of pairingsAggregation) {
       skuPairingsMap.set(result.mainSku, result.topPairs);
-      // Collect all unique paired SKUs for batch mapping lookup
+      skusWithPairings.add(result.mainSku);
       for (const pair of result.topPairs) {
         allPairedSkusSet.add(pair.pairedSku);
       }
     }
     
+    // SKUs that are in the batch but have NO pairings from aggregation
+    const skusWithoutPairings = validSkuList.filter((sku: string) => !skusWithPairings.has(sku));
+    
     // Log pairing statistics
     const totalPairs = Array.from(skuPairingsMap.values()).reduce((sum, pairs) => sum + pairs.length, 0);
     const avgPairsPerSku = skuPairingsMap.size > 0 ? (totalPairs / skuPairingsMap.size).toFixed(2) : '0';
+    console.log(`[Push All Batch] ⚡ DIAGNOSTIC: ${skusWithPairings.size} SKUs HAVE pairings, ${skusWithoutPairings.length} SKUs have NO pairings`);
     console.log(`[Push All Batch] Pairing stats: ${totalPairs} total pairs across ${skuPairingsMap.size} SKUs (avg ${avgPairsPerSku} per SKU)`);
     console.log(`[Push All Batch] Unique paired SKUs found: ${allPairedSkusSet.size}`);
     
-    // Log sample of pairings for first few SKUs
-    let sampleCount = 0;
+    // Log first 5 SKUs WITH pairings
+    let sampleWithCount = 0;
     for (const [mainSku, pairs] of skuPairingsMap.entries()) {
-      if (sampleCount < 3 && pairs.length > 0) {
-        console.log(`[Push All Batch] Sample ${mainSku}: ${pairs.length} pairs - top 3: ${pairs.slice(0, 3).map(p => `${p.pairedSku}(${p.count}x)`).join(', ')}`);
-        sampleCount++;
+      if (sampleWithCount < 5 && pairs.length > 0) {
+        console.log(`[Push All Batch] ⚡ WITH PAIRINGS - ${mainSku}: ${pairs.length} pairs - top 3: ${pairs.slice(0, 3).map(p => `${p.pairedSku}(${p.count}x)`).join(', ')}`);
+        sampleWithCount++;
+      }
+    }
+    
+    // Log first 5 SKUs WITHOUT pairings and do a spot check
+    if (skusWithoutPairings.length > 0) {
+      console.log(`[Push All Batch] ⚡ WITHOUT PAIRINGS (sample of ${Math.min(5, skusWithoutPairings.length)}): ${skusWithoutPairings.slice(0, 5).join(', ')}`);
+      
+      // Spot check: verify if the first SKU without pairings has transactions in the DB
+      const spotCheckSku = skusWithoutPairings[0];
+      const spotCheckTxnCount = await frequentlyBoughtCollection.countDocuments({
+        channel: { $ne: 'admin' },
+        'items.sku': spotCheckSku,
+        'items.1': { $exists: true },
+        substore: { $nin: ['hubchange', 'test4'] },
+      });
+      console.log(`[Push All Batch] ⚡ SPOT CHECK: SKU ${spotCheckSku} has ${spotCheckTxnCount} transactions in DB (should be > 0 if dashboard shows pairings)`);
+      
+      if (spotCheckTxnCount > 0) {
+        // If transactions exist but aggregation found nothing, the aggregation has a bug
+        // Do a direct count to verify
+        const spotCheckDirectPairs = await frequentlyBoughtCollection.find({
+          channel: { $ne: 'admin' },
+          'items.sku': spotCheckSku,
+          'items.1': { $exists: true },
+          substore: { $nin: ['hubchange', 'test4'] },
+        }, { projection: { items: 1, txn_id: 1 } }).limit(3).toArray();
+        
+        for (const doc of spotCheckDirectPairs.slice(0, 2)) {
+          const items = (doc.items as any[]).filter((i: any) => i.price !== 1);
+          console.log(`[Push All Batch] ⚡ SPOT CHECK txn ${doc.txn_id}: ${items.length} items (after price:1 filter): ${items.map((i: any) => i.sku).join(', ')}`);
+        }
       }
     }
 
@@ -329,7 +367,6 @@ export async function POST(request: Request) {
       const matchConditions: any = {
         channel: { $ne: 'admin' },
         'items.price': { $ne: 1 },
-        'items.sku': { $nin: validSkuList }, // Exclude all batch SKUs
         substore: substore,
       };
       
@@ -338,7 +375,6 @@ export async function POST(request: Request) {
         { $unwind: '$items' },
         { $match: { 
           'items.price': { $ne: 1 },
-          'items.sku': { $nin: validSkuList } // Double check at item level
         } },
         {
           $group: {
@@ -354,7 +390,7 @@ export async function POST(request: Request) {
           },
         },
         { $sort: { orderCount: -1 } },
-        { $limit: limit * 3 }, // Get more candidates
+        { $limit: 50 },
       ], { allowDiskUse: true }).toArray();
       
       return {
@@ -517,16 +553,15 @@ export async function POST(request: Request) {
               }
             }
             
-            // Filter: exclude current SKU, batch SKUs, already paired SKUs, and unavailable products
+            // Filter: exclude current SKU, already paired SKUs, and unavailable products
             const topSellerSkus = Array.from(uniqueTopSellersMap.entries())
               .filter(([candidateSku]) => {
-                // Exclude current SKU and all batch SKUs
-                if (candidateSku === sku || validSkuList.includes(candidateSku)) return false;
-                // Exclude already paired SKUs
+                if (candidateSku === sku) return false;
                 if (autoPairedSkus.includes(candidateSku)) return false;
-                // Check availability from pre-fetched mappings
-                const mapping = topSellerMappingMap.get(candidateSku);
-                return mapping && mapping.publish === "1" && mapping.inventory > 0;
+                // Check availability from pre-fetched mappings OR global paired mapping
+                const mapping = topSellerMappingMap.get(candidateSku) || globalPairedMappingMap.get(candidateSku);
+                if (!mapping) return false;
+                return mapping.publish === "1" && mapping.inventory > 0;
               })
               .sort((a, b) => b[1] - a[1]) // Sort by orderCount descending
               .slice(0, needed)
@@ -807,7 +842,25 @@ export async function POST(request: Request) {
     };
 
     // Process all valid SKUs
-    await processBatch(validBatchSkus);
+    const batchResults = await processBatch(validBatchSkus);
+    
+    // Batch-level diagnostic summary
+    const pairingPushCount = batchResults.filter(r => {
+      if (!r.success || !r.log) return false;
+      return r.log.includes('pairing');
+    }).length;
+    const topSellerPushCount = batchResults.filter(r => {
+      if (!r.success || !r.log) return false;
+      return r.log.includes('top seller');
+    }).length;
+    const mixedPushCount = batchResults.filter(r => {
+      if (!r.success || !r.log) return false;
+      return r.log.includes('pairing') && r.log.includes('top seller');
+    }).length;
+    const noPushCount = batchResults.filter(r => !r.success).length;
+    
+    console.log(`[Push All Batch] ⚡ BATCH SUMMARY: ${pairingPushCount} used pairings, ${topSellerPushCount} used top sellers, ${mixedPushCount} mixed, ${noPushCount} failed/skipped`);
+    progress.logs.push(`📊 Batch: ${pairingPushCount} pairings, ${topSellerPushCount} top sellers, ${noPushCount} skipped`);
 
     // Mark remaining invalid SKUs as processed
     const invalidCount = batchSkus.length - validBatchSkus.length;
