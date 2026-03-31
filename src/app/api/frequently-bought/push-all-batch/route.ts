@@ -341,95 +341,96 @@ export async function POST(request: Request) {
     }
     console.log(`[Push All Batch] Paired SKU availability: ${availablePairedCount} available, ${unavailablePairedCount} unavailable (unpublished/out of stock), ${notInMappingCount} not in mapping`);
 
-    // OPTIMIZATION: Pre-calculate top sellers by substore ONCE (major performance boost)
-    console.log(`[Push All Batch] Pre-calculating top sellers by substore...`);
-    const topSellersStartTime = Date.now();
-    const topSellersBySubstore = new Map<string, Array<{ sku: string; orderCount: number }>>();
-    
-    // Collect all unique substores from batch SKUs
-    const allSubstoresSet = new Set<string>();
-    for (const sku of validSkuList) {
-      const mapping = skuToMapping.get(sku);
-      if (mapping?.substore) {
-        const substores = Array.isArray(mapping.substore) ? mapping.substore : [mapping.substore];
-        substores.forEach(sub => {
-          if (sub && sub !== 'hubchange' && sub !== 'test4') {
-            allSubstoresSet.add(sub);
-          }
-        });
-      }
-    }
-    const allSubstores = Array.from(allSubstoresSet);
-    console.log(`[Push All Batch] Found ${allSubstores.length} unique substores: ${allSubstores.join(', ')}`);
-    
-    // Pre-calculate top sellers for each substore in parallel
-    const topSellersPromises = allSubstores.map(async (substore) => {
-      const matchConditions: any = {
-        channel: { $ne: 'admin' },
-        'items.price': { $ne: 1 },
-        substore: substore,
-      };
-      
-      const topSkusByCount = await frequentlyBoughtCollection.aggregate([
-        { $match: matchConditions },
-        { $unwind: '$items' },
-        { $match: { 
-          'items.price': { $ne: 1 },
-        } },
-        {
-          $group: {
-            _id: '$items.sku',
-            txnIds: { $addToSet: '$txn_id' },
-          },
-        },
-        {
-          $project: {
-            sku: '$_id',
-            orderCount: { $size: '$txnIds' },
-            _id: 0,
-          },
-        },
-        { $sort: { orderCount: -1 } },
-        { $limit: 50 },
-      ], { allowDiskUse: true }).toArray();
-      
-      return {
-        substore,
-        topSellers: topSkusByCount.map((item: any) => ({
-          sku: item.sku as string,
-          orderCount: item.orderCount,
-        })),
-      };
-    });
-    
-    const topSellersResults = await Promise.all(topSellersPromises);
-    for (const result of topSellersResults) {
-      topSellersBySubstore.set(result.substore, result.topSellers);
-    }
-    
-    // Batch fetch mappings for all top sellers
-    const allTopSellerSkus = new Set<string>();
-    for (const sellers of topSellersBySubstore.values()) {
-      sellers.forEach(s => allTopSellerSkus.add(s.sku));
-    }
-    const topSellerMappings = await mappingCollection.find(
-      { 
-        sku: { $in: Array.from(allTopSellerSkus) },
-        substore: { $nin: ['hubchange', 'test4'] },
-      },
-      { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
-    ).toArray();
-    
-    const topSellerMappingMap = new Map<string, { publish: string; inventory: number }>();
-    for (const m of topSellerMappings) {
-      topSellerMappingMap.set(m.sku as string, {
-        publish: String(m.publish || "0").trim(),
-        inventory: Number(m.inventory || 0),
-      });
-    }
-    
-    const topSellersTime = ((Date.now() - topSellersStartTime) / 1000).toFixed(2);
-    console.log(`[Push All Batch] Pre-calculated top sellers for ${allSubstores.length} substores (${allTopSellerSkus.size} unique SKUs) in ${topSellersTime}s`);
+    // TOP SELLERS DISABLED: Only pushing pairs now
+    // // OPTIMIZATION: Pre-calculate top sellers by substore ONCE (major performance boost)
+    // console.log(`[Push All Batch] Pre-calculating top sellers by substore...`);
+    // const topSellersStartTime = Date.now();
+    // const topSellersBySubstore = new Map<string, Array<{ sku: string; orderCount: number }>>();
+    // 
+    // // Collect all unique substores from batch SKUs
+    // const allSubstoresSet = new Set<string>();
+    // for (const sku of validSkuList) {
+    //   const mapping = skuToMapping.get(sku);
+    //   if (mapping?.substore) {
+    //     const substores = Array.isArray(mapping.substore) ? mapping.substore : [mapping.substore];
+    //     substores.forEach(sub => {
+    //       if (sub && sub !== 'hubchange' && sub !== 'test4') {
+    //         allSubstoresSet.add(sub);
+    //       }
+    //     });
+    //   }
+    // }
+    // const allSubstores = Array.from(allSubstoresSet);
+    // console.log(`[Push All Batch] Found ${allSubstores.length} unique substores: ${allSubstores.join(', ')}`);
+    // 
+    // // Pre-calculate top sellers for each substore in parallel
+    // const topSellersPromises = allSubstores.map(async (substore) => {
+    //   const matchConditions: any = {
+    //     channel: { $ne: 'admin' },
+    //     'items.price': { $ne: 1 },
+    //     substore: substore,
+    //   };
+    //   
+    //   const topSkusByCount = await frequentlyBoughtCollection.aggregate([
+    //     { $match: matchConditions },
+    //     { $unwind: '$items' },
+    //     { $match: { 
+    //       'items.price': { $ne: 1 },
+    //     } },
+    //     {
+    //       $group: {
+    //         _id: '$items.sku',
+    //         txnIds: { $addToSet: '$txn_id' },
+    //       },
+    //     },
+    //     {
+    //       $project: {
+    //         sku: '$_id',
+    //         orderCount: { $size: '$txnIds' },
+    //         _id: 0,
+    //       },
+    //     },
+    //     { $sort: { orderCount: -1 } },
+    //     { $limit: 50 },
+    //   ], { allowDiskUse: true }).toArray();
+    //   
+    //   return {
+    //     substore,
+    //     topSellers: topSkusByCount.map((item: any) => ({
+    //       sku: item.sku as string,
+    //       orderCount: item.orderCount,
+    //     })),
+    //   };
+    // });
+    // 
+    // const topSellersResults = await Promise.all(topSellersPromises);
+    // for (const result of topSellersResults) {
+    //   topSellersBySubstore.set(result.substore, result.topSellers);
+    // }
+    // 
+    // // Batch fetch mappings for all top sellers
+    // const allTopSellerSkus = new Set<string>();
+    // for (const sellers of topSellersBySubstore.values()) {
+    //   sellers.forEach(s => allTopSellerSkus.add(s.sku));
+    // }
+    // const topSellerMappings = await mappingCollection.find(
+    //   { 
+    //     sku: { $in: Array.from(allTopSellerSkus) },
+    //     substore: { $nin: ['hubchange', 'test4'] },
+    //   },
+    //   { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
+    // ).toArray();
+    // 
+    // const topSellerMappingMap = new Map<string, { publish: string; inventory: number }>();
+    // for (const m of topSellerMappings) {
+    //   topSellerMappingMap.set(m.sku as string, {
+    //     publish: String(m.publish || "0").trim(),
+    //     inventory: Number(m.inventory || 0),
+    //   });
+    // }
+    // 
+    // const topSellersTime = ((Date.now() - topSellersStartTime) / 1000).toFixed(2);
+    // console.log(`[Push All Batch] Pre-calculated top sellers for ${allSubstores.length} substores (${allTopSellerSkus.size} unique SKUs) in ${topSellersTime}s`);
 
     // OPTIMIZATION 2 & 3: Process SKUs in parallel with increased concurrency
     const CONCURRENCY = 120; // Increased concurrency for faster pushes (rate limiting handled in urvannApi)
@@ -468,9 +469,8 @@ export async function POST(request: Request) {
       }
 
       try {
-        // Priority: first use pairings; if none, fall back to top sellers by substore
+        // Only push pairs (top sellers fallback disabled)
         let autoPairedSkus: string[] = [];
-        let topSellersAdded: string[] = []; // Track top sellers separately
         
         // Get SKU substores for hub mapping (needed later)
         const skuMappingForSubstores = skuToMapping.get(sku);
@@ -520,62 +520,62 @@ export async function POST(request: Request) {
         }
         
         if (pairingCandidates.length >= limit) {
-          console.log(`[Push All Batch] ✓ SKU: ${sku} - Found ${pairingCandidates.length} available pairings (NO top sellers needed)`);
+          console.log(`[Push All Batch] ✓ SKU: ${sku} - Found ${pairingCandidates.length} available pairings`);
         } else if (pairingCandidates.length > 0) {
-          const needed = limit - pairingCandidates.length;
-          console.log(`[Push All Batch] ⚠ SKU: ${sku} - Only ${pairingCandidates.length} valid pairings, need ${needed} more from top sellers`);
+          console.log(`[Push All Batch] ⚠ SKU: ${sku} - Only ${pairingCandidates.length} valid pairings found (no top sellers fallback)`);
         } else if (pairs.length === 0) {
-          console.log(`[Push All Batch] ⚠ SKU: ${sku} - No pairs found in aggregation, will use top sellers`);
+          console.log(`[Push All Batch] ⚠ SKU: ${sku} - No pairs found in aggregation`);
         } else {
-          console.log(`[Push All Batch] ⚠ SKU: ${sku} - ${pairs.length} pairs found but all filtered out (unavailable), will use top sellers`);
+          console.log(`[Push All Batch] ⚠ SKU: ${sku} - ${pairs.length} pairs found but all filtered out (unavailable)`);
         }
         
-        // 2) If we need more SKUs, use pre-calculated top sellers by substore (OPTIMIZED - no per-SKU queries!)
-        if (autoPairedSkus.length < limit) {
-          const needed = limit - autoPairedSkus.length;
-          console.log(`[Push All Batch] SKU: ${sku} - Need ${needed} more SKUs, using pre-calculated top sellers from substore(s): ${skuSubstores.join(', ') || 'none'}`);
-          
-          if (skuSubstores.length > 0) {
-            // Collect top sellers from all SKU's substores
-            const allTopSellers: Array<{ sku: string; orderCount: number }> = [];
-            
-            for (const substore of skuSubstores) {
-              const topSellers = topSellersBySubstore.get(substore) || [];
-              allTopSellers.push(...topSellers);
-            }
-            
-            // Remove duplicates (keep highest orderCount)
-            const uniqueTopSellersMap = new Map<string, number>();
-            for (const seller of allTopSellers) {
-              const existing = uniqueTopSellersMap.get(seller.sku);
-              if (!existing || seller.orderCount > existing) {
-                uniqueTopSellersMap.set(seller.sku, seller.orderCount);
-              }
-            }
-            
-            // Filter: exclude current SKU, already paired SKUs, and unavailable products
-            const topSellerSkus = Array.from(uniqueTopSellersMap.entries())
-              .filter(([candidateSku]) => {
-                if (candidateSku === sku) return false;
-                if (autoPairedSkus.includes(candidateSku)) return false;
-                // Check availability from pre-fetched mappings OR global paired mapping
-                const mapping = topSellerMappingMap.get(candidateSku) || globalPairedMappingMap.get(candidateSku);
-                if (!mapping) return false;
-                return mapping.publish === "1" && mapping.inventory > 0;
-              })
-              .sort((a, b) => b[1] - a[1]) // Sort by orderCount descending
-              .slice(0, needed)
-              .map(([sku]) => sku);
-            
-            if (topSellerSkus.length > 0) {
-              autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
-              topSellersAdded = [...topSellersAdded, ...topSellerSkus];
-              console.log(`[Push All Batch] ✓ SKU: ${sku} - Added ${topSellerSkus.length} top sellers from cache: [${topSellerSkus.join(', ')}]`);
-            } else {
-              console.log(`[Push All Batch] ⚠ SKU: ${sku} - No valid top sellers found in cache for substore(s): ${skuSubstores.join(', ')}`);
-            }
-          }
-        }
+        // TOP SELLERS DISABLED: Only pushing pairs
+        // // 2) If we need more SKUs, use pre-calculated top sellers by substore (OPTIMIZED - no per-SKU queries!)
+        // if (autoPairedSkus.length < limit) {
+        //   const needed = limit - autoPairedSkus.length;
+        //   console.log(`[Push All Batch] SKU: ${sku} - Need ${needed} more SKUs, using pre-calculated top sellers from substore(s): ${skuSubstores.join(', ') || 'none'}`);
+        //   
+        //   if (skuSubstores.length > 0) {
+        //     // Collect top sellers from all SKU's substores
+        //     const allTopSellers: Array<{ sku: string; orderCount: number }> = [];
+        //     
+        //     for (const substore of skuSubstores) {
+        //       const topSellers = topSellersBySubstore.get(substore) || [];
+        //       allTopSellers.push(...topSellers);
+        //     }
+        //     
+        //     // Remove duplicates (keep highest orderCount)
+        //     const uniqueTopSellersMap = new Map<string, number>();
+        //     for (const seller of allTopSellers) {
+        //       const existing = uniqueTopSellersMap.get(seller.sku);
+        //       if (!existing || seller.orderCount > existing) {
+        //         uniqueTopSellersMap.set(seller.sku, seller.orderCount);
+        //       }
+        //     }
+        //     
+        //     // Filter: exclude current SKU, already paired SKUs, and unavailable products
+        //     const topSellerSkus = Array.from(uniqueTopSellersMap.entries())
+        //       .filter(([candidateSku]) => {
+        //         if (candidateSku === sku) return false;
+        //         if (autoPairedSkus.includes(candidateSku)) return false;
+        //         // Check availability from pre-fetched mappings OR global paired mapping
+        //         const mapping = topSellerMappingMap.get(candidateSku) || globalPairedMappingMap.get(candidateSku);
+        //         if (!mapping) return false;
+        //         return mapping.publish === "1" && mapping.inventory > 0;
+        //       })
+        //       .sort((a, b) => b[1] - a[1]) // Sort by orderCount descending
+        //       .slice(0, needed)
+        //       .map(([sku]) => sku);
+        //     
+        //     if (topSellerSkus.length > 0) {
+        //       autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
+        //       topSellersAdded = [...topSellersAdded, ...topSellerSkus];
+        //       console.log(`[Push All Batch] ✓ SKU: ${sku} - Added ${topSellerSkus.length} top sellers from cache: [${topSellerSkus.join(', ')}]`);
+        //     } else {
+        //       console.log(`[Push All Batch] ⚠ SKU: ${sku} - No valid top sellers found in cache for substore(s): ${skuSubstores.join(', ')}`);
+        //     }
+        //   }
+        // }
 
         // Determine which hub this SKU belongs to based on its substore
         const skuSubstore = skuSubstores.length > 0 ? skuSubstores[0] : '';
@@ -649,51 +649,21 @@ export async function POST(request: Request) {
 
         if (finalValidSkus.length > 0) {
           const manualCount = hubManualSkus.length > 0 ? finalValidSkus.length - autoPairedSkus.length : 0;
-          
-          // Determine source breakdown: how many from pairings vs top sellers
-          const pairsFromAggregation = skuPairingsMap.get(sku) || [];
-          const pairingCount = pairsFromAggregation.length;
           const availablePairingCount = pairingCandidates.length;
-          const topSellerCount = topSellersAdded.length;
           
-          // Log summary of what was used
-          if (pairingCount === 0) {
-            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: No pairings found in aggregation → Using ${topSellerCount} top sellers from substore(s): ${skuSubstores.join(', ')}`);
-          } else if (availablePairingCount === 0) {
-            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: Found ${pairingCount} pairings but all filtered out (unavailable) → Using ${topSellerCount} top sellers from substore(s): ${skuSubstores.join(', ')}`);
-          } else if (topSellerCount > 0) {
-            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: Using ${availablePairingCount} pairings [${pairingCandidates.join(', ')}] + ${topSellerCount} top sellers [${topSellersAdded.join(', ')}] from substore(s): ${skuSubstores.join(', ')}`);
-          } else {
-            console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: Using ${availablePairingCount} pairings [${pairingCandidates.join(', ')}] (NO top sellers needed)`);
-          }
+          console.log(`[Push All Batch] SKU: ${sku} - SUMMARY: Using ${availablePairingCount} pairings [${pairingCandidates.join(', ')}]`);
           
           let logMsg: string;
           
           if (manualCount > 0) {
             const manualSkusList = finalValidSkus.slice(autoPairedSkus.length);
-            const hubInfo = skuHub ? ` [${skuHub} hub]` : '';
             if (autoPairedSkus.length === 0) {
-              // Case 1: Only manual SKUs
               logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} manual SKU${finalValidSkus.length > 1 ? 's' : ''} from ${skuHub || 'unknown'} hub (${manualSkusList.join(', ')})`;
             } else {
-              // Case 2: Mixed auto + manual
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${autoPairedSkus.length} auto: ${autoPairedSkus.join(', ')} + ${manualCount} manual from ${skuHub || 'unknown'} hub: ${manualSkusList.join(', ')})`;
+              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${autoPairedSkus.length} pairs: ${autoPairedSkus.join(', ')} + ${manualCount} manual from ${skuHub || 'unknown'} hub: ${manualSkusList.join(', ')})`;
             }
           } else {
-            // Case 3 or no manual: Only auto-found (could be pairings or top sellers)
-            if (topSellersAdded.length === 0 && availablePairingCount > 0) {
-              // All are actual pairings
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} pairing${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
-            } else if (availablePairingCount === 0 && topSellersAdded.length > 0) {
-              // All are top sellers (no pairings found or all filtered out)
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} top seller${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
-            } else if (availablePairingCount > 0 && topSellersAdded.length > 0) {
-              // Mix of pairings and top sellers
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} products (${availablePairingCount} pairing${availablePairingCount > 1 ? 's' : ''}: ${pairingCandidates.join(', ')} + ${topSellersAdded.length} top seller${topSellersAdded.length > 1 ? 's' : ''}: ${topSellersAdded.join(', ')})`;
-            } else {
-              // Fallback (shouldn't happen)
-              logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} product${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
-            }
+            logMsg = `✓ ${sku}: Pushing ${finalValidSkus.length} pairing${finalValidSkus.length > 1 ? 's' : ''} (${finalValidSkus.join(', ')})`;
           }
           
           return {
@@ -847,20 +817,12 @@ export async function POST(request: Request) {
     // Batch-level diagnostic summary
     const pairingPushCount = batchResults.filter(r => {
       if (!r.success || !r.log) return false;
-      return r.log.includes('pairing');
-    }).length;
-    const topSellerPushCount = batchResults.filter(r => {
-      if (!r.success || !r.log) return false;
-      return r.log.includes('top seller');
-    }).length;
-    const mixedPushCount = batchResults.filter(r => {
-      if (!r.success || !r.log) return false;
-      return r.log.includes('pairing') && r.log.includes('top seller');
+      return r.log.includes('pairing') || r.log.includes('Pushing');
     }).length;
     const noPushCount = batchResults.filter(r => !r.success).length;
     
-    console.log(`[Push All Batch] ⚡ BATCH SUMMARY: ${pairingPushCount} used pairings, ${topSellerPushCount} used top sellers, ${mixedPushCount} mixed, ${noPushCount} failed/skipped`);
-    progress.logs.push(`📊 Batch: ${pairingPushCount} pairings, ${topSellerPushCount} top sellers, ${noPushCount} skipped`);
+    console.log(`[Push All Batch] ⚡ BATCH SUMMARY: ${pairingPushCount} used pairings, ${noPushCount} failed/skipped`);
+    progress.logs.push(`📊 Batch: ${pairingPushCount} pairings, ${noPushCount} skipped`);
 
     // Mark remaining invalid SKUs as processed
     const invalidCount = batchSkus.length - validBatchSkus.length;

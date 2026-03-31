@@ -112,7 +112,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Priority: first use actual pairings; if not enough, fill remaining with top sellers
+    // Only push pairs (top sellers fallback disabled)
     let autoPairedSkus: string[] = [];
     
     // 1) Pairings from transactions
@@ -140,97 +140,95 @@ export async function POST(request: Request) {
     console.log(`[Push Single] ${sku}: Found ${pairingCandidates.length}/${limit} valid available pairings: ${pairingCandidates.join(', ') || 'none'}`);
     
     if (pairingCandidates.length >= limit) {
-      // We have 6+ available pairings - use them, no need for top sellers!
       autoPairedSkus = pairingCandidates;
-      console.log(`[Push Single] ✓ Using ${autoPairedSkus.length} pairing-based SKUs (NO top sellers needed)`);
+      console.log(`[Push Single] ✓ Using ${autoPairedSkus.length} pairing-based SKUs`);
     } else if (pairingCandidates.length > 0) {
-      // We have some pairings but not enough - use what we have and fill the rest with top sellers
       autoPairedSkus = pairingCandidates;
-      const needed = limit - pairingCandidates.length;
-      console.log(`[Push Single] ⚠ Only ${pairingCandidates.length} valid pairings found, need ${needed} more from top sellers`);
+      console.log(`[Push Single] ⚠ Only ${pairingCandidates.length} valid pairings found (no top sellers fallback)`);
     } else {
-      console.log(`[Push Single] ⚠ No valid pairings found, will use top sellers`);
+      console.log(`[Push Single] ⚠ No valid pairings found`);
     }
     
-    // 2) If we need more SKUs, get top sellers by this SKU's substores
-    if (autoPairedSkus.length < limit) {
-      const skuSubstores = filteredSkuSubstores.length > 0 
-        ? filteredSkuSubstores 
-        : ((await mappingCollection.findOne(
-            { sku: sku },
-            { projection: { substore: 1, _id: 0 } }
-          ))?.substore as string[])?.filter(s => s !== 'hubchange' && s !== 'test4') || [];
-      
-      if (skuSubstores.length > 0) {
-        const matchConditions: any = { 
-          channel: { $ne: 'admin' },
-          'items.price': { $ne: 1 },
-          substore: { $nin: ['hubchange', 'test4'] },
-        };
-        
-        matchConditions.substore = skuSubstores.length === 1
-          ? skuSubstores[0]
-          : { $in: skuSubstores };
-        
-        const topSkusByCount = await frequentlyBoughtCollection.aggregate([
-          { $match: matchConditions },
-          { $unwind: '$items' },
-          { $match: { 'items.price': { $ne: 1 } } },
-          {
-            $group: {
-              _id: '$items.sku',
-              txnIds: { $addToSet: '$txn_id' },
-            },
-          },
-          {
-            $project: {
-              sku: '$_id',
-              orderCount: { $size: '$txnIds' },
-              _id: 0,
-            },
-          },
-          { $sort: { orderCount: -1 } },
-          { $limit: limit * 2 },
-        ]).toArray();
-        
-        const candidateSkus = topSkusByCount.map((item: any) => item.sku).filter((s: string) => s !== sku);
-        if (candidateSkus.length > 0) {
-          const topSkuMappings = await mappingCollection.find(
-            { sku: { $in: candidateSkus }, substore: { $nin: ['hubchange', 'test4'] } },
-            { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
-          ).toArray();
-          
-          const orderCountMap = new Map<string, number>();
-          for (const item of topSkusByCount) {
-            if (item.sku !== sku) {
-              orderCountMap.set(item.sku, item.orderCount);
-            }
-          }
-          
-          const topSellerSkus = topSkuMappings
-            .filter((m: any) => {
-              const sku = m.sku as string;
-              // Exclude if already in autoPairedSkus
-              if (autoPairedSkus.includes(sku)) return false;
-              return String(m.publish || '0').trim() === '1' && (m.inventory || 0) > 0;
-            })
-            .map((m: any) => ({
-              sku: m.sku as string,
-              orderCount: orderCountMap.get(m.sku as string) || 0,
-            }))
-            .sort((a, b) => b.orderCount - a.orderCount)
-            .slice(0, limit - autoPairedSkus.length)
-            .map(item => item.sku);
-          
-          if (topSellerSkus.length > 0) {
-            autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
-            console.log(`[Push Single] ✓ Added ${topSellerSkus.length} top sellers to fill remaining slots. Final: ${autoPairedSkus.join(', ')}`);
-          } else {
-            console.log(`[Push Single] ⚠ No valid top sellers found to fill remaining slots`);
-          }
-        }
-      }
-    }
+    // TOP SELLERS DISABLED: Only pushing pairs
+    // // 2) If we need more SKUs, get top sellers by this SKU's substores
+    // if (autoPairedSkus.length < limit) {
+    //   const skuSubstores = filteredSkuSubstores.length > 0 
+    //     ? filteredSkuSubstores 
+    //     : ((await mappingCollection.findOne(
+    //         { sku: sku },
+    //         { projection: { substore: 1, _id: 0 } }
+    //       ))?.substore as string[])?.filter(s => s !== 'hubchange' && s !== 'test4') || [];
+    //   
+    //   if (skuSubstores.length > 0) {
+    //     const matchConditions: any = { 
+    //       channel: { $ne: 'admin' },
+    //       'items.price': { $ne: 1 },
+    //       substore: { $nin: ['hubchange', 'test4'] },
+    //     };
+    //     
+    //     matchConditions.substore = skuSubstores.length === 1
+    //       ? skuSubstores[0]
+    //       : { $in: skuSubstores };
+    //     
+    //     const topSkusByCount = await frequentlyBoughtCollection.aggregate([
+    //       { $match: matchConditions },
+    //       { $unwind: '$items' },
+    //       { $match: { 'items.price': { $ne: 1 } } },
+    //       {
+    //         $group: {
+    //           _id: '$items.sku',
+    //           txnIds: { $addToSet: '$txn_id' },
+    //         },
+    //       },
+    //       {
+    //         $project: {
+    //           sku: '$_id',
+    //           orderCount: { $size: '$txnIds' },
+    //           _id: 0,
+    //         },
+    //       },
+    //       { $sort: { orderCount: -1 } },
+    //       { $limit: limit * 2 },
+    //     ]).toArray();
+    //     
+    //     const candidateSkus = topSkusByCount.map((item: any) => item.sku).filter((s: string) => s !== sku);
+    //     if (candidateSkus.length > 0) {
+    //       const topSkuMappings = await mappingCollection.find(
+    //         { sku: { $in: candidateSkus }, substore: { $nin: ['hubchange', 'test4'] } },
+    //         { projection: { sku: 1, publish: 1, inventory: 1, substore: 1, _id: 0 } }
+    //       ).toArray();
+    //       
+    //       const orderCountMap = new Map<string, number>();
+    //       for (const item of topSkusByCount) {
+    //         if (item.sku !== sku) {
+    //           orderCountMap.set(item.sku, item.orderCount);
+    //         }
+    //       }
+    //       
+    //       const topSellerSkus = topSkuMappings
+    //         .filter((m: any) => {
+    //           const sku = m.sku as string;
+    //           // Exclude if already in autoPairedSkus
+    //           if (autoPairedSkus.includes(sku)) return false;
+    //           return String(m.publish || '0').trim() === '1' && (m.inventory || 0) > 0;
+    //         })
+    //         .map((m: any) => ({
+    //           sku: m.sku as string,
+    //           orderCount: orderCountMap.get(m.sku as string) || 0,
+    //         }))
+    //         .sort((a, b) => b.orderCount - a.orderCount)
+    //         .slice(0, limit - autoPairedSkus.length)
+    //         .map(item => item.sku);
+    //       
+    //       if (topSellerSkus.length > 0) {
+    //         autoPairedSkus = [...autoPairedSkus, ...topSellerSkus];
+    //         console.log(`[Push Single] ✓ Added ${topSellerSkus.length} top sellers to fill remaining slots. Final: ${autoPairedSkus.join(', ')}`);
+    //       } else {
+    //         console.log(`[Push Single] ⚠ No valid top sellers found to fill remaining slots`);
+    //       }
+    //     }
+    //   }
+    // }
 
     // Get manual SKUs for this SKU's hub only
     const hubManualSkus = skuHub && manualSkusByHub[skuHub] 
