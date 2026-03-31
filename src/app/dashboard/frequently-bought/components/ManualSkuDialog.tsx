@@ -247,17 +247,6 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
         validHubSkus[hub] = validSkus;
       }
     });
-
-    // Allow pushing with zero manual SKUs — use co-purchase pairs only
-    if (Object.keys(validHubSkus).length === 0) {
-      onConfirm({});
-      const resetHubSkus: Record<string, string[]> = {};
-      HUB_MAPPINGS.forEach(hub => {
-        resetHubSkus[hub.hub] = [''];
-      });
-      setHubSkus(resetHubSkus);
-      return;
-    }
     
     // Validate: each hub with SKUs must have at least 1 and at most 6
     const invalidHubs = Object.entries(validHubSkus).filter(([_, skus]) => skus.length < 1 || skus.length > 6);
@@ -453,22 +442,16 @@ export default function ManualSkuDialog({ open, onOpenChange, onConfirm, topSkus
               </button>
               <button
                 onClick={handleConfirm}
-                className={`flex-1 px-5 py-3 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${
-                  totalValidSkus > 0
-                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transform hover:scale-[1.02]'
-                    : 'bg-slate-700 text-white hover:bg-slate-800 shadow-md'
-                }`}
+                className="flex-1 px-5 py-3 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
               >
-                {totalValidSkus > 0 ? (
-                  <>
-                    <CheckCircle2 size={18} />
-                    <span>Confirm</span>
-                    <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-bold">
-                      {totalValidSkus}
-                    </span>
-                  </>
-                ) : (
-                  <span>Continue without manual SKUs</span>
+                <CheckCircle2 size={18} />
+                <span>
+                  {totalValidSkus > 0 ? 'Confirm' : 'Continue (pairs only)'}
+                </span>
+                {totalValidSkus > 0 && (
+                  <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs font-bold">
+                    {totalValidSkus}
+                  </span>
                 )}
               </button>
           </div>
