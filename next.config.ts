@@ -1,9 +1,33 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Use default output for reliable deployment with `next start`
+  // Use default output for reliable deployment with `next start` (PM2: ecosystem.config.cjs).
   // Do not bundle these server-only packages; resolve at runtime.
   serverExternalPackages: ["mongodb", "mongoose"],
+  // Avoid stale HTML after deploys (old pages referencing deleted chunk hashes → 404).
+  // Long-cache only hashed assets under /_next/static; everything else revalidates.
+  async headers() {
+    return [
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, max-age=0, must-revalidate",
+          },
+        ],
+      },
+    ];
+  },
   // Compiler optimizations
   compiler: {
     removeConsole: process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
