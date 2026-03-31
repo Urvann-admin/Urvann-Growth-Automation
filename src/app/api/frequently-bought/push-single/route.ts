@@ -87,24 +87,27 @@ export async function POST(request: Request) {
       projection: { items: 1 }
     }).toArray();
 
-    // Count pairings
+    // Count pairings — same algorithm as the UI analysis route:
+    // 1) exclude price:1 items (but keep null-price items, consistent with analysis)
+    // 2) deduplicate SKUs within each transaction so one transaction counts as 1 co-occurrence
+    // 3) only process transactions that still have ≥ 2 unique items after filtering
     const pairCounts = new Map<string, number>();
 
     for (const doc of transactions) {
-      // Filter items: exclude price == 1 (explicit check to ensure price: 1 items are never included)
-      const items = (doc.items as { sku: string; name: string; price?: number }[])
-        .filter(item => item.price != null && item.price !== 1); // Explicitly exclude price: 1 and handle undefined/null
-      
-      let foundMainSku = false;
-      for (const item of items) {
-        if (item.sku === sku) {
-          foundMainSku = true;
-          break;
-        }
-      }
+      const rawItems = (doc.items as { sku: string; name: string; price?: number }[])
+        .filter(item => item.price !== 1); // Exclude only price:1, same as analysis $ne:1
 
-      if (foundMainSku) {
-        for (const item of items) {
+      // Deduplicate by SKU within this transaction (keep first occurrence)
+      const uniqueItems = Array.from(
+        new Map(rawItems.map(item => [item.sku, item])).values()
+      );
+
+      // Skip transactions with fewer than 2 unique items after filtering
+      if (uniqueItems.length < 2) continue;
+
+      const hasMainSku = uniqueItems.some(item => item.sku === sku);
+      if (hasMainSku) {
+        for (const item of uniqueItems) {
           if (item.sku !== sku) {
             pairCounts.set(item.sku, (pairCounts.get(item.sku) || 0) + 1);
           }

@@ -141,7 +141,7 @@ async function fetchTransactions(
     { $match: { 'items.1': { $exists: true } } }
   ];
 
-  const results = await collection.aggregate(aggregationPipeline).toArray();
+  const results = await collection.aggregate(aggregationPipeline, { allowDiskUse: true }).toArray();
 
   // Transform results and deduplicate items by SKU within each transaction
   const txnItemsMap = new Map<string, { sku: string; name: string }[]>();

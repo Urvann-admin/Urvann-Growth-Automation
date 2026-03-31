@@ -140,16 +140,21 @@ export async function POST(request: Request) {
           }
         }
       },
-      // Filter out null values from mainSkus and filter transactions that have at least one batch SKU
+      // Deduplicate SKUs per transaction (same as UI analysis) and filter nulls from mainSkus
       {
         $project: {
-          allItems: 1,
+          allItems: { $setUnion: ['$allItems', []] }, // dedup: each SKU counted once per transaction
           mainSkus: {
-            $filter: {
-              input: '$mainSkus',
-              as: 'sku',
-              cond: { $ne: ['$$sku', null] }
-            }
+            $setUnion: [
+              {
+                $filter: {
+                  input: '$mainSkus',
+                  as: 'sku',
+                  cond: { $ne: ['$$sku', null] }
+                }
+              },
+              []
+            ]
           }
         }
       },
