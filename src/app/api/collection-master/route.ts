@@ -18,6 +18,8 @@ const OPERATOR_MAP: Record<string, string> = {
 };
 
 // ─── Field mapping: our UI labels → StoreHippo field names ────────────────────
+// Only fields listed here are sent to StoreHippo on create. Add a key when SH supports
+// that rule field; UI-only fields (e.g. Plant, Color) stay in MongoDB only (collectionMaster.filters).
 const FIELD_MAP: Record<string, string> = {
   Price: 'price',
   Categories: 'categories',
@@ -27,30 +29,42 @@ const FIELD_MAP: Record<string, string> = {
 // Fields whose value is sent as an array to StoreHippo
 const MULTI_VALUE_FIELDS = new Set(['Categories', 'Collections']);
 
+function isStoreHippoMappedRuleField(field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(FIELD_MAP, field);
+}
+
 /**
  * Convert our internal filter structure into StoreHippo-ready filter items.
+ * Drops rule rows whose `field` is not in FIELD_MAP (full rules remain in MongoDB only).
  * Input filters: [{ rule_operator, items: [{field, operator, value?, values?}] }]
  */
 function toStoreHippoFilters(rawFilters: unknown[]): StoreHippoFilterItem[] {
   if (!Array.isArray(rawFilters) || rawFilters.length === 0) return [];
   const group = rawFilters[0] as {
+    rule_operator?: string;
     items?: { field: string; operator: string; value?: string; values?: string[] }[];
   };
   if (!Array.isArray(group?.items)) return [];
 
-  return group.items
-    .filter((item) => item.field && item.operator)
-    .map((item) => {
-      const shField = FIELD_MAP[item.field] ?? item.field.toLowerCase();
-      const shOperator = OPERATOR_MAP[item.operator] ?? item.operator.toLowerCase();
-      const isMulti = MULTI_VALUE_FIELDS.has(item.field);
-      const shValue: string | string[] = isMulti
-        ? Array.isArray(item.values) && item.values.length > 0
-          ? item.values
-          : []
-        : item.value ?? '';
-      return { field: shField, operator: shOperator, value: shValue };
-    });
+  const withOp = group.items.filter((item) => item.field && item.operator);
+  const mappable = withOp.filter((item) => isStoreHippoMappedRuleField(item.field));
+  if (withOp.length > mappable.length) {
+    console.log(
+      `[collection-master] StoreHippo: omitting ${withOp.length - mappable.length} dynamic rule(s) (field not mapped for SH); saving all ${withOp.length} in DB`
+    );
+  }
+
+  return mappable.map((item) => {
+    const shField = FIELD_MAP[item.field];
+    const shOperator = OPERATOR_MAP[item.operator] ?? item.operator.toLowerCase();
+    const isMulti = MULTI_VALUE_FIELDS.has(item.field);
+    const shValue: string | string[] = isMulti
+      ? Array.isArray(item.values) && item.values.length > 0
+        ? item.values
+        : []
+      : item.value ?? '';
+    return { field: shField, operator: shOperator, value: shValue };
+  });
 }
 
 /**

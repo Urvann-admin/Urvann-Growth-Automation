@@ -3,6 +3,7 @@
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import type { NonParentFormData, ProductFlowType } from '../types';
+import { effectiveBaseSkuForParentRow } from '@/lib/parentMasterBaseSku';
 
 export interface StepNonParentReviewProps {
   productFlowType: Exclude<ProductFlowType, 'parent'>;
@@ -10,6 +11,8 @@ export interface StepNonParentReviewProps {
   vendors: ProcurementSellerMaster[];
   baseParents: ParentMaster[];
   selectedFileCount: number;
+  growingProductCodePreview?: string;
+  growingProductCodeLoading?: boolean;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -32,12 +35,18 @@ export function StepNonParentReview({
   vendors,
   baseParents,
   selectedFileCount,
+  growingProductCodePreview = '',
+  growingProductCodeLoading = false,
 }: StepNonParentReviewProps) {
   const vendor = data.vendorMasterId
     ? vendors.find((v) => String(v._id) === data.vendorMasterId)
     : null;
   const parent = data.parentSku
-    ? baseParents.find((p) => (p.sku ?? '').trim() === data.parentSku.trim())
+    ? baseParents.find((p) =>
+        productFlowType === 'growing_product'
+          ? effectiveBaseSkuForParentRow(p) === data.parentSku.trim()
+          : (p.sku ?? '').trim() === data.parentSku.trim()
+      )
     : null;
 
   return (
@@ -58,9 +67,24 @@ export function StepNonParentReview({
               : '—'
           }
         />
-        <Row label="Product code" value={data.productCode || '—'} />
         <Row
-          label="Parent SKU"
+          label="Product code"
+          value={
+            productFlowType === 'growing_product' ? (
+              growingProductCodeLoading ? (
+                <span className="text-slate-500">Loading preview…</span>
+              ) : growingProductCodePreview ? (
+                <span className="font-mono">{growingProductCodePreview}</span>
+              ) : (
+                <span className="text-slate-600">Assigned when you create (preview unavailable)</span>
+              )
+            ) : (
+              data.productCode || '—'
+            )
+          }
+        />
+        <Row
+          label={productFlowType === 'growing_product' ? 'Base parent SKU' : 'Parent SKU'}
           value={
             data.parentSku
               ? `${data.parentSku}${parent ? ` — ${parent.finalName || parent.plant || ''}` : ''}`

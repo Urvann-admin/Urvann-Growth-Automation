@@ -67,6 +67,8 @@ export interface ParentMaster {
   storeHippoId?: string;
   /** StoreHippo product _id - same as storeHippoId, canonical field for API mapping */
   product_id?: string;
+  /** StoreHippo product URL slug — read from SH after product exists; do not client-generate on create. */
+  storeHippoAlias?: string;
   /** Procurement seller _id from procurement_seller_master (Vendor Master) */
   vendor_id?: string;
   /** Storefront seller: `seller_id` from sellerMaster (resolved from hub substores when creating hub-scoped parents) */
@@ -81,10 +83,14 @@ export interface ParentMaster {
    * For `growing_product` / `consumable`: SKU string of the linked base parent (not the typed product code).
    */
   sku?: string;
+  /** Same as `sku` for global parents; for hub-scoped parents, `sku` without the hub letter (e.g. TES000501). */
+  base_sku?: string;
   /** Substores derived from hub mapping (e.g. bgl-e, bgl-e2 for Whitefield) */
   substores?: string[];
   /** Product features (dropdown selection) */
   features?: string;
+  /** Merchandising tags (multi-select; same option set as listing products) */
+  tags?: string[];
   /** Redirects (dropdown selection) */
   redirects?: string;
   /** @deprecated Use potType */
@@ -148,6 +154,24 @@ export class ParentMasterModel {
   }
 
   /**
+   * Resolve a base parent row by listing `sku` or by `base_sku` (canonical SKU shared by hub-scoped rows).
+   * Used when growing/consumable forms send the canonical base SKU instead of a hub-prefixed SKU.
+   */
+  static async findBaseParentBySkuOrBaseSku(skuOrBase: string): Promise<ParentMaster | null> {
+    const trimmed = String(skuOrBase ?? '').trim();
+    if (!trimmed) return null;
+    const collection = await getCollection(COLLECTION_NAME);
+    const typeClause = {
+      $or: [{ productType: { $exists: false } }, { productType: 'parent' }],
+    };
+    const bySku = await collection.findOne({ ...typeClause, sku: trimmed });
+    if (bySku && isBaseParent(bySku)) return bySku as ParentMaster;
+    const byBase = await collection.findOne({ ...typeClause, base_sku: trimmed });
+    if (byBase && isBaseParent(byBase)) return byBase as ParentMaster;
+    return null;
+  }
+
+  /**
    * Resolve which Parent Master row to update for inventory sync: exact SKU, then canonical / candidate
    * variants (hub-prefixed listing line + global parent row, or hub-scoped parent row).
    */
@@ -185,6 +209,30 @@ export class ParentMasterModel {
     const trimmed = String(productCode).trim();
     if (!trimmed) return null;
     return collection.findOne({ productCode: trimmed });
+  }
+
+  /**
+   * Max 4-digit numeric suffix for codes matching `prefix` + exactly four digits (growing product codes).
+   */
+  static async maxNumericSuffixForGrowingCodePrefix(prefix: string): Promise<number> {
+    const collection = await getCollection(COLLECTION_NAME);
+    const p = String(prefix).trim();
+    if (!p) return 0;
+    const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const docs = await collection
+      .find({ productCode: { $regex: `^${escaped}\\d{4}$` } })
+      .project({ productCode: 1 })
+      .toArray();
+    let max = 0;
+    for (const doc of docs) {
+      const pc = String((doc as ParentMaster).productCode ?? '');
+      if (pc.length !== p.length + 4 || !pc.startsWith(p)) continue;
+      const suf = pc.slice(p.length);
+      if (!/^\d{4}$/.test(suf)) continue;
+      const n = parseInt(suf, 10);
+      if (!Number.isNaN(n)) max = Math.max(max, n);
+    }
+    return max;
   }
 
   static async create(data: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'>) {

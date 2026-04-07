@@ -63,7 +63,10 @@ export function SearchableSelect({
             : 'border-slate-200 hover:border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500'
         }`}
       >
-        <span className={selected ? '' : 'text-slate-400'}>
+        <span
+          className={`min-w-0 flex-1 truncate text-left ${selected ? '' : 'text-slate-400'}`}
+          title={selected ? selected.label : undefined}
+        >
           {selected ? selected.label : placeholder || 'Select...'}
         </span>
         <ChevronDown

@@ -19,6 +19,8 @@ export interface ListingLayoutContextValue {
   onImageSectionToggle: () => void;
   sidebarCollapsed: boolean;
   onSidebarCollapsedToggle: () => void;
+  pendingApprovalsCount: number;
+  setPendingApprovalsCount: (count: number) => void;
 }
 
 const defaultValue: ListingLayoutContextValue = {
@@ -37,6 +39,8 @@ const defaultValue: ListingLayoutContextValue = {
   onImageSectionToggle: () => {},
   sidebarCollapsed: false,
   onSidebarCollapsedToggle: () => {},
+  pendingApprovalsCount: 0,
+  setPendingApprovalsCount: () => {},
 };
 
 export const ListingLayoutContext = createContext<ListingLayoutContextValue>(defaultValue);

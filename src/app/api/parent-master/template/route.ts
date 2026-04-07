@@ -29,7 +29,8 @@ const TEMPLATE_HEADERS = [
  * - collection: comma-separated collection Mongo _id, alias, or name (from collection master).
  * - seller: procurement_seller_master _id.
  * - tax: optional 5, 18, 5%, or 18%.
- * - features / redirects: same option values as the product form dropdowns.
+ * - features: comma-separated; upserted into product_feature_master on import.
+ * - redirects: comma-separated full URLs (e.g. from category/collection browse links).
  * - image: comma-separated http(s) URLs — each file is downloaded and re-uploaded to S3; stored URLs are S3.
  */
 const EXAMPLE_ROW = [
@@ -48,8 +49,8 @@ const EXAMPLE_ROW = [
   '',
   '399',
   '5',
-  'option-a',
-  'redirect-1',
+  'Low maintenance',
+  'https://www.urvann.com/browse/example-category-alias',
   '10',
   'https://example.com/plant-photo.jpg',
 ];

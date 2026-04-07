@@ -9,6 +9,7 @@ export interface CollectionMaster {
   name: string;
   type: string;
   alias: string;
+  /** Dynamic rule groups from the app UI; may include fields not synced to StoreHippo. */
   filters?: unknown[];
   images?: unknown[];
   SEO?: Record<string, unknown>;

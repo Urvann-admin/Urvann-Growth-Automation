@@ -13,6 +13,7 @@ export default function ListingPage() {
     listingViewMode,
     setListingViewMode,
     sidebarCollapsed,
+    setPendingApprovalsCount,
   } = useListingLayoutContext();
 
   if (loading) {
@@ -33,6 +34,7 @@ export default function ListingPage() {
         onListingSectionTabChange={setListingSectionTab}
         listingViewMode={listingViewMode}
         sidebarCollapsed={sidebarCollapsed}
+        onPendingApprovalsCountChange={setPendingApprovalsCount}
       />
     </div>
   );

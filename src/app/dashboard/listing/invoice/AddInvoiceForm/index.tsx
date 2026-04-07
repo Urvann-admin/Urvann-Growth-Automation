@@ -9,7 +9,26 @@ import {
   setPersistedForm,
   removePersistedForm,
 } from '../../hooks/useFormPersistence';
+import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import type { DraftPurchaseRow, ParentOption } from './types';
+
+function rowTypeSum(r: DraftPurchaseRow): number {
+  const t = r.type ?? {};
+  return (
+    Math.max(0, Math.floor(Number(t.listing) || 0)) +
+    Math.max(0, Math.floor(Number(t.revival) || 0)) +
+    Math.max(0, Math.floor(Number(t.growth) || 0)) +
+    Math.max(0, Math.floor(Number(t.consumers) || 0))
+  );
+}
+
+/** When no type buckets are set, treat the line as 100% listing. */
+function resolvedRowType(r: DraftPurchaseRow): PurchaseTypeBreakdown {
+  if (rowTypeSum(r) === 0 && r.quantity > 0) {
+    return { listing: r.quantity };
+  }
+  return { ...(r.type ?? {}) };
+}
 import { OverheadModal, type OverheadFormState } from './OverheadModal';
 
 const FORM_STORAGE_KEY = 'listing_form_invoice';
@@ -154,10 +173,18 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
       const merged = { ...current, ...patch };
       if (patch.quantity !== undefined) {
         const t = merged.type ?? {};
-        const hasAnyType =
-          (t.listing ?? 0) > 0 || (t.revival ?? 0) > 0 || (t.growth ?? 0) > 0 || (t.consumers ?? 0) > 0;
-        if (!hasAnyType) {
-          merged.type = { ...t, listing: merged.quantity };
+        const prevQty = current.quantity;
+        const rev = Math.max(0, Math.floor(Number(t.revival ?? 0) || 0));
+        const gro = Math.max(0, Math.floor(Number(t.growth ?? 0) || 0));
+        const con = Math.max(0, Math.floor(Number(t.consumers ?? 0) || 0));
+        const othersZero = rev === 0 && gro === 0 && con === 0;
+        if (othersZero) {
+          const listRaw = t.listing;
+          const listingUnset = listRaw == null;
+          const listVal = listingUnset ? 0 : Math.max(0, Math.floor(Number(listRaw) || 0));
+          if (listingUnset || listVal === prevQty) {
+            merged.type = { ...t, listing: merged.quantity };
+          }
         }
       }
       next[index] = merged;
@@ -305,11 +332,9 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
     }
 
     const typeMismatchIndex = rows.findIndex((r) => {
-      const listing = Number(r.type?.listing ?? 0) || 0;
-      const revival = Number(r.type?.revival ?? 0) || 0;
-      const growth = Number(r.type?.growth ?? 0) || 0;
-      const consumers = Number(r.type?.consumers ?? 0) || 0;
-      return listing + revival + growth + consumers !== r.quantity;
+      const sum = rowTypeSum(r);
+      if (sum === 0 && r.quantity > 0) return false;
+      return sum !== r.quantity;
     });
     if (typeMismatchIndex !== -1) {
       setMessage({ type: 'error', text: `Row ${typeMismatchIndex + 1}: Type split must equal Quantity.` });
@@ -323,6 +348,7 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
         const quantity = r.quantity;
         const amount = r.amount;
         const productPrice = quantity > 0 ? Math.round(amount / quantity) : 0;
+        const type = resolvedRowType(r);
         return {
           billNumber: r.billNumber,
           productCode: r.productCode,
@@ -331,7 +357,7 @@ export function AddInvoiceForm({ onSuccess, onClose, embedded }: AddInvoiceFormP
           productPrice,
           amount,
           parentSku: r.parentSku,
-          type: r.type,
+          type,
           overhead: r.overhead
           ? {
               overheadAmount: r.overhead.overheadAmount,

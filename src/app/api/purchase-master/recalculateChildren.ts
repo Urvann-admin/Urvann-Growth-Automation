@@ -1,6 +1,22 @@
 import { ListingProductModel } from '@/models/listingProduct';
+import type { ListingProductListingType } from '@/models/listingProduct';
 import { ListingNotificationModel } from '@/models/listingNotification';
 import { ParentMasterModel } from '@/models/parentMaster';
+
+function effectiveListingType(
+  listingType: ListingProductListingType | undefined
+): ListingProductListingType {
+  return listingType === 'parent' ? 'parent' : 'child';
+}
+
+/** Matches listing-product API: missing listingType is treated as child. */
+function inventoryRecalculatedUnpublishedMessage(
+  parentCount: number,
+  childCount: number
+): string {
+  const total = parentCount + childCount;
+  return `${total} SKU${total === 1 ? '' : 's'} · publish pending`;
+}
 
 /**
  * After a parent's inventory_quantity changes (via invoice addition), find all
@@ -44,6 +60,8 @@ export async function recalculateListingChildrenInventory(
   let recalculated = 0;
   const unpublishedSkus: string[] = [];
   const unpublishedListingIds: string[] = [];
+  let unpublishedParentCount = 0;
+  let unpublishedChildCount = 0;
 
   for (const child of listedChildren) {
     const items = child.parentItems ?? [];
@@ -69,6 +87,11 @@ export async function recalculateListingChildrenInventory(
     if (wasUnpublished && newInventory > 0) {
       unpublishedSkus.push(child.sku ?? String(child._id));
       if (child._id) unpublishedListingIds.push(String(child._id));
+      if (effectiveListingType(child.listingType) === 'parent') {
+        unpublishedParentCount++;
+      } else {
+        unpublishedChildCount++;
+      }
     }
 
     await ListingProductModel.update(child._id!, updatePayload as any);
@@ -81,7 +104,10 @@ export async function recalculateListingChildrenInventory(
       parentSkus,
       childSkus: unpublishedSkus,
       listingProductIds: unpublishedListingIds,
-      message: `Inventory recalculated for ${unpublishedSkus.length} child product(s), but they remain unpublished. Approve to publish or dismiss.`,
+      message: inventoryRecalculatedUnpublishedMessage(
+        unpublishedParentCount,
+        unpublishedChildCount
+      ),
       read: false,
     });
   }
@@ -104,7 +130,7 @@ export async function sendInventoryWebhook(
   }
 
   try {
-    await fetch(`${baseUrl}/api/inventory-dashboard/webhook/invoice-inventory`, {
+    await fetch(`${baseUrl}/api/inventoryOrders/webhook/invoice-inventory`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

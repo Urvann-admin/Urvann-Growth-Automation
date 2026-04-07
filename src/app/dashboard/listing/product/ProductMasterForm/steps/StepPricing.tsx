@@ -7,7 +7,7 @@ export interface StepPricingProps {
   sellingPrice: number | '';
   /** When set with `compareAtEditable`, allows overriding the default selling × 4 */
   compare_at?: number | '';
-  /** On review step, allow editing compare-at; otherwise show selling × 4 only */
+  /** When true, compare-at is an editable field (default is still selling × 4 when selling price changes). */
   compareAtEditable?: boolean;
   tax: string;
   errors: Record<string, string>;

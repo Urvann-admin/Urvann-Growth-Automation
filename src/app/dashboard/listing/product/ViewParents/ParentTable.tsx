@@ -50,6 +50,7 @@ export function ParentTable({ items, onEdit, onDelete }: ParentTableProps) {
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Selling price</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Listing price</th>
             <th className="text-left py-3 px-3 font-semibold text-slate-700">Categories</th>
+            <th className="text-left py-3 px-3 font-semibold text-slate-700">Tags</th>
             <th className="text-right py-3 px-3 font-semibold text-slate-700">Actions</th>
           </tr>
         </thead>
@@ -67,6 +68,9 @@ export function ParentTable({ items, onEdit, onDelete }: ParentTableProps) {
               <td className="py-3 px-3 text-slate-600">{row.listing_price ?? '—'}</td>
               <td className="py-3 px-3 text-slate-600">
                 {Array.isArray(row.categories) ? row.categories.length : 0}
+              </td>
+              <td className="py-3 px-3 text-slate-600 max-w-[160px] truncate" title={(row.tags ?? []).join(', ')}>
+                {Array.isArray(row.tags) && row.tags.length > 0 ? row.tags.join(', ') : '—'}
               </td>
               <td className="py-3 px-3 text-right">
                 <div className="flex items-center justify-end gap-2">

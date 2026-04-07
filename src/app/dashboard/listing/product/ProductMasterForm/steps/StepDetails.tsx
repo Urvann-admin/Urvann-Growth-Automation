@@ -2,21 +2,23 @@
 
 import type { ListingSection } from '@/models/listingProduct';
 import { CustomSelect } from '../../../components/CustomSelect';
-import { MOSS_STICK_OPTIONS, POT_TYPE_OPTIONS, FEATURES_OPTIONS, REDIRECTS_OPTIONS } from '../types';
+import type { SelectOption } from '../../../components/CustomSelect';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
+import { PRODUCT_TAG_OPTIONS } from '@/lib/productTagOptions';
 import { ReviewHubListingSection } from './ReviewHubListingSection';
 
 export interface StepDetailsProps {
-  mossStick: string;
-  potType: string;
   seller: string;
+  featureOptions: SelectOption[];
+  redirectOptions: SelectOption[];
   features: string;
+  tags: string;
   redirects: string;
   description: string;
   sellerOptions: { value: string; label: string }[];
   listingHubs: string[];
   listingSection: ListingSection;
-  onListingHubToggle: (hub: string) => void;
+  onListingHubsChange: (hubs: string[]) => void;
   onListingSectionChange: (section: ListingSection) => void;
   listingHubsError?: string;
   errors: Record<string, string>;
@@ -25,16 +27,17 @@ export interface StepDetailsProps {
 }
 
 export function StepDetails({
-  mossStick,
-  potType,
   seller,
+  featureOptions,
+  redirectOptions,
   features,
+  tags,
   redirects,
   description,
   sellerOptions,
   listingHubs,
   listingSection,
-  onListingHubToggle,
+  onListingHubsChange,
   onListingSectionChange,
   listingHubsError,
   errors,
@@ -48,20 +51,6 @@ export function StepDetails({
     <div className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <CustomSelect
-          label="Moss Stick"
-          value={mossStick}
-          onChange={(v) => onFieldChange('mossStick', v)}
-          options={MOSS_STICK_OPTIONS}
-          placeholder="Select Moss Stick"
-        />
-        <CustomSelect
-          label="Pot Type"
-          value={potType}
-          onChange={(v) => onFieldChange('potType', v)}
-          options={POT_TYPE_OPTIONS}
-          placeholder="Select Pot Type"
-        />
-        <CustomSelect
           label="Procurement Seller"
           value={seller}
           onChange={(v) => onFieldChange('seller', v)}
@@ -72,16 +61,26 @@ export function StepDetails({
           label="Features"
           value={features}
           onChange={(v) => onFieldChange('features', v)}
-          options={FEATURES_OPTIONS}
+          options={featureOptions}
           placeholder="Select Features"
+          multiSelect
+          allowCreate
+        />
+        <CustomSelect
+          label="Tags"
+          value={tags}
+          onChange={(v) => onFieldChange('tags', v)}
+          options={PRODUCT_TAG_OPTIONS}
+          placeholder="Select tags"
           multiSelect
         />
         <CustomSelect
           label="Redirects"
           value={redirects}
           onChange={(v) => onFieldChange('redirects', v)}
-          options={REDIRECTS_OPTIONS}
-          placeholder="Select Redirects"
+          options={redirectOptions}
+          placeholder="Select one category or collection (browse URL)"
+          allowCreate
         />
       </div>
 
@@ -100,7 +99,7 @@ export function StepDetails({
       <ReviewHubListingSection
         listingHubs={listingHubs}
         listingSection={listingSection}
-        onListingHubToggle={onListingHubToggle}
+        onListingHubsChange={onListingHubsChange}
         onListingSectionChange={onListingSectionChange}
         listingHubsError={listingHubsError}
       />

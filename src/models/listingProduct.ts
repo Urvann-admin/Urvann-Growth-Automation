@@ -51,6 +51,8 @@ export interface ListingProduct {
   parentSkus?: string[];
   /** parent = one base parent per listing line; child = one or more parents in composition */
   listingType?: ListingProductListingType;
+  /** Merchandising kind for parent-type lines (mirrors parentMaster.parentKind) */
+  parentKind?: 'plant' | 'pot';
   /** Plant name */
   plant: string;
   /** Other names for the plant */
@@ -109,6 +111,8 @@ export interface ListingProduct {
   images: string[];
   /** Generated SKU for this listing product */
   sku?: string;
+  /** Base parent SKU without hub letter (aligned with `parentMaster.base_sku` for parent-type listings). */
+  base_sku?: string;
   /** Which section this belongs to */
   section: ListingSection;
   /** Listing status */
@@ -119,7 +123,7 @@ export interface ListingProduct {
   hub?: string;
   /** Substores derived from hub mapping */
   substores?: string[];
-  /** Product tags (e.g. Bestseller, New Arrival) - array for multiselect */
+  /** Merchandising tags (multi-select; aligned with `parentMaster.tags`) */
   tags?: string[];
   /** Compare-at price shown as original/strikethrough price */
   compare_at_price?: number;
@@ -180,21 +184,13 @@ export class ListingProductModel {
     return collection.find({ section }).toArray();
   }
 
-  static async findByStatus(status: ListingStatus) {
-    const collection = await getCollection(COLLECTION_NAME);
-    return collection.find({ status }).toArray();
-  }
-
   /**
-   * Image URLs attached to listing products that are live (listed or published) in a section.
+   * Image URLs attached to any listing product in a section.
    * Used to hide those photos from the child listing queue. URLs are normalized for matching.
    */
-  static async listImageUrlsFromListedOrPublished(section: ListingSection): Promise<string[]> {
+  static async listImageUrlsFromSection(section: ListingSection): Promise<string[]> {
     const collection = await getCollection(COLLECTION_NAME);
-    const cursor = collection.find(
-      { section, status: { $in: ['listed', 'published'] as const } },
-      { projection: { images: 1 } }
-    );
+    const cursor = collection.find({ section }, { projection: { images: 1 } });
     const keys = new Set<string>();
     for await (const doc of cursor) {
       const images = (doc as ListingProduct).images;
@@ -395,11 +391,6 @@ export class ListingProductModel {
   static async countBySection(section: ListingSection) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.countDocuments({ section });
-  }
-
-  static async countByStatus(status: ListingStatus) {
-    const collection = await getCollection(COLLECTION_NAME);
-    return collection.countDocuments({ status });
   }
 
   static async updateStatus(id: string | ObjectId, status: ListingStatus) {

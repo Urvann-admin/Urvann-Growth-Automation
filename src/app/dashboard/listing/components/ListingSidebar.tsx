@@ -39,6 +39,7 @@ export interface ListingSidebarProps {
   onCollectionSectionToggle: () => void;
   sidebarCollapsed: boolean;
   onSidebarCollapsedToggle: () => void;
+  pendingApprovalsCount?: number;
 }
 
 export function ListingSidebar({
@@ -63,6 +64,7 @@ export function ListingSidebar({
   onCollectionSectionToggle,
   sidebarCollapsed,
   onSidebarCollapsedToggle,
+  pendingApprovalsCount = 0,
 }: ListingSidebarProps) {
   const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
 
@@ -99,6 +101,7 @@ export function ListingSidebar({
           onSectionToggle={onListingSectionToggle}
           collapsed={sidebarCollapsed}
           isChristmasTheme={isChristmasTheme}
+          pendingApprovalsCount={pendingApprovalsCount}
         />
         )}
         <InvoiceNavSection
@@ -365,6 +368,7 @@ function ListingNavSection({
   onSectionToggle,
   collapsed,
   isChristmasTheme,
+  pendingApprovalsCount = 0,
 }: {
   activeTab: ListingTab;
   onTabChange: (id: ListingTab) => void;
@@ -374,6 +378,7 @@ function ListingNavSection({
   onSectionToggle: () => void;
   collapsed: boolean;
   isChristmasTheme: boolean;
+  pendingApprovalsCount?: number;
 }) {
   return (
     <div>
@@ -389,10 +394,22 @@ function ListingNavSection({
             : 'text-white hover:bg-white/10'
         }`}
       >
-        <List className="w-5 h-5 shrink-0" strokeWidth={2} />
+        <div className="relative shrink-0">
+          <List className="w-5 h-5" strokeWidth={2} />
+          {pendingApprovalsCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white leading-none">
+              {pendingApprovalsCount > 99 ? '99+' : pendingApprovalsCount}
+            </span>
+          )}
+        </div>
         {!collapsed && (
           <>
             <span className="truncate flex-1">Listing</span>
+            {pendingApprovalsCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {pendingApprovalsCount > 99 ? '99+' : pendingApprovalsCount}
+              </span>
+            )}
             <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${sectionOpen ? 'rotate-180' : ''}`} />
           </>
         )}
@@ -401,6 +418,7 @@ function ListingNavSection({
         <div className="ml-4 mt-0.5 space-y-0.5 pl-2">
           {LISTING_SECTION_TABS.map(({ id, label }) => {
             const isActive = activeTab === 'listing' && listingSectionTab === id;
+            const isPendingTab = id === 'pending-approvals';
             return (
               <button
                 key={id}
@@ -426,7 +444,12 @@ function ListingNavSection({
                 }
               >
                 <ListIcon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{label}</span>
+                <span className="truncate flex-1">{label}</span>
+                {isPendingTab && pendingApprovalsCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-[10px] font-bold text-white">
+                    {pendingApprovalsCount > 99 ? '99+' : pendingApprovalsCount}
+                  </span>
+                )}
               </button>
             );
           })}

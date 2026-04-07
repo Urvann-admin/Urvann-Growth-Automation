@@ -2,7 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { ParentMaster, ProductType } from '@/models/parentMaster';
+import { redirectsCsvToUrlCsv } from '@/lib/redirectOptionTokens';
+import { parseTagsCsv } from '@/lib/productTagOptions';
 import type { Category } from '@/models/category';
+import type { CollectionMaster } from '@/models/collectionMaster';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import { Notification } from '@/components/ui/Notification';
 import { SearchBar, Pagination, ConfirmDialog } from '../../shared';
@@ -42,6 +45,9 @@ interface EditParentForm {
   seoTitle: string;
   seoDescription: string;
   images: string[];
+  /** Comma-separated tags (same options as Product Master / listings). */
+  tags: string;
+  collectionIds: string[];
 }
 
 export function ViewParents() {
@@ -59,6 +65,7 @@ export function ViewParents() {
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<EditParentForm | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [collections, setCollections] = useState<CollectionMaster[]>([]);
   const [sellers, setSellers] = useState<ProcurementSellerMaster[]>([]);
   const [deleteConfirm, setDeleteConfirm] = useState<ParentMaster | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -81,13 +88,23 @@ export function ViewParents() {
       .catch(() => {});
   }, []);
 
-  // Defer categories and sellers until edit modal opens to speed up initial load
+  const fetchCollections = useCallback(() => {
+    fetch('/api/collection-master?limit=500')
+      .then((res) => res.json())
+      .then((json) => {
+        if (json?.success && Array.isArray(json.data)) setCollections(json.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Defer categories, collections, and sellers until edit modal opens to speed up initial load
   useEffect(() => {
     if (editing) {
       fetchCategories();
+      fetchCollections();
       fetchSellers();
     }
-  }, [editing, fetchCategories, fetchSellers]);
+  }, [editing, fetchCategories, fetchCollections, fetchSellers]);
 
   useEffect(() => {
     if (!editing) return;
@@ -186,6 +203,9 @@ export function ViewParents() {
       features: (parent as any).features ?? '',
       redirects: (parent as any).redirects ?? '',
       categories: Array.isArray(parent.categories) ? parent.categories : [],
+      collectionIds: Array.isArray(parent.collectionIds)
+        ? parent.collectionIds.map((id) => String(id))
+        : [],
       sellingPrice: sellingPrice ?? '',
       compare_at:
         parent.compare_at != null && typeof parent.compare_at === 'number' ? parent.compare_at : '',
@@ -200,6 +220,7 @@ export function ViewParents() {
       seoTitle: pt === 'parent' ? (parent.SEO?.title ?? '') : '',
       seoDescription: pt === 'parent' ? (parent.SEO?.description ?? '') : '',
       images: Array.isArray(parent.images) ? parent.images : [],
+      tags: Array.isArray(parent.tags) ? parent.tags.join(', ') : '',
     });
   };
 
@@ -238,8 +259,10 @@ export function ViewParents() {
         ? { seller: editForm.seller || undefined }
         : { vendor_id: editForm.seller.trim() || undefined }),
       features: editForm.features || undefined,
-      redirects: editForm.redirects || undefined,
+      tags: parseTagsCsv(editForm.tags),
+      redirects: redirectsCsvToUrlCsv(editForm.redirects) || undefined,
       categories: editForm.categories,
+      collectionIds: editForm.collectionIds.length > 0 ? editForm.collectionIds : [],
       sellingPrice: editForm.sellingPrice !== '' ? Number(editForm.sellingPrice) : undefined,
       compare_at: compareAtPayload,
       tax: editForm.tax === '5' || editForm.tax === '18' ? editForm.tax : null,
@@ -352,6 +375,7 @@ export function ViewParents() {
         editForm={editForm}
         saving={saving}
         categories={categories}
+        collections={collections}
         sellers={sellers}
         onClose={() => {
           setEditing(null);

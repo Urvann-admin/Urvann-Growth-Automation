@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const urls = await ListingProductModel.listImageUrlsFromListedOrPublished(section);
+    const urls = await ListingProductModel.listImageUrlsFromSection(section);
     return NextResponse.json({ success: true, urls });
   } catch (error) {
     console.error('[listed-image-urls] GET error:', error);

@@ -3,13 +3,28 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 import { Notification } from '@/components/ui/Notification';
+import { CustomSelect, type SelectOption } from '@/app/dashboard/listing/components/CustomSelect';
 
 interface ParentFromApi {
   _id: string;
   sku?: string;
   plant: string;
   finalName?: string;
+  productCode?: string;
+  vendor_id?: string;
 }
+
+function displayProductName(p: ParentFromApi): string {
+  const fromFinal = p.finalName?.trim();
+  if (fromFinal) return fromFinal;
+  const fromPlant = p.plant?.trim();
+  if (fromPlant) return fromPlant;
+  const sk = p.sku?.trim();
+  return sk ?? '';
+}
+
+/** CustomSelect treats `value=""` as no selection but fails to show placeholder; use a sentinel. */
+const NO_PRODUCT = '__no_product__';
 
 export interface AddInvoiceFormState {
   billNumber: string;
@@ -48,6 +63,7 @@ interface AddInvoiceFormModalProps {
 export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFormModalProps) {
   const [form, setForm] = useState<AddInvoiceFormState>(emptyForm);
   const [parents, setParents] = useState<ParentFromApi[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState('');
   const [sellers, setSellers] = useState<
     { _id: string; seller_name: string; vendorCode?: string }[]
   >([]);
@@ -56,7 +72,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
 
   const fetchParents = useCallback(async () => {
     try {
-      const res = await fetch('/api/parent-master?limit=500&baseParentsOnly=true');
+      const res = await fetch('/api/parent-master?limit=2000&baseParentsOnly=true');
       const json = await res.json();
       if (json?.success && Array.isArray(json.data)) {
         setParents(json.data);
@@ -66,7 +82,26 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
     }
   }, []);
 
-  /** All unique SKUs from parent master */
+  /** Searchable product names: one row per base parent with SKU (matches ParentMaster listing use). */
+  const productNameOptions = useMemo((): SelectOption[] => {
+    const rows = parents.filter((p) => p.sku && String(p.sku).trim());
+    const baseLabels = rows.map((p) => displayProductName(p));
+    const labelCounts = new Map<string, number>();
+    baseLabels.forEach((l) => labelCounts.set(l, (labelCounts.get(l) ?? 0) + 1));
+    const opts = rows.map((p) => {
+      const base = displayProductName(p);
+      const sku = String(p.sku).trim();
+      const dup = (labelCounts.get(base) ?? 0) > 1;
+      return {
+        value: String(p._id),
+        label: dup && base ? `${base} (${sku})` : base || sku,
+      };
+    });
+    opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    return [{ value: NO_PRODUCT, label: 'Select product…' }, ...opts];
+  }, [parents]);
+
+  /** All unique SKUs from parent master (Parent SKU dropdown; stays in sync when picking product name). */
   const parentOptions = useMemo(() => {
     const set = new Set<string>();
     parents.forEach((p: ParentFromApi) => {
@@ -76,6 +111,48 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       .sort()
       .map((sku) => ({ value: sku, label: sku }));
   }, [parents]);
+
+  const applyParentSelection = useCallback(
+    (parentId: string) => {
+      if (!parentId || parentId === NO_PRODUCT) {
+        setSelectedParentId('');
+        setForm((f) => ({
+          ...f,
+          productName: '',
+          productCode: '',
+          parentSku: '',
+          seller: '',
+        }));
+        return;
+      }
+      setSelectedParentId(parentId);
+      const p = parents.find((x) => String(x._id) === parentId);
+      if (!p?.sku) return;
+      const sku = String(p.sku).trim();
+      const productName = displayProductName(p) || sku;
+      const productCode = (p.productCode?.trim() || sku).trim();
+      const vid = p.vendor_id?.trim();
+      const seller =
+        vid && sellers.some((s) => s._id === vid) ? vid : '';
+      setForm((f) => ({
+        ...f,
+        productName,
+        productCode,
+        parentSku: sku,
+        seller,
+      }));
+    },
+    [parents, sellers]
+  );
+
+  useEffect(() => {
+    if (!selectedParentId) return;
+    const vid = String(
+      parents.find((x) => String(x._id) === selectedParentId)?.vendor_id ?? ''
+    ).trim();
+    if (!vid || !sellers.some((s) => s._id === vid)) return;
+    setForm((f) => (f.seller === vid ? f : { ...f, seller: vid }));
+  }, [sellers, selectedParentId, parents]);
 
   const sellerOptions = useMemo(
     () =>
@@ -111,6 +188,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
   useEffect(() => {
     if (isOpen) {
       setForm(emptyForm);
+      setSelectedParentId('');
       setMessage(null);
       fetchParents();
       fetchSellers();
@@ -138,12 +216,15 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       return;
     }
 
-    const listing = Math.max(0, Math.floor(Number(form.listing) || 0));
-    const revival = Math.max(0, Math.floor(Number(form.revival) || 0));
-    const growth = Math.max(0, Math.floor(Number(form.growth) || 0));
-    const consumers = Math.max(0, Math.floor(Number(form.consumers) || 0));
+    let listing = Math.max(0, Math.floor(Number(form.listing) || 0));
+    let revival = Math.max(0, Math.floor(Number(form.revival) || 0));
+    let growth = Math.max(0, Math.floor(Number(form.growth) || 0));
+    let consumers = Math.max(0, Math.floor(Number(form.consumers) || 0));
     const typeSum = listing + revival + growth + consumers;
-    if (typeSum !== quantity) {
+    if (typeSum === 0 && quantity > 0) {
+      listing = quantity;
+      revival = growth = consumers = 0;
+    } else if (typeSum !== quantity) {
       setMessage({ type: 'error', text: 'Type split must equal Quantity.' });
       return;
     }
@@ -230,16 +311,16 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
                   placeholder="e.g. SKU001"
                 />
               </label>
-              <label className="block sm:col-span-2">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Product name</span>
-                <input
-                  type="text"
-                  value={form.productName}
-                  onChange={(e) => setForm((f) => ({ ...f, productName: e.target.value }))}
-                  className={inputClass}
-                  placeholder="Optional"
+              <div className="block sm:col-span-2">
+                <CustomSelect
+                  label="Product name"
+                  value={selectedParentId || NO_PRODUCT}
+                  onChange={applyParentSelection}
+                  options={productNameOptions}
+                  placeholder="Search or select product…"
+                  searchable
                 />
-              </label>
+              </div>
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Quantity</span>
                 <input
@@ -249,11 +330,19 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
                   onChange={(e) =>
                     setForm((f) => {
                       const nextQuantity = e.target.value;
-                      const allTypeEmpty = !f.listing && !f.revival && !f.growth && !f.consumers;
+                      const prevQty = Math.max(0, Math.floor(Number(f.quantity) || 0));
+                      const listVal = Math.max(0, Math.floor(Number(f.listing) || 0));
+                      const rev = Math.max(0, Math.floor(Number(f.revival) || 0));
+                      const gro = Math.max(0, Math.floor(Number(f.growth) || 0));
+                      const con = Math.max(0, Math.floor(Number(f.consumers) || 0));
+                      const othersZero = rev === 0 && gro === 0 && con === 0;
+                      const listingUnset = !String(f.listing ?? '').trim();
+                      const syncListing =
+                        othersZero && (listingUnset || listVal === prevQty);
                       return {
                         ...f,
                         quantity: nextQuantity,
-                        ...(allTypeEmpty ? { listing: nextQuantity } : {}),
+                        ...(syncListing ? { listing: nextQuantity } : {}),
                       };
                     })
                   }

@@ -83,6 +83,9 @@ export async function PATCH(
         updateData.alias = slug(name);
       }
     }
+    if (typeof body.alias === 'string' && body.alias.trim()) {
+      updateData.alias = slug(body.alias.trim());
+    }
     if (body.publish !== undefined && body.publish !== null) {
       const publish = Number(body.publish);
       updateData.publish = Number.isFinite(publish) ? publish : 0;

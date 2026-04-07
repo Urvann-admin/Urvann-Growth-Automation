@@ -7,7 +7,7 @@ async function notifyInventoryManagementPublish(skus: string[]): Promise<void> {
   const baseUrl = process.env.INVENTORY_MANAGEMENT_API_URL;
   if (!baseUrl || skus.length === 0) return;
   try {
-    await fetch(`${baseUrl}/api/inventory-dashboard/webhook/publish-skus`, {
+    await fetch(`${baseUrl}/api/inventoryOrders/webhook/publish-skus`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ skus }),

@@ -1,10 +1,21 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Search, ChevronDown, Check, Image as ImageIcon, Upload, ZoomIn } from 'lucide-react';
+import { X, Search, ChevronDown, Check, Image as ImageIcon, Upload, ZoomIn, FolderTree, Sparkles } from 'lucide-react';
 import type { Category } from '@/models/category';
 import type { CollectionMaster } from '@/models/collectionMaster';
 import { ImagePreviewModal } from '../../../shared';
+import { CategoryHierarchyPickerModal } from './CategoryHierarchyPickerModal';
+
+/** Snapshot of parent product fields used by `/api/categories/evaluate-rules` (`potType` is sent as `type`). */
+export interface CategoryRuleEvalFields {
+  plant: string;
+  variety: string;
+  colour: string;
+  height: number | '';
+  size: number | '';
+  potType: string;
+}
 
 export interface StepCategoriesAndImagesProps {
   categories: Category[];
@@ -23,6 +34,10 @@ export interface StepCategoriesAndImagesProps {
   onRemoveSelectedImage: (index: number) => void;
   onRemoveUploadedImage: (index: number) => void;
   onClearError: (key: string) => void;
+  /** When set, loads rule-based category suggestions (debounced). Omit for flows without rules. */
+  categoryRuleEval?: CategoryRuleEvalFields | null;
+  /** Single state update when applying all rule suggestions; falls back to repeated toggle if omitted. */
+  onMergeRuleCategoryAliases?: (aliases: string[]) => void;
 }
 
 function getCategoryName(categories: Category[], categoryAlias: string): string {
@@ -47,23 +62,101 @@ export function StepCategoriesAndImages({
   onRemoveSelectedImage,
   onRemoveUploadedImage,
   onClearError,
+  categoryRuleEval,
+  onMergeRuleCategoryAliases,
 }: StepCategoriesAndImagesProps) {
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [collectionDropdownOpen, setCollectionDropdownOpen] = useState(false);
-  const [search, setSearch] = useState('');
   const [collectionSearch, setCollectionSearch] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [autoCategories, setAutoCategories] = useState<string[]>([]);
+  const [loadingAutoCategories, setLoadingAutoCategories] = useState(false);
   const collectionDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
+    if (!categoryRuleEval) {
+      setAutoCategories([]);
+      setLoadingAutoCategories(false);
+      return;
+    }
+    const plant = categoryRuleEval.plant.trim();
+    if (!plant) {
+      setAutoCategories([]);
+      setLoadingAutoCategories(false);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setLoadingAutoCategories(true);
+      try {
+        const { variety, colour, height, size, potType } = categoryRuleEval;
+        const productData: Record<string, unknown> = {
+          plant,
+          categories: selectedCategoryIds,
+        };
+        if (variety.trim()) productData.variety = variety.trim();
+        if (colour.trim()) productData.colour = colour.trim();
+        if (height !== '' && Number.isFinite(Number(height))) productData.height = Number(height);
+        if (size !== '' && Number.isFinite(Number(size))) productData.size = Number(size);
+        if (potType.trim()) productData.type = potType.trim();
+
+        const response = await fetch('/api/categories/evaluate-rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productData),
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+        if (!response.ok) {
+          setAutoCategories([]);
+          return;
+        }
+        const result = await response.json();
+        if (cancelled) return;
+        setAutoCategories(
+          result.success && Array.isArray(result.categories) ? result.categories : []
+        );
+      } catch (e) {
+        if ((e as Error).name === 'AbortError' || cancelled) return;
+        setAutoCategories([]);
+      } finally {
+        if (!cancelled) setLoadingAutoCategories(false);
       }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [
+    categoryRuleEval?.plant,
+    categoryRuleEval?.variety,
+    categoryRuleEval?.colour,
+    categoryRuleEval?.height,
+    categoryRuleEval?.size,
+    categoryRuleEval?.potType,
+    selectedCategoryIds.join(','),
+  ]);
+
+  const notYetSelectedRuleCategories = autoCategories.filter((a) => !selectedCategoryIds.includes(a));
+
+  const handleApplyAutoCategories = () => {
+    if (notYetSelectedRuleCategories.length === 0) return;
+    if (onMergeRuleCategoryAliases) {
+      onMergeRuleCategoryAliases(notYetSelectedRuleCategories);
+    } else {
+      notYetSelectedRuleCategories.forEach((alias) => onCategoryToggle(alias));
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
       if (collectionDropdownRef.current && !collectionDropdownRef.current.contains(event.target as Node)) {
         setCollectionDropdownOpen(false);
       }
@@ -71,12 +164,6 @@ export function StepCategoriesAndImages({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const filteredCategories = categories.filter(
-    (cat) =>
-      cat.category?.toLowerCase().includes(search.toLowerCase()) ||
-      cat.alias?.toLowerCase().includes(search.toLowerCase())
-  );
 
   const filteredCollections = collections.filter(
     (col) =>
@@ -154,70 +241,82 @@ export function StepCategoriesAndImages({
             ))}
           </div>
         )}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            type="button"
-            onClick={() => setDropdownOpen(!dropdownOpen)}
-            className={`w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-white text-left transition-colors focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.categories ? 'border-red-300' : 'border-slate-300'
-            } ${dropdownOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-          >
-            <span className={selectedCategoryIds.length > 0 ? 'text-slate-900' : 'text-slate-500'}>
+        <button
+          type="button"
+          onClick={() => setCategoryModalOpen(true)}
+          className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 border rounded-lg bg-white text-left transition-colors focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+            errors.categories ? 'border-red-300' : 'border-slate-300'
+          }`}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <FolderTree className="w-4 h-4 text-slate-400 shrink-0" aria-hidden />
+            <span className={selectedCategoryIds.length > 0 ? 'text-slate-900' : 'text-slate-500 truncate'}>
               {selectedCategoryIds.length === 0
-                ? 'Select categories...'
+                ? 'Browse categories…'
                 : `${selectedCategoryIds.length} ${selectedCategoryIds.length > 1 ? 'categories' : 'category'} selected`}
             </span>
-            <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 ml-2 ${dropdownOpen ? 'rotate-180' : ''}`} />
-          </button>
-          {dropdownOpen && (
-            <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-              <div className="p-2 border-b border-slate-200">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search categories..."
-                    className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+          </span>
+          <span className="text-xs font-medium text-blue-600 shrink-0">Open</span>
+        </button>
+        <CategoryHierarchyPickerModal
+          isOpen={categoryModalOpen}
+          onClose={() => setCategoryModalOpen(false)}
+          categories={categories}
+          selectedCategoryIds={selectedCategoryIds}
+          onCategoryToggle={onCategoryToggle}
+          onClearError={onClearError}
+        />
+        {errors.categories && <p className="text-red-500 text-xs mt-1">{errors.categories}</p>}
+
+        {categoryRuleEval && !categoryRuleEval.plant.trim() && (
+          <p className="text-xs text-slate-500 mt-2">
+            Add a plant name on the Product info step to preview categories from your rules.
+          </p>
+        )}
+
+        {categoryRuleEval &&
+          categoryRuleEval.plant.trim() &&
+          (loadingAutoCategories || autoCategories.length > 0) && (
+            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-600">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0 text-blue-600" aria-hidden />
+                  Auto-suggested categories (rules)
+                  {loadingAutoCategories && <span className="text-blue-600">Loading…</span>}
                 </div>
-              </div>
-              <div className="max-h-56 overflow-y-auto">
-                {filteredCategories.length === 0 ? (
-                  <p className="text-slate-500 text-sm p-3 text-center">No categories found</p>
-                ) : (
-                  filteredCategories.map((category) => {
-                    const categoryAlias = category.alias || '';
-                    const isSelected = selectedCategoryIds.includes(categoryAlias);
-                    return (
-                      <button
-                        key={categoryAlias || String(category._id)}
-                        type="button"
-                        onClick={() => {
-                          onCategoryToggle(categoryAlias);
-                          onClearError('categories');
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
-                          isSelected ? 'bg-indigo-50 text-indigo-700' : 'text-slate-900 hover:bg-slate-50'
-                        }`}
-                      >
-                        <div className="flex flex-col">
-                          <span className="text-sm font-medium">{category.category}</span>
-                          {category.typeOfCategory && (
-                            <span className="text-xs text-slate-400">{category.typeOfCategory}</span>
-                          )}
-                        </div>
-                        {isSelected && <Check className="w-4 h-4 text-indigo-600 shrink-0" />}
-                      </button>
-                    );
-                  })
+                {!loadingAutoCategories && notYetSelectedRuleCategories.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleApplyAutoCategories}
+                    className="shrink-0 flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-full hover:bg-emerald-100"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Add all ({notYetSelectedRuleCategories.length})
+                  </button>
                 )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {autoCategories.map((alias) => {
+                  const isSelected = selectedCategoryIds.includes(alias);
+                  return (
+                    <button
+                      key={alias}
+                      type="button"
+                      onClick={() => onCategoryToggle(alias)}
+                      className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-full border transition-colors ${
+                        isSelected
+                          ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                          : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                      }`}
+                    >
+                      <Sparkles className="h-3 w-3 shrink-0 opacity-70" />
+                      {getCategoryName(categories, alias)}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
-        </div>
-        {errors.categories && <p className="text-red-500 text-xs mt-1">{errors.categories}</p>}
       </div>
 
       {/* Collections */}

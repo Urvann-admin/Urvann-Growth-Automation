@@ -67,7 +67,7 @@ export function AddSellerForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!seller_name.trim()) {
-      setMessage({ type: 'error', text: 'Seller name is required.' });
+      setMessage({ type: 'error', text: 'Vendor name is required.' });
       return;
     }
     setMessage(null);
@@ -131,14 +131,14 @@ export function AddSellerForm() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <label className="block sm:col-span-2">
             <span className="block text-sm font-medium text-slate-700 mb-1.5">
-              Seller name
+              Vendor name
             </span>
             <input
               type="text"
               value={seller_name}
               onChange={(e) => setSeller_name(e.target.value)}
               className={inputClass}
-              placeholder="Seller name"
+              placeholder="Vendor name"
               required
             />
           </label>

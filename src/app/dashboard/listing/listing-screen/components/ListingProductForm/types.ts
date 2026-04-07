@@ -1,5 +1,6 @@
 import type { ListingSection, ListingStatus } from '@/models/listingProduct';
 import { POT_TYPES_WITH_PRICING } from '@/shared/constants/pots';
+import { computeProductDisplayName } from '@/lib/productListingDisplayName';
 
 /** Whether the user is listing a parent product (single) or a child product (can be multi-parent). */
 export type ListingType = 'parent' | 'child';
@@ -91,14 +92,47 @@ export const initialListingFormData: ListingFormData = {
   status: 'draft',
 };
 
-export function buildDefaultSeoTitle(plantName: string): string {
-  const n = plantName.trim() || 'plant';
+export function buildDefaultSeoTitle(displayName: string): string {
+  const n = displayName.trim() || 'plant';
   return `Free Next Day Delivery | ${n}`;
 }
 
-export function buildDefaultSeoDescription(plantName: string): string {
-  const n = plantName.trim() || 'plant';
+export function buildDefaultSeoDescription(displayName: string): string {
+  const n = displayName.trim() || 'plant';
   return `Buy ${n} at Urvann. Choose from 10000+ plants, gardening products and essentials. Order now to get free next day home delivery.`;
+}
+
+/** Same building blocks as Product Master final name (plant + attributes). */
+export function computeListingDisplayName(data: ListingFormData): string {
+  return computeProductDisplayName({
+    plant: data.plant,
+    otherNames: data.otherNames,
+    variety: data.variety,
+    colour: data.colour,
+    height: data.height,
+    size: data.size,
+    type: data.type,
+    mossStick: data.mossStick,
+  });
+}
+
+export function applyListingSeoDefaultsIfStillAuto(
+  prev: ListingFormData,
+  next: ListingFormData
+): ListingFormData {
+  const oldFn = computeListingDisplayName(prev).trim() || prev.plant.trim() || 'plant';
+  const newFn = computeListingDisplayName(next).trim() || next.plant.trim() || 'plant';
+  if (oldFn === newFn) return next;
+  const out = { ...next };
+  const oldT = buildDefaultSeoTitle(oldFn);
+  const oldD = buildDefaultSeoDescription(oldFn);
+  if (!prev.seoTitle.trim() || prev.seoTitle === oldT) {
+    out.seoTitle = buildDefaultSeoTitle(newFn);
+  }
+  if (!prev.seoDescription.trim() || prev.seoDescription === oldD) {
+    out.seoDescription = buildDefaultSeoDescription(newFn);
+  }
+  return out;
 }
 
 export const MOSS_STICK_OPTIONS = [

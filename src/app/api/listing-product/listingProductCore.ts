@@ -12,8 +12,8 @@ import { PurchaseMasterModel } from '@/models/purchaseMaster';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { CategoryModel } from '@/models/category';
 import { syncParentFromPurchases } from '@/app/api/purchase-master/syncParent';
+import { expectedParentSkuForHub } from '@/lib/childListingHubSku';
 import {
-  appendHubLetterToParentSku,
   generateSKU,
   parentListingLineParentSku,
   toCanonicalParentSkuForPurchases,
@@ -204,8 +204,16 @@ export async function validateListingProductData(data: unknown): Promise<{
     if (parentTax > maxTax) maxTax = parentTax;
 
     const redirectsStr = (parent as any).redirects;
-    if (redirectsStr && typeof redirectsStr === 'string') {
-      redirectsStr.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((r: string) => combinedRedirects.add(r));
+    if (
+      combinedRedirects.size === 0 &&
+      redirectsStr &&
+      typeof redirectsStr === 'string'
+    ) {
+      const first = redirectsStr
+        .split(',')
+        .map((s: string) => s.trim())
+        .filter(Boolean)[0];
+      if (first) combinedRedirects.add(first);
     }
 
     // Features: only from plant parents (ignore pot parents if there are plant parents)
@@ -234,6 +242,13 @@ export async function validateListingProductData(data: unknown): Promise<{
 
   autoCategories.forEach((cat) => combinedCategories.add(cat));
 
+  if (Array.isArray(d.categories)) {
+    (d.categories as unknown[]).forEach((c) => {
+      const s = String(c).trim();
+      if (s) combinedCategories.add(s);
+    });
+  }
+
   let sku: string | undefined;
   const setQuantity = typeof (d as any).setQuantity === 'number'
     ? (d as any).setQuantity
@@ -249,6 +264,17 @@ export async function validateListingProductData(data: unknown): Promise<{
   const substores = hub ? getSubstoresByHub(hub) : [];
 
   const finalInventory = minInventoryQuantity === Infinity ? 0 : minInventoryQuantity;
+
+  let parentKindOut: 'plant' | 'pot' | undefined;
+  const pkRaw = (d as { parentKind?: unknown }).parentKind;
+  if (pkRaw != null && String(pkRaw).trim() !== '') {
+    const pk = String(pkRaw).trim().toLowerCase();
+    if (pk === 'plant' || pk === 'pot') parentKindOut = pk;
+  }
+  if (!parentKindOut && listingType === 'parent' && parents[0]) {
+    const fromP = (parents[0] as { parentKind?: string }).parentKind;
+    if (fromP === 'plant' || fromP === 'pot') parentKindOut = fromP;
+  }
 
   let SEO: ListingProductSEO | undefined;
   const seoRaw = (d as any).SEO ?? (d as any).seo;
@@ -269,9 +295,11 @@ export async function validateListingProductData(data: unknown): Promise<{
   // Redirects: use form-provided array if present, otherwise parent-derived
   let resolvedRedirects: string[] | undefined;
   if (Array.isArray((d as any).redirects) && (d as any).redirects.length > 0) {
-    resolvedRedirects = (d as any).redirects.map((r: unknown) => String(r).trim()).filter(Boolean);
+    const urls = (d as any).redirects.map((r: unknown) => String(r).trim()).filter(Boolean);
+    resolvedRedirects = urls[0] !== undefined ? [urls[0]] : undefined;
   } else if (combinedRedirects.size > 0) {
-    resolvedRedirects = Array.from(combinedRedirects);
+    const one = Array.from(combinedRedirects)[0];
+    resolvedRedirects = one ? [one] : undefined;
   }
 
   // Features: use form-provided array if present, otherwise parent-derived (plant-only filtered)
@@ -299,7 +327,7 @@ export async function validateListingProductData(data: unknown): Promise<{
       : listingType === 'child' && hub
         ? parentItems.map((item) => ({
             ...item,
-            parentSku: appendHubLetterToParentSku(hub, item.parentSku),
+            parentSku: expectedParentSkuForHub(hub, item.parentSku),
           }))
         : parentItems;
 
@@ -362,8 +390,17 @@ export async function validateListingProductData(data: unknown): Promise<{
     features: resolvedFeatures,
     images: imageUrls,
     sku: sku,
+    base_sku: (() => {
+      const raw = (d as { base_sku?: unknown }).base_sku;
+      if (typeof raw === 'string' && raw.trim()) return raw.trim();
+      if (hub && parentItemsPersisted[0]) {
+        return toCanonicalParentSkuForPurchases('parent', hub, parentItemsPersisted[0].parentSku);
+      }
+      return undefined;
+    })(),
     section: d.section as ListingSection,
     listingType,
+    ...(parentKindOut ? { parentKind: parentKindOut } : {}),
     status: (d.status as ListingStatus) || 'draft',
     seller: d.seller ? String(d.seller).trim() : undefined,
     hub: hub,

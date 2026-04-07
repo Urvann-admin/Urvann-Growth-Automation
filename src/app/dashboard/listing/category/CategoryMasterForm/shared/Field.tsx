@@ -14,6 +14,7 @@ export function Field({
   error,
   children,
   className = '',
+  layout = 'vertical',
 }: {
   id?: string;
   label: string;
@@ -21,7 +22,27 @@ export function Field({
   error?: string;
   children: React.ReactNode;
   className?: string;
+  /** `horizontal`: label and control on one row (fills width; control flexes). */
+  layout?: 'vertical' | 'horizontal';
 }) {
+  if (layout === 'horizontal') {
+    return (
+      <div className={className}>
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3 w-full min-w-0">
+          <label
+            htmlFor={id}
+            className="text-sm font-medium text-slate-700 sm:w-32 shrink-0 leading-tight"
+          >
+            {label}
+            {required && <span className="text-red-500 ml-0.5">*</span>}
+          </label>
+          <div className="min-w-0 flex-1 w-full">{children}</div>
+        </div>
+        {error && <p className="mt-1.5 text-xs text-red-600 font-medium sm:pl-[8.75rem]">{error}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
       <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-1.5">

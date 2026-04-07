@@ -3,7 +3,9 @@ import { ParentMasterModel, isBaseParent, type ParentMaster } from '@/models/par
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
 import { SellerMasterModel } from '@/models/sellerMaster';
 import { deleteMultipleImagesFromS3 } from '@/lib/s3Upload';
+import { baseSkuForParentMasterRow } from '@/lib/skuGenerator';
 import { serializeParent, sanitizeParentMasterUpdate } from '../route';
+import { ProductFeatureMasterModel } from '@/models/productFeatureMaster';
 
 function isMongoObjectIdString(s: string): boolean {
   return /^[a-f\d]{24}$/i.test(String(s).trim());
@@ -85,16 +87,17 @@ export async function PUT(
     if (updateData.sku !== undefined) {
       const skuTrim = String(updateData.sku).trim();
       const doc = await ParentMasterModel.findById(id);
-      const resolved = skuTrim ? await ParentMasterModel.findBySku(skuTrim) : null;
+      const resolvedExact = skuTrim ? await ParentMasterModel.findBySku(skuTrim) : null;
+      const resolvedBase = skuTrim ? await ParentMasterModel.findBaseParentBySkuOrBaseSku(skuTrim) : null;
       if (doc && isBaseParent(doc)) {
-        if (resolved && isBaseParent(resolved) && String(resolved._id) !== String(id)) {
+        if (resolvedExact && isBaseParent(resolvedExact) && String(resolvedExact._id) !== String(id)) {
           return NextResponse.json(
             { success: false, message: 'A base parent with this SKU already exists' },
             { status: 409 }
           );
         }
       } else if (doc && skuTrim && !isBaseParent(doc)) {
-        if (!resolved || !isBaseParent(resolved)) {
+        if (!resolvedBase || !isBaseParent(resolvedBase)) {
           return NextResponse.json(
             {
               success: false,
@@ -108,7 +111,9 @@ export async function PUT(
     }
 
     if (updateData.parentSku !== undefined && updateData.parentSku) {
-      const linked = await ParentMasterModel.findBySku(String(updateData.parentSku).trim());
+      const linked = await ParentMasterModel.findBaseParentBySkuOrBaseSku(
+        String(updateData.parentSku).trim()
+      );
       if (!linked || !isBaseParent(linked)) {
         return NextResponse.json(
           { success: false, message: 'parentSku must be the SKU of an existing base (parent) product' },
@@ -161,6 +166,34 @@ export async function PUT(
         const procurementSeller = await ProcurementSellerMasterModel.findById(vendorKey);
         const factor = procurementSeller?.multiplicationFactor ?? 1;
         updateData = { ...updateData, listing_price: priceVal * factor };
+      }
+    }
+
+    if (updateData.features !== undefined) {
+      await ProductFeatureMasterModel.ensureFromFeaturesField(
+        typeof updateData.features === 'string' ? updateData.features : undefined
+      );
+    }
+
+    if (existing) {
+      const ex = existing as ParentMaster;
+      const mergedSku =
+        updateData.sku !== undefined
+          ? String(updateData.sku ?? '').trim()
+          : ex.sku != null
+            ? String(ex.sku).trim()
+            : '';
+      const mergedHub =
+        updateData.hub !== undefined
+          ? String(updateData.hub ?? '').trim() || undefined
+          : ex.hub != null
+            ? String(ex.hub).trim() || undefined
+            : undefined;
+      if (mergedSku) {
+        updateData = {
+          ...updateData,
+          base_sku: baseSkuForParentMasterRow(mergedSku, mergedHub),
+        };
       }
     }
 

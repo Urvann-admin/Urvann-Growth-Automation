@@ -1,24 +1,42 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Category } from '@/models/category';
 import { Notification } from '@/components/ui/Notification';
 import { SearchBar, ConfirmDialog } from '../../shared';
 import { CategoryTable } from './CategoryTable';
-import { EditCategoryModal } from './EditCategoryModal';
+import {
+  EditCategoryModal,
+  type EditCategoryForm,
+  type EditCategoryRecordMeta,
+} from './EditCategoryModal';
+import type { FormRuleItem, RuleConditionField } from '../CategoryMasterForm/types';
+import {
+  hasConditionWithValue,
+  formRuleItemsToRuleItems,
+  ruleToFormRuleItems,
+  appendToPath,
+  removeAtPath,
+  getItemAtPath,
+  setItemAtPath,
+} from '../CategoryMasterForm/ruleFormHelpers';
 
-interface EditCategoryForm {
-  category: string;
-  alias: string;
-  typeOfCategory: string;
-  description: string;
-  l1Parent: string;
-  l2Parent: string;
-  l3Parent: string;
-  publish: boolean;
-  priorityOrder: string;
-  type: string;
-  substores: string[];
+function emptyEditForm(): EditCategoryForm {
+  return {
+    category: '',
+    alias: '',
+    typeOfCategory: '',
+    description: '',
+    l1Parent: '',
+    l2Parent: '',
+    l3Parent: '',
+    publish: true,
+    priorityOrder: '0',
+    type: 'Manual',
+    ruleOperator: 'AND',
+    ruleItems: [{ field: 'Plant', value: '' }],
+    substores: [],
+  };
 }
 
 export function ViewCategories() {
@@ -30,19 +48,8 @@ export function ViewCategories() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<Category | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [editForm, setEditForm] = useState<EditCategoryForm>({
-    category: '',
-    alias: '',
-    typeOfCategory: '',
-    description: '',
-    l1Parent: '',
-    l2Parent: '',
-    l3Parent: '',
-    publish: true,
-    priorityOrder: '0',
-    type: 'Manual',
-    substores: [],
-  });
+  const [editForm, setEditForm] = useState<EditCategoryForm>(emptyEditForm);
+  const [ruleErrors, setRuleErrors] = useState<Record<string, string>>({});
 
   const fetchCategories = useCallback(() => {
     fetch('/api/categories')
@@ -63,6 +70,7 @@ export function ViewCategories() {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setEditing(null);
+        setRuleErrors({});
       }
     };
     document.addEventListener('keydown', handleEscape);
@@ -73,6 +81,36 @@ export function ViewCategories() {
     };
   }, [editing]);
 
+  const l1Options = useMemo(() => {
+    const list = categories.filter((c) => String(c.typeOfCategory || '').toUpperCase() === 'L1');
+    return list
+      .map((c) => ({
+        value: (c.category ?? c.categoryId ?? '').toString(),
+        label: c.category || (c.categoryId ?? ''),
+      }))
+      .filter((o) => o.value);
+  }, [categories]);
+
+  const l2Options = useMemo(() => {
+    const list = categories.filter((c) => String(c.typeOfCategory || '').toUpperCase() === 'L2');
+    return list
+      .map((c) => ({
+        value: (c.category ?? c.categoryId ?? '').toString(),
+        label: c.category || (c.categoryId ?? ''),
+      }))
+      .filter((o) => o.value);
+  }, [categories]);
+
+  const l3Options = useMemo(() => {
+    const list = categories.filter((c) => String(c.typeOfCategory || '').toUpperCase() === 'L3');
+    return list
+      .map((c) => ({
+        value: (c.category ?? c.categoryId ?? '').toString(),
+        label: c.category || (c.categoryId ?? ''),
+      }))
+      .filter((o) => o.value);
+  }, [categories]);
+
   const filtered = categories.filter(
     (c) =>
       !search.trim() ||
@@ -80,8 +118,17 @@ export function ViewCategories() {
       (c.alias ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
+  const recordMeta: EditCategoryRecordMeta | null = editing
+    ? {
+        storeHippoId: editing.categoryId != null ? String(editing.categoryId) : null,
+        createdAt: editing.createdAt,
+        updatedAt: editing.updatedAt,
+      }
+    : null;
+
   const openEdit = (cat: Category) => {
     setEditing(cat);
+    setRuleErrors({});
     setEditForm({
       category: cat.category ?? '',
       alias: cat.alias ?? '',
@@ -92,8 +139,60 @@ export function ViewCategories() {
       l3Parent: cat.l3Parent ?? '',
       publish: cat.publish ?? true,
       priorityOrder: String(cat.priorityOrder ?? 0),
-      type: cat.type ?? 'Manual',
+      type: cat.type === 'Automatic' ? 'Automatic' : 'Manual',
+      ruleOperator: cat.rule?.rule_operator ?? 'AND',
+      ruleItems: ruleToFormRuleItems(cat.rule),
       substores: Array.isArray(cat.substores) ? cat.substores : [],
+    });
+  };
+
+  const clearRuleError = (key: string) => {
+    setRuleErrors((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const addRuleCondition = (path: number[]) => {
+    setEditForm((prev) => ({
+      ...prev,
+      ruleItems: appendToPath(prev.ruleItems, path, { field: 'Plant', value: '' }),
+    }));
+  };
+
+  const addRuleGroup = (path: number[]) => {
+    setEditForm((prev) => ({
+      ...prev,
+      ruleItems: appendToPath(prev.ruleItems, path, {
+        rule_operator: 'AND',
+        items: [{ field: 'Plant', value: '' }],
+      }),
+    }));
+  };
+
+  const removeRuleItem = (path: number[]) => {
+    setEditForm((prev) => ({
+      ...prev,
+      ruleItems: removeAtPath(prev.ruleItems, path),
+    }));
+  };
+
+  const updateRuleItem = (
+    path: number[],
+    updates: Partial<{ field: RuleConditionField; value: string }> | { rule_operator: 'AND' | 'OR' }
+  ) => {
+    setEditForm((prev) => {
+      const current = getItemAtPath(prev.ruleItems, path);
+      if (!current) return prev;
+      const newItem: FormRuleItem =
+        'field' in current
+          ? { ...current, ...(updates as Partial<{ field: RuleConditionField; value: string }>) }
+          : { ...current, ...('rule_operator' in updates ? { rule_operator: updates.rule_operator } : {}) };
+      return {
+        ...prev,
+        ruleItems: setItemAtPath(prev.ruleItems, path, newItem),
+      };
     });
   };
 
@@ -101,28 +200,37 @@ export function ViewCategories() {
     if (!editing?._id) return;
     setSaving(true);
     setMessage(null);
+    setRuleErrors({});
+
+    if (editForm.type === 'Automatic' && !hasConditionWithValue(editForm.ruleItems)) {
+      setRuleErrors({ rule: 'Add at least one condition with a value when assignment type is Automatic.' });
+      setMessage({
+        type: 'error',
+        text: 'Add at least one condition with a value when assignment type is Automatic.',
+      });
+      setSaving(false);
+      return;
+    }
+
     const id = String(editing._id);
-    const formWithRule = editForm as EditCategoryForm & { conditions?: unknown[]; items?: unknown[]; ruleOperator?: string };
-    const conditionsOrItems = formWithRule.conditions ?? formWithRule.items;
+    const ruleItemsConverted = formRuleItemsToRuleItems(editForm.ruleItems);
     const rule =
-      editForm.type === 'Automatic' && Array.isArray(conditionsOrItems) && conditionsOrItems?.length
-        ? {
-            rule_operator: formWithRule.ruleOperator ?? 'AND',
-            items: conditionsOrItems.filter((c: unknown) => {
-              const x = c as { value?: unknown };
-              return x != null && String((x.value ?? '')).trim() !== '';
-            }),
-          }
-        : undefined;
+      editForm.type === 'Automatic' && ruleItemsConverted.length > 0
+        ? { rule_operator: editForm.ruleOperator, items: ruleItemsConverted }
+        : null;
+
+    const typeUpper = String(editForm.typeOfCategory || '').toUpperCase();
+    const isL1 = typeUpper === 'L1';
+    const isL2 = typeUpper === 'L2';
 
     const payload = {
       category: String(editForm.category ?? '').trim(),
       alias: String(editForm.alias ?? '').trim(),
       typeOfCategory: String(editForm.typeOfCategory ?? '').trim(),
       description: String(editForm.description ?? '').trim(),
-      l1Parent: String(editForm.l1Parent ?? '').trim(),
-      l2Parent: String(editForm.l2Parent ?? '').trim(),
-      l3Parent: String(editForm.l3Parent ?? '').trim(),
+      l1Parent: isL1 ? '' : String(editForm.l1Parent ?? '').trim(),
+      l2Parent: isL1 || isL2 ? '' : String(editForm.l2Parent ?? '').trim(),
+      l3Parent: isL1 || isL2 ? '' : String(editForm.l3Parent ?? '').trim(),
       publish: Boolean(editForm.publish),
       priorityOrder: Math.max(0, Math.round((parseFloat(String(editForm.priorityOrder)) || 0) * 10) / 10),
       type: editForm.type === 'Automatic' ? 'Automatic' : 'Manual',
@@ -144,6 +252,7 @@ export function ViewCategories() {
       }
       setMessage({ type: 'success', text: 'Category updated successfully.' });
       setEditing(null);
+      setRuleErrors({});
       fetchCategories();
     } catch {
       setMessage({ type: 'error', text: 'Network error. Please try again.' });
@@ -175,7 +284,9 @@ export function ViewCategories() {
       }
       setMessage({
         type: 'success',
-        text: data.warnings ? `Category deleted with warnings: ${data.warnings.join('; ')}` : 'Category deleted successfully from all systems',
+        text: data.warnings
+          ? `Category deleted with warnings: ${data.warnings.join('; ')}`
+          : 'Category deleted successfully from all systems',
       });
       setDeleteConfirm(null);
       fetchCategories();
@@ -218,10 +329,23 @@ export function ViewCategories() {
       <EditCategoryModal
         isOpen={!!editing}
         editForm={editForm}
+        recordMeta={recordMeta}
         saving={saving}
-        onClose={() => setEditing(null)}
+        l1Options={l1Options}
+        l2Options={l2Options}
+        l3Options={l3Options}
+        ruleErrors={ruleErrors}
+        onClose={() => {
+          setEditing(null);
+          setRuleErrors({});
+        }}
         onSave={handleSaveEdit}
         onChange={setEditForm}
+        onClearRuleError={clearRuleError}
+        onAddRuleCondition={addRuleCondition}
+        onAddRuleGroup={addRuleGroup}
+        onRemoveRuleItem={removeRuleItem}
+        onUpdateRuleItem={updateRuleItem}
       />
 
       <ConfirmDialog

@@ -1,7 +1,7 @@
 'use client';
 
 import { CustomSelect } from '../../../components/CustomSelect';
-import { COLOUR_OPTIONS, PARENT_KIND_OPTIONS } from '../types';
+import { COLOUR_OPTIONS, MOSS_STICK_OPTIONS, PARENT_KIND_OPTIONS, POT_TYPE_OPTIONS } from '../types';
 
 export interface StepProductInfoProps {
   plant: string;
@@ -10,8 +10,11 @@ export interface StepProductInfoProps {
   colour: string;
   height: number | '';
   size: number | '';
+  mossStick: string;
+  potType: string;
   parentKind: string;
-  finalName: string;
+  /** Shown in the Final name field: override if set, otherwise the auto-built name. */
+  finalNameInputValue: string;
   errors: Record<string, string>;
   onFieldChange: (field: string, value: string | number | '') => void;
   onClearError: (key: string) => void;
@@ -24,8 +27,10 @@ export function StepProductInfo({
   colour,
   height,
   size,
+  mossStick,
+  potType,
   parentKind,
-  finalName,
+  finalNameInputValue,
   errors,
   onFieldChange,
   onClearError,
@@ -106,18 +111,32 @@ export function StepProductInfo({
             placeholder="Size in inches"
           />
         </div>
+        <CustomSelect
+          label="Pot Type"
+          value={potType}
+          onChange={(v) => onFieldChange('potType', v)}
+          options={POT_TYPE_OPTIONS}
+          placeholder="Select Pot Type"
+        />
+        <CustomSelect
+          label="Moss Stick"
+          value={mossStick}
+          onChange={(v) => onFieldChange('mossStick', v)}
+          options={MOSS_STICK_OPTIONS}
+          placeholder="Select Moss Stick"
+        />
       </div>
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Final Name</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Final name</label>
         <input
           type="text"
-          value={finalName}
-          readOnly
-          className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-50 text-slate-700"
-          placeholder="Auto-generated"
+          value={finalNameInputValue}
+          onChange={(e) => onFieldChange('finalNameOverride', e.target.value)}
+          className={`${inputBase} ${inputNormal}`}
+          placeholder="Auto from fields above"
         />
         <p className="text-xs text-slate-500 mt-1">
-          Generated from: plant + other names + variety + colour + in + size + inch + pot type
+          Built from the fields above unless you edit it here. Clear the field to go back to the auto name when attributes change.
         </p>
       </div>
     </div>

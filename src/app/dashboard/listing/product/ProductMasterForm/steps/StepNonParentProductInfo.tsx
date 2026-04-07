@@ -5,6 +5,7 @@ import { Search, X, Check, Image as ImageIcon, Upload, ZoomIn } from 'lucide-rea
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ProcurementSellerMaster } from '@/models/procurementSellerMaster';
 import type { NonParentFormData, ProductFlowType } from '../types';
+import { effectiveBaseSkuForParentRow } from '@/lib/parentMasterBaseSku';
 import { CustomSelect } from '../../../components/CustomSelect';
 import { ImagePreviewModal } from '../../../shared';
 
@@ -20,6 +21,11 @@ export interface StepNonParentProductInfoProps {
   onClearError: (key: string) => void;
   onImageSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveSelectedFile: (index: number) => void;
+  /** Growing product: server preview (non-consuming). */
+  growingCodePreview?: string;
+  growingCodePrefix?: string;
+  growingCodeLoading?: boolean;
+  growingCodeError?: string | null;
 }
 
 export function StepNonParentProductInfo({
@@ -34,6 +40,10 @@ export function StepNonParentProductInfo({
   onClearError,
   onImageSelect,
   onRemoveSelectedFile,
+  growingCodePreview = '',
+  growingCodePrefix = '',
+  growingCodeLoading = false,
+  growingCodeError = null,
 }: StepNonParentProductInfoProps) {
   const [parentQuery, setParentQuery] = useState('');
   const [parentOpen, setParentOpen] = useState(false);
@@ -69,20 +79,30 @@ export function StepNonParentProductInfo({
     if (!q) return baseParents.slice(0, 80);
     return baseParents
       .filter((p) => {
-        const sku = (p.sku ?? '').toLowerCase();
+        const hubSku = (p.sku ?? '').toLowerCase();
+        const baseSku = effectiveBaseSkuForParentRow(p).toLowerCase();
         const name = (p.plant ?? '').toLowerCase();
         const fn = (p.finalName ?? '').toLowerCase();
-        return sku.includes(q) || name.includes(q) || fn.includes(q);
+        return (
+          hubSku.includes(q) || baseSku.includes(q) || name.includes(q) || fn.includes(q)
+        );
       })
       .slice(0, 80);
   }, [baseParents, parentQuery]);
 
   const selectedParentLabel = useMemo(() => {
     if (!data.parentSku) return '';
-    const p = baseParents.find((x) => (x.sku ?? '').trim() === data.parentSku.trim());
+    const target = data.parentSku.trim();
+    const p = baseParents.find((x) =>
+      productFlowType === 'growing_product'
+        ? effectiveBaseSkuForParentRow(x) === target
+        : (x.sku ?? '').trim() === target
+    );
     if (!p) return data.parentSku;
-    return `${p.sku ?? '—'} — ${p.finalName || p.plant || '—'}`;
-  }, [baseParents, data.parentSku]);
+    const skuShow =
+      productFlowType === 'growing_product' ? effectiveBaseSkuForParentRow(p) : (p.sku ?? '—');
+    return `${skuShow} — ${p.finalName || p.plant || '—'}`;
+  }, [baseParents, data.parentSku, productFlowType]);
 
   const inputBase =
     'w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500';
@@ -91,6 +111,10 @@ export function StepNonParentProductInfo({
 
   const vendorRequired = productFlowType === 'growing_product';
   const parentRequired = productFlowType === 'growing_product';
+
+  const growingInputsComplete =
+    productFlowType === 'growing_product' &&
+    Boolean(data.plant.trim() && data.vendorMasterId.trim() && data.parentSku.trim());
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -162,24 +186,30 @@ export function StepNonParentProductInfo({
       />
       {errors.vendorMasterId && <p className="text-red-500 text-xs mt-1">{errors.vendorMasterId}</p>}
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Product code *</label>
-        <input
-          type="text"
-          value={data.productCode}
-          onChange={(e) => {
-            onFieldChange('productCode', e.target.value);
-            onClearError('productCode');
-          }}
-          className={`${inputBase} ${errors.productCode ? inputError : inputNormal}`}
-          placeholder="Enter product code"
-        />
-        {errors.productCode && <p className="text-red-500 text-xs mt-1">{errors.productCode}</p>}
-      </div>
+      {productFlowType === 'consumable' ? (
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">Product code *</label>
+          <input
+            type="text"
+            value={data.productCode}
+            onChange={(e) => {
+              onFieldChange('productCode', e.target.value);
+              onClearError('productCode');
+            }}
+            className={`${inputBase} ${errors.productCode ? inputError : inputNormal}`}
+            placeholder="Enter product code"
+          />
+          {errors.productCode && <p className="text-red-500 text-xs mt-1">{errors.productCode}</p>}
+        </div>
+      ) : null}
 
       <div className="relative">
         <label className="block text-sm font-medium text-slate-700 mb-2">
-          {parentRequired ? 'Parent SKU *' : 'Parent SKU (optional)'}
+          {parentRequired
+            ? productFlowType === 'growing_product'
+              ? 'Base parent SKU *'
+              : 'Parent SKU *'
+            : 'Parent SKU (optional)'}
         </label>
         <button
           type="button"
@@ -201,7 +231,11 @@ export function StepNonParentProductInfo({
               type="text"
               value={parentQuery}
               onChange={(e) => setParentQuery(e.target.value)}
-              placeholder="Filter by SKU or name…"
+              placeholder={
+                productFlowType === 'growing_product'
+                  ? 'Filter by base SKU or name…'
+                  : 'Filter by SKU or name…'
+              }
               className="m-2 px-3 py-2 border border-slate-200 rounded-lg text-sm"
               autoFocus
             />
@@ -210,15 +244,19 @@ export function StepNonParentProductInfo({
                 <li className="px-2 py-3 text-sm text-slate-500">No matches</li>
               ) : (
                 filteredParents.map((p) => {
-                  const sku = (p.sku ?? '').trim();
-                  const label = `${sku} — ${p.finalName || p.plant || '—'}`;
+                  const rowSku = (p.sku ?? '').trim();
+                  const valueSku =
+                    productFlowType === 'growing_product'
+                      ? effectiveBaseSkuForParentRow(p)
+                      : rowSku;
+                  const label = `${valueSku} — ${p.finalName || p.plant || '—'}`;
                   return (
                     <li key={String(p._id)}>
                       <button
                         type="button"
                         className="w-full text-left px-2 py-2 rounded-md text-sm hover:bg-emerald-50 text-slate-800"
                         onClick={() => {
-                          onFieldChange('parentSku', sku);
+                          onFieldChange('parentSku', valueSku);
                           onClearError('parentSku');
                           setParentOpen(false);
                           setParentQuery('');
@@ -234,6 +272,31 @@ export function StepNonParentProductInfo({
           </div>
         )}
       </div>
+
+      {productFlowType === 'growing_product' && growingInputsComplete ? (
+        <div className="space-y-1.5" aria-live="polite">
+          <h3 className="text-sm font-medium text-slate-700">Product code (auto)</h3>
+          {growingCodeError ? (
+            <p className="text-sm text-red-600">{growingCodeError}</p>
+          ) : growingCodeLoading ? (
+            <p className="text-sm text-slate-500">Generating preview…</p>
+          ) : growingCodePreview ? (
+            <p className="text-base font-mono font-medium text-slate-900 tracking-tight">{growingCodePreview}</p>
+          ) : (
+            <p className="text-sm text-slate-500">Loading preview…</p>
+          )}
+          <p className="text-xs text-slate-500">
+            Format: first 3 letters of name + 2 of vendor + 2 of base SKU + a 4-digit sequence (final code is
+            assigned when you create; preview may differ by one if another product is created first).
+            {growingCodePrefix ? (
+              <>
+                {' '}
+                Prefix: <span className="font-mono">{growingCodePrefix}</span>
+              </>
+            ) : null}
+          </p>
+        </div>
+      ) : null}
 
       <div>
         <div className="flex items-center justify-between mb-3">

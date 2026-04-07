@@ -86,14 +86,24 @@ export interface ProductRow {
   sellersByHub?: Record<string, string>;
   categories: string[];
   collectionIds: string[];
+  /** Listing-level features (merged from parents when composition changes; editable on review). */
+  features?: string[];
+  /** Listing-level redirect paths/URLs (merged from parents when composition changes). */
+  redirects?: string[];
+  /** SEO title for storefront (optional override). */
+  seoTitle?: string;
+  /** SEO description for storefront (optional override). */
+  seoDescription?: string;
   /** Generated listing name (computed from plant, variety, etc.); set after save */
   finalName?: string;
   /** Generated SKU (set after save) */
   sku?: string;
-  /** Product tags (e.g. Bestseller, New Arrival) - array for multiselect */
+  /** Merchandising tags (aligned with `parentMaster.tags`) */
   tags?: string[];
   /** Compare-at price shown as original/strikethrough price */
   compare_at_price?: number;
+  /** GST rate 5 or 18 (from parents as max, editable on review). */
+  tax?: number;
   /** Display sort order; defaults to 3000 */
   sort_order?: number;
   /** Publish status: 1 = published, 0 = unpublished (auto-set from inventory) */
@@ -152,6 +162,8 @@ export interface ListingState {
    * Parent picker options are limited to listing products for this hub.
    */
   childContextHub: string;
+  /** Child listing: optional `imageCollection` _id — show only photos from that collection (empty = all). */
+  childImageCollectionFilter: string;
   /** Child listing: `sellerMaster.seller_id` for `childContextHub` (after /api/sellers/by-hub resolves). */
   childHubSellerId: string;
   availableParents: ListingSourcedParentOption[];

@@ -7,6 +7,7 @@ import { CollectionMasterModel } from '@/models/collectionMaster';
 import type { CollectionMaster } from '@/models/collectionMaster';
 import { generateParentSKUGlobal } from '@/lib/skuGenerator';
 import { uploadImageBufferToS3 } from '@/lib/s3Upload';
+import { ProductFeatureMasterModel, parseFeatureTokens } from '@/models/productFeatureMaster';
 
 /** Canonical CSV column keys (order matches downloadable template). */
 const TEMPLATE_HEADERS = [
@@ -455,6 +456,16 @@ export async function POST(request: NextRequest) {
         const factor = procurementSeller?.multiplicationFactor ?? 1;
         (validatedItems[i] as Record<string, unknown>).listing_price = Number(item.sellingPrice) * factor;
       }
+    }
+
+    const importFeatureKeys = new Set<string>();
+    for (const item of validatedItems) {
+      for (const t of parseFeatureTokens(item.features)) {
+        importFeatureKeys.add(t);
+      }
+    }
+    if (importFeatureKeys.size > 0) {
+      await ProductFeatureMasterModel.ensureNames([...importFeatureKeys]);
     }
 
     const result = await ParentMasterModel.createMany(validatedItems);

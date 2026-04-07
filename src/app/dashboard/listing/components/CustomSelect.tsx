@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check, Search } from 'lucide-react';
+import { joinRedirectFormValues, splitRedirectFormValues } from '@/lib/redirectOptionTokens';
 
 export interface SelectOption {
   value: string;
@@ -23,6 +24,21 @@ interface CustomSelectProps {
   closeOnSelect?: boolean;
   /** When true, value is comma-separated; clicking an option toggles it in the list and dropdown stays open. */
   multiSelect?: boolean;
+  /**
+   * When searchable: allow adding a new token from the search text (exact match against options / existing selection skips the row).
+   * Works with multiSelect (comma-separated value) or single-select (e.g. one chip at a time with empty value).
+   */
+  allowCreate?: boolean;
+  /**
+   * Multi-select only: store selections joined with a record separator so values can contain commas
+   * (e.g. redirect URLs with query strings).
+   */
+  multiUseRecordSeparator?: boolean;
+  /**
+   * Where to render the portal menu relative to the trigger.
+   * `auto` opens upward when there is not enough space below the field (viewport).
+   */
+  dropdownPlacement?: 'auto' | 'above' | 'below';
 }
 
 export function CustomSelect({
@@ -37,21 +53,31 @@ export function CustomSelect({
   hideIndicatorWhenSelected = false,
   closeOnSelect = true,
   multiSelect = false,
+  allowCreate = false,
+  multiUseRecordSeparator = false,
+  dropdownPlacement = 'auto',
 }: CustomSelectProps) {
   const effectiveCloseOnSelect = multiSelect ? false : closeOnSelect;
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({
+    top: 0,
+    left: 0,
+    width: 0,
+    openUpward: false,
+  });
   const searchInputRef = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedValues = multiSelect
-    ? value
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
+    ? multiUseRecordSeparator
+      ? splitRedirectFormValues(value)
+      : value
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
     : [];
   const selectedLabels = multiSelect
     ? selectedValues.map((v) => options.find((o) => o.value === v)?.label ?? v)
@@ -69,7 +95,9 @@ export function CustomSelect({
       const next = selectedValues.includes(optValue)
         ? selectedValues.filter((v) => v !== optValue)
         : [...selectedValues, optValue];
-      onChange(next.join(', '));
+      onChange(
+        multiUseRecordSeparator ? joinRedirectFormValues(next) : next.join(', ')
+      );
     } else {
       onChange(optValue);
       if (effectiveCloseOnSelect) setOpen(false);
@@ -89,26 +117,46 @@ export function CustomSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (open) {
-      if (buttonRef.current) {
-        const rect = buttonRef.current.getBoundingClientRect();
-        // Fixed positioning is viewport-relative; do not add scroll offset
-        setDropdownPosition({
-          top: rect.bottom,
-          left: rect.left,
-          width: rect.width,
-        });
-      }
-
-      if (searchable) {
-        queueMicrotask(() => {
-          setSearch('');
-          searchInputRef.current?.focus();
-        });
-      }
+  const updateDropdownLayout = useCallback(() => {
+    if (!open || !buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const gap = 6;
+    /** ~search row + max-h-56 list + borders */
+    const estPanelHeight = 300;
+    let openUpward = false;
+    if (dropdownPlacement === 'above') {
+      openUpward = true;
+    } else if (dropdownPlacement === 'below') {
+      openUpward = false;
+    } else {
+      const spaceBelow = window.innerHeight - rect.bottom - gap;
+      const spaceAbove = rect.top - gap;
+      openUpward = spaceBelow < estPanelHeight && spaceAbove > spaceBelow;
     }
-  }, [open, searchable]);
+    setDropdownPosition({
+      top: openUpward ? rect.top - gap : rect.bottom + gap,
+      left: rect.left,
+      width: rect.width,
+      openUpward,
+    });
+  }, [open, dropdownPlacement]);
+
+  useEffect(() => {
+    if (!open) return;
+    updateDropdownLayout();
+    if (searchable) {
+      queueMicrotask(() => {
+        setSearch('');
+        searchInputRef.current?.focus();
+      });
+    }
+    window.addEventListener('resize', updateDropdownLayout);
+    window.addEventListener('scroll', updateDropdownLayout, true);
+    return () => {
+      window.removeEventListener('resize', updateDropdownLayout);
+      window.removeEventListener('scroll', updateDropdownLayout, true);
+    };
+  }, [open, searchable, updateDropdownLayout]);
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
   const isReadOnlyWhenSelected = Boolean(
@@ -122,6 +170,36 @@ export function CustomSelect({
   const optionsForList = multiSelect
     ? filteredOptions.filter((opt) => opt.value !== '')
     : filteredOptions;
+
+  const trimmedSearch = search.trim();
+  const exactOptionMatch = trimmedSearch
+    ? options.some(
+        (o) =>
+          (o.value && o.value.toLowerCase() === trimmedSearch.toLowerCase()) ||
+          (o.label && o.label.toLowerCase() === trimmedSearch.toLowerCase())
+      )
+    : false;
+  const alreadyInMultiValue =
+    multiSelect &&
+    trimmedSearch &&
+    selectedValues.some((v) => v.toLowerCase() === trimmedSearch.toLowerCase());
+  const canCreate =
+    allowCreate &&
+    Boolean(trimmedSearch) &&
+    !exactOptionMatch &&
+    !(multiSelect && alreadyInMultiValue);
+
+  const applyCreate = () => {
+    if (!canCreate) return;
+    if (multiSelect) {
+      const next = [...selectedValues, trimmedSearch];
+      onChange(multiUseRecordSeparator ? joinRedirectFormValues(next) : next.join(', '));
+    } else {
+      onChange(trimmedSearch);
+    }
+    setSearch('');
+    if (effectiveCloseOnSelect) setOpen(false);
+  };
 
   return (
     <div ref={ref} className="relative">
@@ -166,6 +244,7 @@ export function CustomSelect({
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
               width: `${dropdownPosition.width}px`,
+              transform: dropdownPosition.openUpward ? 'translateY(-100%)' : undefined,
             }}
           >
             {searchable && (
@@ -179,13 +258,28 @@ export function CustomSelect({
                     onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search..."
                     className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
-                    onKeyDown={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter' && allowCreate && canCreate) {
+                        e.preventDefault();
+                        applyCreate();
+                      }
+                    }}
                   />
                 </div>
               </div>
             )}
             <div className="max-h-56 overflow-y-auto">
-              {optionsForList.length === 0 ? (
+              {canCreate && (
+                <button
+                  type="button"
+                  onClick={applyCreate}
+                  className="w-full flex items-center px-3 py-2.5 text-left text-sm font-medium text-[#E6007A] hover:bg-pink-50 border-b border-slate-100"
+                >
+                  Add &quot;{trimmedSearch}&quot;
+                </button>
+              )}
+              {optionsForList.length === 0 && !canCreate ? (
                 <p className="text-slate-500 text-sm p-3 text-center">No options found</p>
               ) : (
                 optionsForList.map((opt, index) => {
@@ -195,14 +289,18 @@ export function CustomSelect({
                       key={opt.value ? `${opt.value}-${index}` : `option-${index}`}
                       type="button"
                       onClick={() => handleOptionClick(opt.value)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 text-left transition-colors ${
+                      className={`w-full flex items-start justify-between gap-2 px-3 py-2.5 text-left transition-colors ${
                         isSelected
                           ? 'bg-pink-50 text-[#E6007A]'
                           : 'text-slate-900 hover:bg-slate-50'
                       }`}
                     >
-                      <span className="text-sm font-medium">{opt.label}</span>
-                      {isSelected && <Check className="w-4 h-4 text-[#E6007A] shrink-0" />}
+                      <span className="text-sm font-medium min-w-0 flex-1 break-words whitespace-normal">
+                        {opt.label}
+                      </span>
+                      {isSelected && (
+                        <Check className="w-4 h-4 text-[#E6007A] shrink-0 mt-0.5" aria-hidden />
+                      )}
                     </button>
                   );
                 })

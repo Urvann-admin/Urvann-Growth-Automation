@@ -162,5 +162,12 @@ function sanitizeIndividualUpdateData(data: Record<string, unknown>) {
     }
   }
 
+  if (data.parentKind !== undefined) {
+    const pk = String(data.parentKind).trim().toLowerCase();
+    if (pk === 'plant' || pk === 'pot') {
+      sanitized.parentKind = pk;
+    }
+  }
+
   return sanitized;
 }

@@ -4,10 +4,14 @@ import { SkuCounterModel } from '@/models/skuCounter';
 vi.mock('@/models/skuCounter');
 
 const mockGetNextCounter = vi.mocked(SkuCounterModel.getNextCounter);
+const mockGetCurrentCounter = vi.mocked(SkuCounterModel.getCurrentCounter);
+const mockGetAllCounters = vi.mocked(SkuCounterModel.getAllCounters);
 
 describe('SKU Generator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetCurrentCounter.mockResolvedValue(0);
+    mockGetAllCounters.mockResolvedValue([]);
   });
 
   describe('getHubCode', () => {

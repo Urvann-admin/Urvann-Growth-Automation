@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
     const skuSearch =
       searchParams.get('sku')?.trim() || searchParams.get('parentSku')?.trim() || '';
     const section = searchParams.get('section') as ListingSection | null;
-    const status = searchParams.get('status') as ListingStatus | null;
     const hub = searchParams.get('hub') || '';
     const category = searchParams.get('category') || '';
     const idsOnly = searchParams.get('idsOnly') === 'true';
@@ -84,10 +83,6 @@ export async function GET(request: NextRequest) {
 
     if (section) {
       query.section = section;
-    }
-
-    if (status) {
-      query.status = status;
     }
 
     if (hub) {
@@ -413,6 +408,12 @@ async function sanitizeUpdateData(data: Record<string, unknown>, existing: Listi
       sanitized.listingType = lt as ListingProductListingType;
     }
   }
+  if (data.parentKind !== undefined) {
+    const pk = String(data.parentKind).trim().toLowerCase();
+    if (pk === 'plant' || pk === 'pot') {
+      sanitized.parentKind = pk as 'plant' | 'pot';
+    }
+  }
   if (data.seller !== undefined) {
     sanitized.seller = String(data.seller).trim();
   }
@@ -423,6 +424,10 @@ async function sanitizeUpdateData(data: Record<string, unknown>, existing: Listi
   }
   if (data.tags !== undefined && Array.isArray(data.tags)) {
     sanitized.tags = (data.tags as string[]).map((t) => String(t).trim()).filter(Boolean);
+  }
+  if (data.base_sku !== undefined) {
+    const b = String(data.base_sku ?? '').trim();
+    sanitized.base_sku = b || undefined;
   }
   if (data.compare_at_price !== undefined) {
     sanitized.compare_at_price = typeof data.compare_at_price === 'number' ? data.compare_at_price : undefined;
@@ -455,6 +460,20 @@ async function sanitizeUpdateData(data: Record<string, unknown>, existing: Listi
       size: sanitized.size !== undefined ? sanitized.size : existing.size,
       type: sanitized.type !== undefined ? sanitized.type : existing.type,
     });
+  }
+
+  if (data.base_sku === undefined && (data.hub !== undefined || data.parentItems !== undefined)) {
+    const nextHub =
+      sanitized.hub !== undefined
+        ? sanitized.hub
+        : existing.hub
+          ? String(existing.hub).trim() || undefined
+          : undefined;
+    const items = (data.parentItems as { parentSku?: string }[] | undefined) ?? existing.parentItems;
+    const lineSku = items?.[0]?.parentSku ? String(items[0].parentSku).trim() : '';
+    if (nextHub && lineSku) {
+      sanitized.base_sku = toCanonicalParentSkuForPurchases('parent', nextHub, lineSku);
+    }
   }
 
   return { success: true, data: sanitized };

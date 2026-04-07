@@ -55,12 +55,20 @@ export type ParentItemLike = {
   parent?: { sku?: string };
 };
 
-/** Hub letter + base parent SKU as stored on listing parent lines (e.g. Noida + TES000401 → NTES000401). */
+/**
+ * Hub letter + base parent SKU as stored on parent-type listing docs / lines
+ * (e.g. Noida + TES000401 → NTES000401).
+ * If `canonicalBaseSku` already starts with this hub’s letter (hub-scoped parent row), returns it unchanged — no double prefix.
+ */
 export function expectedParentSkuForHub(hub: string, canonicalBaseSku: string): string {
   const h = String(hub ?? '').trim();
   const b = String(canonicalBaseSku ?? '').trim();
   if (!h || !b) return '';
   try {
+    const code = getHubCode(h);
+    if (b.startsWith(code) && b.length > code.length) {
+      return b;
+    }
     return appendHubLetterToParentSkuLocal(h, b);
   } catch (e) {
     if (e instanceof HubSkuError) return '';
@@ -131,4 +139,24 @@ export function passedHubsFromChecks(
       return row?.ok === true;
     })
   );
+}
+
+/**
+ * Child listing: parents come from the hub-scoped listing picker only, so every selected hub is valid
+ * once each line has an embedded parent from that flow (no second DB verify).
+ */
+export function passedHubsForChildListingFromPicker(
+  hubs: string[],
+  parentItems: ParentItemLike[]
+): string[] {
+  const hubList = [...new Set(hubs.map((h) => String(h).trim()).filter(Boolean))];
+  if (hubList.length === 0 || parentItems.length === 0) return [];
+  const everyLineFromPicker = parentItems.every(
+    (item) =>
+      item.parent &&
+      String((item.parent as { sku?: string }).sku ?? '').trim() &&
+      Boolean(canonicalBaseSkuForParentItem(item))
+  );
+  if (!everyLineFromPicker) return [];
+  return hubList;
 }

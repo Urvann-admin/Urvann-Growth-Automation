@@ -81,7 +81,7 @@ export const TAB_CONFIG: ListingTabConfig[] = [
 export const LISTING_TOP_LEVEL_TABS: ListingTab[] = [];
 
 /** Section tabs shown in main content when sidebar "Listing" is active */
-export type ListingSectionTab = 'listing' | 'revival' | 'growth' | 'consumer';
+export type ListingSectionTab = 'listing' | 'revival' | 'growth' | 'consumer' | 'pending-approvals';
 
 export interface ListingSectionTabConfig {
   id: ListingSectionTab;
@@ -93,4 +93,5 @@ export const LISTING_SECTION_TABS: ListingSectionTabConfig[] = [
   { id: 'revival', label: 'Revival' },
   { id: 'growth', label: 'Growth' },
   { id: 'consumer', label: 'Consumer' },
+  { id: 'pending-approvals', label: 'Pending Approvals' },
 ];

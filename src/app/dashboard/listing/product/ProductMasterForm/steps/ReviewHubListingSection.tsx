@@ -3,11 +3,14 @@
 import type { ListingSection } from '@/models/listingProduct';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { LISTING_SECTION_TABS } from '../../../config';
+import { CustomSelect } from '../../../components/CustomSelect';
+
+const HUB_SELECT_OPTIONS = HUB_MAPPINGS.map((m) => ({ value: m.hub, label: m.hub }));
 
 export interface ReviewHubListingSectionProps {
   listingHubs: string[];
   listingSection: ListingSection;
-  onListingHubToggle: (hub: string) => void;
+  onListingHubsChange: (hubs: string[]) => void;
   onListingSectionChange: (section: ListingSection) => void;
   listingHubsError?: string;
 }
@@ -15,7 +18,7 @@ export interface ReviewHubListingSectionProps {
 export function ReviewHubListingSection({
   listingHubs,
   listingSection,
-  onListingHubToggle,
+  onListingHubsChange,
   onListingSectionChange,
   listingHubsError,
 }: ReviewHubListingSectionProps) {
@@ -27,29 +30,22 @@ export function ReviewHubListingSection({
         (same rules as the former Listing → Parent listing flow). At least one product image is required.
       </p>
 
-      <label className="block text-xs font-medium text-slate-600 mb-2">
-        Hub <span className="text-red-500">*</span>
-      </label>
-      <div className="flex flex-wrap gap-2">
-        {HUB_MAPPINGS.map((m) => {
-          const selected = listingHubs.includes(m.hub);
-          return (
-            <button
-              key={m.hub}
-              type="button"
-              onClick={() => onListingHubToggle(m.hub)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                selected
-                  ? 'border-emerald-600 bg-emerald-600 text-white'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-              }`}
-            >
-              {m.hub}
-            </button>
-          );
-        })}
-      </div>
-      {listingHubsError ? <p className="text-xs text-red-600 mt-2">{listingHubsError}</p> : null}
+      <CustomSelect
+        label="Hub *"
+        value={listingHubs.join(', ')}
+        onChange={(v) => {
+          const hubs = v
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          onListingHubsChange(hubs);
+        }}
+        options={HUB_SELECT_OPTIONS}
+        placeholder="Select hubs"
+        multiSelect
+        dropdownPlacement="above"
+        error={listingHubsError}
+      />
 
       <label className="block text-xs font-medium text-slate-600 mb-1.5 mt-5">Listing section</label>
       <select

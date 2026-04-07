@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Check, Save, Download, Upload } from 'lucide-react';
 import type { ParentMaster, ProductType } from '@/models/parentMaster';
+import { redirectsCsvToUrlCsv, mapLegacyRedirectCsvToInternal } from '@/lib/redirectOptionTokens';
+import { parseTagsCsv } from '@/lib/productTagOptions';
 import type { ListingSection } from '@/models/listingProduct';
 import type { Category } from '@/models/category';
 import type { CollectionMaster } from '@/models/collectionMaster';
@@ -21,6 +23,10 @@ import {
   initialNonParentFormData,
   buildDefaultSeoTitle,
   buildDefaultSeoDescription,
+  computeProductFinalName,
+  getEffectiveFinalName,
+  syncFinalNameOverrideAfterAttributeChange,
+  applySeoDefaultsIfStillAuto,
   type StepId,
   type ProductFormData,
   type NonParentFormData,
@@ -35,6 +41,8 @@ import {
   StepNonParentProductInfo,
   StepNonParentReview,
 } from './steps';
+import { useGrowingProductCodePreview } from './hooks/useGrowingProductCodePreview';
+import { dedupeParentsByBaseSku } from '@/lib/parentMasterBaseSku';
 
 const FORM_STORAGE_KEY = 'listing_form_product';
 
@@ -135,7 +143,9 @@ function validateNonParentInfo(
 ): Record<string, string> {
   const err: Record<string, string> = {};
   if (!data.plant.trim()) err.plant = 'Name is required';
-  if (!data.productCode.trim()) err.productCode = 'Product code is required';
+  if (productType === 'consumable' && !data.productCode.trim()) {
+    err.productCode = 'Product code is required';
+  }
   if (productType === 'growing_product') {
     if (!data.vendorMasterId.trim()) err.vendorMasterId = 'Primary vendor is required';
     if (!data.parentSku.trim()) err.parentSku = 'Parent SKU is required';
@@ -143,18 +153,16 @@ function validateNonParentInfo(
   return err;
 }
 
-function computeFinalName(data: ProductFormData): string {
-  const parts: string[] = [];
-  if (data.plant?.trim()) parts.push(data.plant.trim());
-  if (data.otherNames?.trim()) parts.push(data.otherNames.trim());
-  if (data.variety?.trim()) parts.push(data.variety.trim());
-  if (data.colour?.trim()) parts.push(data.colour.trim());
-  if (data.size !== '' && data.size !== undefined) {
-    parts.push('in', String(data.size), 'inch');
-  }
-  if (data.potType?.trim()) parts.push(data.potType.trim());
-  return parts.join(' ');
-}
+const FINAL_NAME_FIELDS = new Set<keyof ProductFormData>([
+  'plant',
+  'otherNames',
+  'variety',
+  'colour',
+  'height',
+  'mossStick',
+  'size',
+  'potType',
+]);
 
 export function ProductMasterForm() {
   const init = loadInitialPersisted();
@@ -177,17 +185,34 @@ export function ProductMasterForm() {
   const [baseParents, setBaseParents] = useState<ParentMaster[]>([]);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [bulkImporting, setBulkImporting] = useState(false);
+  const [featureOptions, setFeatureOptions] = useState<{ value: string; label: string }[]>([]);
+  const [redirectOptions, setRedirectOptions] = useState<{ value: string; label: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const nonParentFileInputRef = useRef<HTMLInputElement>(null);
   const bulkImportInputRef = useRef<HTMLInputElement>(null);
   const createButtonClickedRef = useRef(false);
+
+  const growingCodePreview = useGrowingProductCodePreview(
+    phase === 'non-parent' && nonParentProductType === 'growing_product',
+    nonParentFormData.plant,
+    nonParentFormData.vendorMasterId,
+    nonParentFormData.parentSku
+  );
+
+  const nonParentBaseParents = useMemo(() => {
+    if (nonParentProductType !== 'growing_product') return baseParents;
+    return dedupeParentsByBaseSku(baseParents);
+  }, [baseParents, nonParentProductType]);
 
   const currentStep = STEPS[stepIndex];
   const isParentFirst = phase === 'parent' && stepIndex === 0;
   const isParentLast = phase === 'parent' && stepIndex === STEPS.length - 1;
   const isNonParentFirst = phase === 'non-parent' && nonParentStepIndex === 0;
   const isNonParentLast = phase === 'non-parent' && nonParentStepIndex === SHORT_STEPS.length - 1;
-  const finalName = useMemo(() => computeFinalName(formData), [formData]);
+  const finalName = useMemo(() => getEffectiveFinalName(formData), [formData]);
+  const computedFinalName = useMemo(() => computeProductFinalName(formData), [formData]);
+  const finalNameInputValue =
+    formData.finalNameOverride.trim() !== '' ? formData.finalNameOverride : computedFinalName;
 
   /** On the parent review step, copy calculated defaults into state so every field shows a real value (not placeholders). */
   useEffect(() => {
@@ -204,12 +229,13 @@ export function ProductMasterForm() {
         changed = true;
       }
       if (next.plant.trim()) {
+        const display = getEffectiveFinalName(next);
         if (!next.seoTitle.trim()) {
-          next.seoTitle = buildDefaultSeoTitle(next.plant);
+          next.seoTitle = buildDefaultSeoTitle(display);
           changed = true;
         }
         if (!next.seoDescription.trim()) {
-          next.seoDescription = buildDefaultSeoDescription(next.plant);
+          next.seoDescription = buildDefaultSeoDescription(display);
           changed = true;
         }
       }
@@ -266,6 +292,56 @@ export function ProductMasterForm() {
       .catch((e) => console.error('Error fetching procurement sellers:', e));
   }, []);
 
+  const refreshFeatureOptions = useCallback(() => {
+    fetch('/api/product-feature-master')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json?.success || !Array.isArray(json.data)) return;
+        setFeatureOptions(
+          (json.data as { name?: string }[])
+            .map((row) => {
+              const name = String(row.name ?? '').trim();
+              return name ? { value: name, label: name } : null;
+            })
+            .filter(Boolean) as { value: string; label: string }[]
+        );
+      })
+      .catch((e) => console.error('Error fetching product features:', e));
+  }, []);
+
+  const refreshRedirectOptions = useCallback(() => {
+    fetch('/api/listing-redirect-options')
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json?.success || !Array.isArray(json.data)) return;
+        setRedirectOptions(
+          (json.data as { value?: string; label?: string }[])
+            .map((row) => {
+              const value = String(row.value ?? '').trim();
+              const label = String(row.label ?? '').trim() || value;
+              return value ? { value, label } : null;
+            })
+            .filter(Boolean) as { value: string; label: string }[]
+        );
+      })
+      .catch((e) => console.error('Error fetching redirect options:', e));
+  }, []);
+
+  useEffect(() => {
+    refreshFeatureOptions();
+    refreshRedirectOptions();
+  }, [refreshFeatureOptions, refreshRedirectOptions]);
+
+  /** Map URL-only persisted redirects to unique row tokens once options load. */
+  useEffect(() => {
+    if (redirectOptions.length === 0) return;
+    setFormData((prev) => {
+      const mapped = mapLegacyRedirectCsvToInternal(prev.redirects, redirectOptions);
+      if (mapped === prev.redirects) return prev;
+      return { ...prev, redirects: mapped };
+    });
+  }, [redirectOptions]);
+
   useEffect(() => {
     if (phase !== 'non-parent') return;
     fetch('/api/parent-master?baseParentsOnly=true&limit=2000&sortField=plant&sortOrder=asc')
@@ -277,7 +353,12 @@ export function ProductMasterForm() {
   }, [phase]);
 
   const setField = <K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) => {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [key]: value };
+      if (!FINAL_NAME_FIELDS.has(key)) return next;
+      const synced = syncFinalNameOverrideAfterAttributeChange(prev, next);
+      return applySeoDefaultsIfStillAuto(prev, synced);
+    });
   };
 
   const clearError = (key: string) => {
@@ -306,15 +387,20 @@ export function ProductMasterForm() {
       const newPlant = String(value);
       setFormData((prev) => {
         const next = { ...prev, plant: newPlant };
-        const oldTitle = buildDefaultSeoTitle(prev.plant);
-        const oldDesc = buildDefaultSeoDescription(prev.plant);
-        if (!prev.seoTitle.trim() || prev.seoTitle === oldTitle) {
-          next.seoTitle = buildDefaultSeoTitle(newPlant);
-        }
-        if (!prev.seoDescription.trim() || prev.seoDescription === oldDesc) {
-          next.seoDescription = buildDefaultSeoDescription(newPlant);
-        }
-        return next;
+        const synced = syncFinalNameOverrideAfterAttributeChange(prev, next);
+        return applySeoDefaultsIfStillAuto(prev, synced);
+      });
+      return;
+    }
+    if (field === 'finalNameOverride') {
+      const v = String(value);
+      setFormData((prev) => {
+        const computed = computeProductFinalName(prev).trim();
+        const next =
+          v.trim() === '' || (computed !== '' && v.trim() === computed)
+            ? { ...prev, finalNameOverride: '' }
+            : { ...prev, finalNameOverride: v };
+        return applySeoDefaultsIfStillAuto(prev, next);
       });
       return;
     }
@@ -338,6 +424,15 @@ export function ProductMasterForm() {
     }));
   };
 
+  const handleMergeRuleCategoryAliases = (aliases: string[]) => {
+    if (aliases.length === 0) return;
+    setFormData((prev) => ({
+      ...prev,
+      categories: [...new Set([...prev.categories, ...aliases])],
+    }));
+    clearError('categories');
+  };
+
   const handleCollectionToggle = (collectionId: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -354,13 +449,8 @@ export function ProductMasterForm() {
     }));
   };
 
-  const handleListingHubToggle = (hub: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      listingHubs: prev.listingHubs.includes(hub)
-        ? prev.listingHubs.filter((h) => h !== hub)
-        : [...prev.listingHubs, hub],
-    }));
+  const handleListingHubsChange = (hubs: string[]) => {
+    setFormData((prev) => ({ ...prev, listingHubs: hubs }));
     clearError('listingHubs');
   };
 
@@ -546,7 +636,8 @@ export function ProductMasterForm() {
           potType: formData.potType || undefined,
           vendor_id: formData.seller || undefined,
           features: formData.features || undefined,
-          redirects: formData.redirects || undefined,
+          ...(parseTagsCsv(formData.tags).length > 0 ? { tags: parseTagsCsv(formData.tags) } : {}),
+          redirects: redirectsCsvToUrlCsv(formData.redirects) || undefined,
           description: formData.description.trim() || undefined,
           finalName: finalName || undefined,
           categories: formData.categories,
@@ -590,6 +681,8 @@ export function ProductMasterForm() {
         const result = await response.json();
 
         if (result.success) {
+          refreshFeatureOptions();
+          refreshRedirectOptions();
           removePersistedForm(FORM_STORAGE_KEY);
           const listingNote =
             typeof result.listingCreatedCount === 'number' && result.listingCreatedCount > 0
@@ -637,10 +730,12 @@ export function ProductMasterForm() {
         const submitData: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
           productType: nonParentProductType,
           plant: nonParentFormData.plant.trim(),
-          productCode: nonParentFormData.productCode.trim(),
           categories: [],
           finalName: nonParentFormData.plant.trim(),
           images: allImageUrls.length > 0 ? allImageUrls : undefined,
+          ...(nonParentProductType === 'consumable'
+            ? { productCode: nonParentFormData.productCode.trim() }
+            : {}),
           ...(nonParentFormData.vendorMasterId.trim()
             ? { vendorMasterId: nonParentFormData.vendorMasterId.trim() }
             : {}),
@@ -658,9 +753,15 @@ export function ProductMasterForm() {
 
         if (result.success) {
           removePersistedForm(FORM_STORAGE_KEY);
+          const createdCode =
+            nonParentProductType === 'growing_product' && result.data?.productCode
+              ? ` Product code: ${result.data.productCode}.`
+              : '';
           setMessage({
             type: 'success',
-            text: result.warning ? `Product created with warning: ${result.warning}` : 'Product created successfully!',
+            text: result.warning
+              ? `Product created with warning: ${result.warning}`
+              : `Product created successfully!${createdCode}`,
           });
           setNonParentFormData(initialNonParentFormData);
           setSelectedImages([]);
@@ -847,8 +948,10 @@ export function ProductMasterForm() {
                 colour={formData.colour}
                 height={formData.height}
                 size={formData.size}
+                mossStick={formData.mossStick}
+                potType={formData.potType}
                 parentKind={formData.parentKind}
-                finalName={finalName}
+                finalNameInputValue={finalNameInputValue}
                 errors={errors}
                 onFieldChange={handleFieldChange}
                 onClearError={clearError}
@@ -856,16 +959,17 @@ export function ProductMasterForm() {
             )}
             {phase === 'parent' && currentStep.id === 'details' && (
               <StepDetails
-                mossStick={formData.mossStick}
-                potType={formData.potType}
                 seller={formData.seller}
+                featureOptions={featureOptions}
+                redirectOptions={redirectOptions}
                 features={formData.features}
+                tags={formData.tags}
                 redirects={formData.redirects}
                 description={formData.description}
                 sellerOptions={sellerOptions}
                 listingHubs={formData.listingHubs}
                 listingSection={formData.listingSection}
-                onListingHubToggle={handleListingHubToggle}
+                onListingHubsChange={handleListingHubsChange}
                 onListingSectionChange={handleListingSectionChange}
                 listingHubsError={errors.listingHubs}
                 errors={errors}
@@ -876,6 +980,8 @@ export function ProductMasterForm() {
             {phase === 'parent' && currentStep.id === 'pricing' && (
               <StepPricing
                 sellingPrice={formData.sellingPrice}
+                compare_at={formData.compare_at}
+                compareAtEditable
                 tax={formData.tax}
                 errors={errors}
                 onFieldChange={handleFieldChange}
@@ -900,6 +1006,15 @@ export function ProductMasterForm() {
                 onRemoveSelectedImage={removeSelectedImage}
                 onRemoveUploadedImage={removeUploadedImage}
                 onClearError={clearError}
+                categoryRuleEval={{
+                  plant: formData.plant,
+                  variety: formData.variety,
+                  colour: formData.colour,
+                  height: formData.height,
+                  size: formData.size,
+                  potType: formData.potType,
+                }}
+                onMergeRuleCategoryAliases={handleMergeRuleCategoryAliases}
               />
             )}
             {phase === 'parent' && currentStep.id === 'review' && (
@@ -918,8 +1033,10 @@ export function ProductMasterForm() {
                     colour={formData.colour}
                     height={formData.height}
                     size={formData.size}
+                    mossStick={formData.mossStick}
+                    potType={formData.potType}
                     parentKind={formData.parentKind}
-                    finalName={finalName}
+                    finalNameInputValue={finalNameInputValue}
                     errors={errors}
                     onFieldChange={handleFieldChange}
                     onClearError={clearError}
@@ -930,16 +1047,17 @@ export function ProductMasterForm() {
                     Details
                   </h2>
                   <StepDetails
-                    mossStick={formData.mossStick}
-                    potType={formData.potType}
                     seller={formData.seller}
+                    featureOptions={featureOptions}
+                    redirectOptions={redirectOptions}
                     features={formData.features}
+                    tags={formData.tags}
                     redirects={formData.redirects}
                     description={formData.description}
                     sellerOptions={sellerOptions}
                     listingHubs={formData.listingHubs}
                     listingSection={formData.listingSection}
-                    onListingHubToggle={handleListingHubToggle}
+                    onListingHubsChange={handleListingHubsChange}
                     onListingSectionChange={handleListingSectionChange}
                     listingHubsError={errors.listingHubs}
                     errors={errors}
@@ -982,6 +1100,15 @@ export function ProductMasterForm() {
                     onRemoveSelectedImage={removeSelectedImage}
                     onRemoveUploadedImage={removeUploadedImage}
                     onClearError={clearError}
+                    categoryRuleEval={{
+                      plant: formData.plant,
+                      variety: formData.variety,
+                      colour: formData.colour,
+                      height: formData.height,
+                      size: formData.size,
+                      potType: formData.potType,
+                    }}
+                    onMergeRuleCategoryAliases={handleMergeRuleCategoryAliases}
                   />
                 </section>
                 <section className="space-y-3">
@@ -989,7 +1116,7 @@ export function ProductMasterForm() {
                     SEO
                   </h2>
                   <StepSeoFields
-                    plantName={formData.plant}
+                    displayNameForSeo={finalName}
                     seoTitle={formData.seoTitle}
                     seoDescription={formData.seoDescription}
                     onFieldChange={handleFieldChange}
@@ -1003,7 +1130,7 @@ export function ProductMasterForm() {
                 productFlowType={nonParentProductType}
                 data={nonParentFormData}
                 vendors={sellers}
-                baseParents={baseParents}
+                baseParents={nonParentBaseParents}
                 errors={errors}
                 selectedFiles={selectedImages}
                 fileInputRef={nonParentFileInputRef}
@@ -1011,6 +1138,10 @@ export function ProductMasterForm() {
                 onClearError={clearError}
                 onImageSelect={handleImageSelect}
                 onRemoveSelectedFile={removeSelectedImage}
+                growingCodePreview={growingCodePreview.preview}
+                growingCodePrefix={growingCodePreview.prefix}
+                growingCodeLoading={growingCodePreview.loading}
+                growingCodeError={growingCodePreview.error}
               />
             )}
             {phase === 'non-parent' && SHORT_STEPS[nonParentStepIndex].id === 'non-parent-review' && (
@@ -1018,8 +1149,10 @@ export function ProductMasterForm() {
                 productFlowType={nonParentProductType}
                 data={nonParentFormData}
                 vendors={sellers}
-                baseParents={baseParents}
+                baseParents={nonParentBaseParents}
                 selectedFileCount={selectedImages.length}
+                growingProductCodePreview={growingCodePreview.preview}
+                growingProductCodeLoading={growingCodePreview.loading}
               />
             )}
           </div>

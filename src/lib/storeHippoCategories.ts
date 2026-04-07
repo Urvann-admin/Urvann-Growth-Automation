@@ -222,6 +222,41 @@ export async function mapCategoryToStoreHippo(categoryData: any): Promise<StoreH
   return payload;
 }
 
+function substoresEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+  const aa = Array.isArray(a) ? a : [];
+  const bb = Array.isArray(b) ? b : [];
+  if (aa.length !== bb.length) return false;
+  const sa = [...aa].map((s) => String(s).trim().toLowerCase()).sort();
+  const sb = [...bb].map((s) => String(s).trim().toLowerCase()).sort();
+  return sa.every((v, i) => v === sb[i]);
+}
+
+function sortOrderEqual(a: unknown, b: unknown): boolean {
+  return Number(a) === Number(b);
+}
+
+/**
+ * Fields to send on PUT `.../ms.categories/{storeHippoId}` — only keys that changed vs previous mapped state.
+ */
+function diffStoreHippoCategoryPayload(
+  prev: StoreHippoCategoryPayload,
+  next: StoreHippoCategoryPayload
+): Partial<StoreHippoCategoryPayload> {
+  const out: Partial<StoreHippoCategoryPayload> = {};
+  if (prev.name !== next.name) out.name = next.name;
+  if (prev.alias !== next.alias) out.alias = next.alias;
+  if (String(prev.description ?? '') !== String(next.description ?? '')) {
+    out.description = next.description;
+  }
+  if (prev.publish !== next.publish) out.publish = next.publish;
+  if (!sortOrderEqual(prev.sort_order, next.sort_order)) out.sort_order = next.sort_order;
+  const prevParent = prev.parent ?? null;
+  const nextParent = next.parent ?? null;
+  if (prevParent !== nextParent) out.parent = next.parent;
+  if (!substoresEqual(prev.substore, next.substore)) out.substore = next.substore;
+  return out;
+}
+
 /**
  * Fetch category from StoreHippo by alias (GET with filters).
  * URL format: .../ms.categories/?filters=[{"field":"alias","operator":"eq","value":"<alias>"}]
@@ -314,21 +349,25 @@ export async function createStoreHippoCategory(categoryData: StoreHippoCategoryP
 }
 
 /**
- * Update an existing category in StoreHippo by its _id
+ * Update an existing category in StoreHippo by its _id.
+ * Body should list only fields to change (StoreHippo partial PUT semantics).
  */
-export async function updateStoreHippoCategory(storeHippoId: string, categoryData: StoreHippoCategoryPayload): Promise<StoreHippoCategoryResponse> {
+export async function updateStoreHippoCategory(
+  storeHippoId: string,
+  partial: Partial<StoreHippoCategoryPayload>
+): Promise<StoreHippoCategoryResponse> {
+  const keys = Object.keys(partial);
+  if (keys.length === 0) {
+    throw new Error('updateStoreHippoCategory: empty partial payload');
+  }
+
   const url = `${BASE_URL}/api/1.1/entity/ms.categories/${encodeURIComponent(storeHippoId)}`;
-  console.log(`[StoreHippo Categories] PUT ${url}`, {
-    name: categoryData.name,
-    alias: categoryData.alias,
-    sort_order: categoryData.sort_order,
-    publish: categoryData.publish,
-  });
+  console.log(`[StoreHippo Categories] PUT ${url} (partial keys: ${keys.join(', ')})`, partial);
 
   try {
     const response = await makeApiRequest(url, {
       method: 'PUT',
-      body: JSON.stringify(categoryData),
+      body: JSON.stringify(partial),
     });
 
     if (!response.ok) {
@@ -339,7 +378,7 @@ export async function updateStoreHippoCategory(storeHippoId: string, categoryDat
 
     const result = await response.json();
     console.log(`[StoreHippo Categories] ✅ Category updated successfully: _id=${storeHippoId}`);
-    return { ...categoryData, _id: storeHippoId, ...result } as StoreHippoCategoryResponse;
+    return { ...partial, _id: storeHippoId, ...result } as StoreHippoCategoryResponse;
   } catch (error) {
     console.error(`[StoreHippo Categories] ❌ updateStoreHippoCategory failed:`, error);
     throw error;
@@ -347,18 +386,34 @@ export async function updateStoreHippoCategory(storeHippoId: string, categoryDat
 }
 
 /**
- * Sync category update to StoreHippo (for existing category with categoryId = StoreHippo _id)
+ * Sync category update to StoreHippo (categoryId = StoreHippo `_id` in URL).
+ * Sends only fields whose mapped StoreHippo values changed (PUT body matches StoreHippo partial-edit docs).
  */
-export async function updateCategoryInStoreHippo(categoryData: any): Promise<{ success: boolean; error?: string }> {
-  const storeHippoId = categoryData?.categoryId;
+export async function updateCategoryInStoreHippo(
+  categoryBefore: any,
+  categoryAfter: any
+): Promise<{ success: boolean; error?: string; skipped?: boolean }> {
+  const storeHippoId = categoryAfter?.categoryId ?? categoryBefore?.categoryId;
   if (!storeHippoId || !String(storeHippoId).trim()) {
     console.warn(`[StoreHippo Categories] updateCategoryInStoreHippo: no categoryId (StoreHippo _id)`);
     return { success: false, error: 'No StoreHippo category ID' };
   }
 
+  const id = String(storeHippoId).trim();
+  const ctxBefore = { ...categoryBefore, categoryId: id };
+  const ctxAfter = { ...categoryAfter, categoryId: id };
+
   try {
-    const storeHippoPayload = await mapCategoryToStoreHippo(categoryData);
-    await updateStoreHippoCategory(String(storeHippoId).trim(), storeHippoPayload);
+    const prevPayload = await mapCategoryToStoreHippo(ctxBefore);
+    const nextPayload = await mapCategoryToStoreHippo(ctxAfter);
+    const partial = diffStoreHippoCategoryPayload(prevPayload, nextPayload);
+
+    if (Object.keys(partial).length === 0) {
+      console.log(`[StoreHippo Categories] updateCategoryInStoreHippo: no SH-mapped fields changed, skipping PUT`);
+      return { success: true, skipped: true };
+    }
+
+    await updateStoreHippoCategory(id, partial);
     return { success: true };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

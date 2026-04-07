@@ -30,21 +30,14 @@ import type {
 import type { ParentMaster } from '@/models/parentMaster';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { CustomSelect } from '@/app/dashboard/listing/components/CustomSelect';
-import {
-  canonicalBaseSkuForParentItem,
-  passedHubsFromChecks,
-} from '@/lib/childListingHubSku';
 import { compareAtFromFirstParentLine } from '@/lib/childListingCompareAt';
-
-const TAG_OPTIONS = [
-  { value: 'Bestseller', label: 'Bestseller' },
-  { value: 'New Arrival', label: 'New Arrival' },
-  { value: 'Sale', label: 'Sale' },
-  { value: 'Featured', label: 'Featured' },
-  { value: 'Trending', label: 'Trending' },
-  { value: 'Clearance', label: 'Clearance' },
-  { value: 'Limited Stock', label: 'Limited Stock' },
-];
+import { computeProductDisplayName } from '@/lib/productListingDisplayName';
+import { redirectOptionTokenToUrl } from '@/lib/redirectOptionTokens';
+import {
+  buildDefaultSeoTitle,
+  buildDefaultSeoDescription,
+} from '@/app/dashboard/listing/listing-screen/components/ListingProductForm/types';
+import { PRODUCT_TAG_OPTIONS } from '@/lib/productTagOptions';
 
 const STEPS = [
   { id: 'parent', label: 'Parent', icon: Package },
@@ -68,6 +61,94 @@ function stripHtmlToPlain(html: string): string {
     .replace(/&gt;/gi, '>')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function parseCommaList(s: string | undefined): string[] {
+  if (!s || typeof s !== 'string') return [];
+  return s.split(',').map((x) => x.trim()).filter(Boolean);
+}
+
+/** Full product label for SEO defaults: row fields, else first parent / finalName. */
+function rowDisplayNameForSeo(row: ProductRow): string {
+  const fromRow = computeProductDisplayName({
+    plant: row.plant,
+    otherNames: row.otherNames,
+    variety: row.variety,
+    colour: row.colour,
+    height: row.height,
+    size: row.size,
+    type: row.type,
+  }).trim();
+  if (fromRow) return fromRow;
+  const p = row.parentItems[0]?.parent;
+  if (p) {
+    if (p.finalName?.trim()) return p.finalName.trim();
+    const fromP = computeProductDisplayName({
+      plant: p.plant || '',
+      otherNames: p.otherNames,
+      variety: p.variety,
+      colour: p.colour,
+      height: p.height ?? '',
+      size: p.size ?? '',
+      potType: p.potType,
+      type: p.type,
+      mossStick: p.mossStick,
+    }).trim();
+    if (fromP) return fromP;
+    return p.plant?.trim() || 'plant';
+  }
+  return row.plant?.trim() || 'plant';
+}
+
+function seoDisplayFromParentAndRow(parent: ParentMaster, row: ProductRow): string {
+  const merged = computeProductDisplayName({
+    plant: parent.plant || row.plant || '',
+    otherNames: parent.otherNames || row.otherNames,
+    variety: parent.variety || row.variety,
+    colour: parent.colour || row.colour,
+    height: (parent.height ?? row.height) || '',
+    size: (parent.size ?? row.size) || '',
+    type: parent.type || row.type,
+    potType: parent.potType,
+    mossStick: parent.mossStick,
+  }).trim();
+  return merged || parent.finalName?.trim() || parent.plant?.trim() || row.plant?.trim() || 'plant';
+}
+
+/** Single browse redirect from parents (first unique URL wins, same as Parent Master). */
+function combinedRedirectsFromParents(items: ParentItemRow[]): string[] {
+  const set = new Set<string>();
+  for (const item of items) {
+    const raw = item.parent?.redirects;
+    parseCommaList(typeof raw === 'string' ? raw : undefined).forEach((x) => set.add(x));
+  }
+  const arr = Array.from(set);
+  return arr.slice(0, 1);
+}
+
+/** Match listing API: plant parents only when mix plant+pot; else all (pot-only) parents. */
+function combinedFeaturesFromParentItems(items: ParentItemRow[]): string[] {
+  const parents = items.map((i) => i.parent).filter(Boolean) as ParentMaster[];
+  const plantParents = parents.filter((p) => (p as { parentKind?: string }).parentKind !== 'pot');
+  const source = plantParents.length > 0 ? plantParents : parents;
+  const set = new Set<string>();
+  for (const p of source) {
+    const f = (p as { features?: string }).features;
+    parseCommaList(typeof f === 'string' ? f : undefined).forEach((x) => set.add(x));
+  }
+  return Array.from(set);
+}
+
+/** Max tax across all parent lines (plant + pot), same as server merge. */
+function maxTaxFromParentItems(items: ParentItemRow[]): number | undefined {
+  let max = 0;
+  for (const item of items) {
+    const p = item.parent;
+    if (!p || p.tax == null || String(p.tax).trim() === '') continue;
+    const t = Number(p.tax);
+    if (Number.isFinite(t) && t > max) max = t;
+  }
+  return max > 0 ? max : undefined;
 }
 
 type ParentListingDetailLine = { label: string; value: string; fullWidth?: boolean };
@@ -125,6 +206,7 @@ function buildParentListingReadOnlyLines(
 
   const sku = baseParent.sku || row.parentSkus[0];
   add('SKU', sku);
+  if (baseParent.base_sku?.trim()) add('Base SKU (no hub code)', baseParent.base_sku.trim());
   if (baseParent.productCode && baseParent.productCode !== sku) {
     add('Product code', baseParent.productCode);
   }
@@ -164,6 +246,7 @@ function buildParentListingReadOnlyLines(
   }
 
   add('Features', baseParent.features);
+  if (baseParent.tags?.length) add('Tags (Parent Master)', baseParent.tags);
   add('Redirects', baseParent.redirects);
   add('Hub (on parent)', baseParent.hub);
   add('Substores', baseParent.substores);
@@ -184,6 +267,9 @@ function buildParentListingReadOnlyLines(
   if (baseParent.product_id && baseParent.product_id !== baseParent.storeHippoId) {
     add('Product ID', String(baseParent.product_id));
   }
+  if (baseParent.storeHippoAlias?.trim()) {
+    add('StoreHippo alias (URL slug)', baseParent.storeHippoAlias.trim());
+  }
 
   const descSource = (baseParent.description || row.description || '').trim();
   if (descSource) {
@@ -198,7 +284,8 @@ function resolveDisplayImage(
   row: ProductRow,
   index: number,
   listingMode: ListingScreenMode,
-  allImages: SelectedImage[]
+  allImages: SelectedImage[],
+  childPhotoPool?: SelectedImage[]
 ): SelectedImage | null {
   const tagged = row.taggedImages?.[0];
   if (tagged) return tagged;
@@ -214,8 +301,9 @@ function resolveDisplayImage(
       serial: row.serial,
     };
   }
-  if (listingMode === 'child' && allImages[index]) {
-    return allImages[index] ?? null;
+  if (listingMode === 'child') {
+    const pool = childPhotoPool ?? allImages;
+    if (pool[index]) return pool[index] ?? null;
   }
   return null;
 }
@@ -255,6 +343,78 @@ function InlineInput({
         }`}
       />
       {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+  );
+}
+
+/** Multi-select using `CustomSelect`; optional creatable row from search (features). */
+function MultiSelectFromDropdown({
+  label,
+  hint,
+  values,
+  onChange,
+  options,
+  selectPlaceholder = 'Choose a value to add…',
+  compact,
+  allowCreate,
+  getChipLabel,
+}: {
+  label: string;
+  hint?: string;
+  values: string[];
+  onChange: (next: string[]) => void;
+  options: { value: string; label: string }[];
+  selectPlaceholder?: string;
+  /** Smaller label / chips for parent listing card */
+  compact?: boolean;
+  allowCreate?: boolean;
+  getChipLabel?: (value: string, options: { value: string; label: string }[]) => string;
+}) {
+  const labelFor = (v: string) =>
+    getChipLabel?.(v, options) ?? options.find((o) => o.value === v)?.label ?? v;
+  const labelCls = compact
+    ? 'block text-[10px] font-medium text-slate-500 mb-1'
+    : 'block text-xs font-medium text-slate-500 mb-1.5';
+  const chipCls = compact
+    ? 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-[10px] font-medium max-w-full break-all'
+    : 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium max-w-full break-all';
+  const hintCls = compact ? 'text-[10px] text-slate-500 mb-2 leading-snug' : 'text-[11px] text-slate-500 mb-2 leading-snug';
+
+  return (
+    <div>
+      <label className={labelCls}>{label}</label>
+      {hint ? <p className={hintCls}>{hint}</p> : null}
+      <div className="flex flex-wrap gap-2 mb-2 min-h-[1.5rem]">
+        {values.map((v) => (
+          <span key={v} className={chipCls}>
+            {labelFor(v)}
+            <button
+              type="button"
+              onClick={() => onChange(values.filter((x) => x !== v))}
+              className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700 shrink-0"
+              aria-label={`Remove ${labelFor(v)}`}
+            >
+              <X className={compact ? 'w-2.5 h-2.5' : 'w-3 h-3'} />
+            </button>
+          </span>
+        ))}
+      </div>
+      <CustomSelect
+        value=""
+        onChange={(value) => {
+          const v = String(value ?? '').trim();
+          if (!v) return;
+          if (values.some((x) => x.toLowerCase() === v.toLowerCase())) return;
+          onChange([...values, v]);
+        }}
+        options={options.filter(
+          (o) => !values.some((x) => x.toLowerCase() === String(o.value).toLowerCase())
+        )}
+        placeholder={selectPlaceholder}
+        searchable={true}
+        closeOnSelect={false}
+        allowCreate={allowCreate}
+      />
     </div>
   );
 }
@@ -640,6 +800,10 @@ interface ProductTableProps {
   onUploadParentPhoto: (rowId: string, file: File) => void | Promise<void>;
   /** Child listing: global hub filter (parent picker options match this hub). */
   childContextHub?: string;
+  /** Child listing: photos included after hub + optional collection filter (picker + row fallback). */
+  childPhotoPool?: SelectedImage[];
+  /** Child listing: user narrowed to one image collection — for empty-state copy. */
+  childCollectionFilterActive?: boolean;
 }
 
 export function ProductTable({
@@ -659,34 +823,55 @@ export function ProductTable({
   onLoadMoreParents,
   onUploadParentPhoto,
   childContextHub = '',
+  childPhotoPool,
+  childCollectionFilterActive = false,
 }: ProductTableProps) {
   const hubOptions = useMemo(
     () => HUB_MAPPINGS.map((mapping) => ({ value: mapping.hub, label: mapping.hub })),
     []
   );
 
-  /** Storefront sellers (sellerMaster.seller_id) — listing `seller` field, not procurement. */
-  const [sellerOptions, setSellerOptions] = useState<{ value: string; label: string }[]>([]);
+  /** Raw Seller Master rows — used for select options and resolving stored id → display name. */
+  const [sellerRows, setSellerRows] = useState<
+    { _id?: string; seller_id?: string; seller_name?: string }[]
+  >([]);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/sellers')
       .then((res) => res.json())
       .then((data) => {
         if (cancelled || !data.success || !Array.isArray(data.data)) return;
-        setSellerOptions(
-          data.data
-            .map((s: { seller_id?: string; seller_name?: string }) => ({
-              value: String(s.seller_id ?? '').trim(),
-              label: s.seller_name || String(s.seller_id ?? ''),
-            }))
-            .filter((o: { value: string }) => o.value)
-        );
+        setSellerRows(data.data);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const sellerOptions = useMemo(
+    () =>
+      sellerRows
+        .map((s) => ({
+          value: String(s.seller_id ?? '').trim(),
+          label: (s.seller_name?.trim() || String(s.seller_id ?? '')).trim() || String(s.seller_id ?? ''),
+        }))
+        .filter((o) => o.value),
+    [sellerRows]
+  );
+
+  /** Match listing `seller` / hub map values whether stored as seller_id or Seller Master _id. */
+  const sellerLabelByKey = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of sellerRows) {
+      const sid = String(s.seller_id ?? '').trim();
+      const name = (s.seller_name?.trim() || sid).trim() || sid;
+      if (sid) m.set(sid, name);
+      const oid = s._id != null ? String(s._id) : '';
+      if (oid) m.set(oid, name);
+    }
+    return m;
+  }, [sellerRows]);
 
   const [collectionNames, setCollectionNames] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -709,6 +894,102 @@ export function ProductTable({
     () => Object.entries(collectionNames).map(([value, label]) => ({ value, label: label || value })),
     [collectionNames]
   );
+
+  const [categoryOptions, setCategoryOptions] = useState<{ value: string; label: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/categories')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled || !data.success || !Array.isArray(data.data)) return;
+        const seen = new Set<string>();
+        const opts: { value: string; label: string }[] = [];
+        for (const c of data.data as { alias?: string; category?: string }[]) {
+          const value = String(c.alias ?? '').trim();
+          if (!value || seen.has(value)) continue;
+          seen.add(value);
+          const label = String(c.category ?? c.alias ?? value).trim() || value;
+          opts.push({ value, label });
+        }
+        opts.sort((a, b) => a.label.localeCompare(b.label));
+        setCategoryOptions(opts);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const [featureDropdownOptions, setFeatureDropdownOptions] = useState<{ value: string; label: string }[]>(
+    []
+  );
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/product-feature-master')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled || !data.success || !Array.isArray(data.data)) return;
+        const opts: { value: string; label: string }[] = [];
+        for (const row of data.data as { name?: string }[]) {
+          const name = String(row.name ?? '').trim();
+          if (name) opts.push({ value: name, label: name });
+        }
+        opts.sort((a, b) => a.label.localeCompare(b.label));
+        setFeatureDropdownOptions(opts);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const [redirectDropdownOptions, setRedirectDropdownOptions] = useState<{ value: string; label: string }[]>(
+    []
+  );
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/listing-redirect-options')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled || !data.success || !Array.isArray(data.data)) return;
+        const opts: { value: string; label: string }[] = [];
+        for (const row of data.data as { value?: string; label?: string }[]) {
+          const value = String(row.value ?? '').trim();
+          const label = String(row.label ?? '').trim() || value;
+          if (value) opts.push({ value, label });
+        }
+        opts.sort((a, b) => a.label.localeCompare(b.label));
+        setRedirectDropdownOptions(opts);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (redirectDropdownOptions.length === 0) return;
+    for (const row of productRows) {
+      const r = row.redirects;
+      if (!r?.length) continue;
+      let changed = false;
+      const mapped = r.map((part) => {
+        const p = String(part).trim();
+        if (p.includes('\t')) return part;
+        const opt = redirectDropdownOptions.find((o) => redirectOptionTokenToUrl(o.value) === p);
+        if (opt) {
+          changed = true;
+          return opt.value;
+        }
+        return part;
+      });
+      const next = mapped.slice(0, 1);
+      if (mapped.length > 1) changed = true;
+      if (changed || next.length !== r.length || next[0] !== r[0]) {
+        onUpdateRow(row.id, { redirects: next });
+      }
+    }
+  }, [redirectDropdownOptions, productRows, onUpdateRow]);
 
   const parentScrollRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
@@ -737,15 +1018,20 @@ export function ProductTable({
           <p className="text-sm text-slate-500">
             {listingMode === 'parent'
               ? 'No base parents found in Parent Master, or still loading.'
-              : 'No unlisted photos in completed image collections. Add images under Image collections, or use “+ Add Row” for a blank line.'}
+              : childCollectionFilterActive && (childPhotoPool?.length ?? 0) === 0
+                ? 'No unlisted photos in the selected image collection. Choose another collection or “All collections”, or use “+ Add Row”.'
+                : 'No unlisted photos in completed image collections. Add images under Image collections, or use “+ Add Row” for a blank line.'}
           </p>
         </div>
       </div>
     );
   }
 
+  const poolForChild = listingMode === 'child' ? (childPhotoPool ?? allImages) : allImages;
+
   const cardProps = {
     allImages,
+    childPhotoPool: poolForChild,
     onAssignImage,
     availableParents,
     onUpdateRow,
@@ -754,8 +1040,12 @@ export function ProductTable({
     isSaving,
     hubOptions,
     sellerOptions,
+    sellerLabelByKey,
     collectionOptions,
     collectionNames,
+    categoryOptions,
+    featureDropdownOptions,
+    redirectDropdownOptions,
     listingMode,
     onUploadParentPhoto,
     childContextHub,
@@ -776,7 +1066,7 @@ export function ProductTable({
             {virtualItems.map((vi) => {
               const row = productRows[vi.index];
               if (!row) return null;
-              const displayImage = resolveDisplayImage(row, vi.index, listingMode, allImages);
+              const displayImage = resolveDisplayImage(row, vi.index, listingMode, allImages, poolForChild);
               return (
                 <div
                   key={row.id}
@@ -816,7 +1106,7 @@ export function ProductTable({
   return (
     <div className="space-y-6">
       {productRows.map((row, index) => {
-        const displayImage = resolveDisplayImage(row, index, listingMode, allImages);
+        const displayImage = resolveDisplayImage(row, index, listingMode, allImages, poolForChild);
         return (
           <ProductCard
             key={row.id}
@@ -835,7 +1125,13 @@ export function ProductTable({
 // Child listing: seller comes from sellerMaster via hub → substore (not procurement).
 // ---------------------------------------------------------------------------
 
-function ChildListingSellerSummary({ row }: { row: ProductRow }) {
+function ChildListingSellerSummary({
+  row,
+  sellerLabelByKey,
+}: {
+  row: ProductRow;
+  sellerLabelByKey: Map<string, string>;
+}) {
   const hubs = row.hubs ?? [];
   if (hubs.length === 0) {
     return (
@@ -847,16 +1143,17 @@ function ChildListingSellerSummary({ row }: { row: ProductRow }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 space-y-1">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        Store seller ID (Seller Master)
+        Seller (Seller Master)
       </p>
       {hubs.map((h) => {
         const sid =
           row.sellersByHub?.[h] ?? (hubs.length === 1 ? row.seller : undefined);
-        const display = sid?.trim() ? sid : '—';
+        const raw = sid?.trim() ?? '';
+        const display = raw ? sellerLabelByKey.get(raw) ?? raw : '—';
         return (
           <p key={h} className="text-xs text-slate-800">
             <span className="font-medium text-slate-600">{h}:</span>{' '}
-            <span className="font-mono">{display}</span>
+            <span>{display}</span>
           </p>
         );
       })}
@@ -881,11 +1178,17 @@ interface ProductCardProps {
   isSaving: boolean;
   hubOptions: { value: string; label: string }[];
   sellerOptions: { value: string; label: string }[];
+  sellerLabelByKey: Map<string, string>;
   collectionOptions: { value: string; label: string }[];
   collectionNames: Record<string, string>;
+  categoryOptions: { value: string; label: string }[];
+  featureDropdownOptions: { value: string; label: string }[];
+  redirectDropdownOptions: { value: string; label: string }[];
   listingMode: ListingScreenMode;
   onUploadParentPhoto: (rowId: string, file: File) => void | Promise<void>;
   childContextHub?: string;
+  /** Child: subset of `allImages` after collection filter (image swap picker). */
+  childPhotoPool?: SelectedImage[];
 }
 
 function ProductCard({
@@ -893,6 +1196,7 @@ function ProductCard({
   index,
   displayImage,
   allImages,
+  childPhotoPool,
   onAssignImage,
   availableParents,
   onUpdateRow,
@@ -901,14 +1205,21 @@ function ProductCard({
   isSaving,
   hubOptions,
   sellerOptions,
+  sellerLabelByKey,
   collectionOptions,
   collectionNames,
+  categoryOptions,
+  featureDropdownOptions,
+  redirectDropdownOptions,
   listingMode,
   onUploadParentPhoto,
   childContextHub = '',
 }: ProductCardProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showImagePicker, setShowImagePicker] = useState(false);
+
+  const imagesForPicker =
+    listingMode === 'child' ? (childPhotoPool ?? allImages) : allImages;
 
   const parentPickerOptions = useMemo(() => {
     const h = childContextHub?.trim();
@@ -938,10 +1249,11 @@ function ProductCard({
     });
   }, [row.sku, row.plant, row.setQuantity, selectedHubs.join(',')]);
 
-  // Per-card rule-based categories (loaded when reaching review step)
+  // Per-card rule-based categories (child: review step; parent: whenever plant is set)
   const [ruleBasedCategories, setRuleBasedCategories] = useState<string[]>([]);
   useEffect(() => {
-    if (currentStep !== REVIEW_STEP_INDEX || !row.plant?.trim()) return;
+    if (!row.plant?.trim()) return;
+    if (listingMode === 'child' && currentStep !== REVIEW_STEP_INDEX) return;
     const payload = {
       plant: row.plant.trim(),
       variety: row.variety?.trim() || undefined,
@@ -960,7 +1272,16 @@ function ProductCard({
         if (data.success && Array.isArray(data.categories)) setRuleBasedCategories(data.categories);
       })
       .catch(() => {});
-  }, [currentStep, row.plant, row.variety, row.colour, row.height, row.size, row.type]);
+  }, [
+    listingMode,
+    currentStep,
+    row.plant,
+    row.variety,
+    row.colour,
+    row.height,
+    row.size,
+    row.type,
+  ]);
 
   // --- Helpers ---
 
@@ -1093,12 +1414,24 @@ function ProductCard({
       variety: parent.variety || row.variety,
       colour: parent.colour || row.colour,
       height: parent.height ?? row.height,
+      description: parent.description || row.description || '',
       hubs: (row.hubs ?? []).length > 0 ? row.hubs : [],
       seller: listingMode === 'child' ? row.seller : row.seller || parent.seller || '',
       categories: Array.from(new Set([...(row.categories || []), ...(parent.categories || [])])),
       collectionIds: Array.from(
         new Set([...(row.collectionIds || []), ...(parent.collectionIds?.map((id) => String(id)) || [])])
       ),
+      features: combinedFeaturesFromParentItems([newItem]),
+      redirects: combinedRedirectsFromParents([newItem]),
+      tax: maxTaxFromParentItems([newItem]),
+      seoTitle:
+        parent.SEO?.title?.trim() ||
+        row.seoTitle?.trim() ||
+        buildDefaultSeoTitle(seoDisplayFromParentAndRow(parent, row)),
+      seoDescription:
+        parent.SEO?.description?.trim() ||
+        row.seoDescription?.trim() ||
+        buildDefaultSeoDescription(seoDisplayFromParentAndRow(parent, row)),
       price,
       inventory_quantity: inventory,
       setQuantity: setQty,
@@ -1124,6 +1457,9 @@ function ProductCard({
       parentSkus: updatedItems.map((i) => i.parentSku),
       categories: Array.from(combinedCategories),
       collectionIds: Array.from(combinedCollectionIds),
+      features: combinedFeaturesFromParentItems(updatedItems),
+      redirects: combinedRedirectsFromParents(updatedItems),
+      tax: maxTaxFromParentItems(updatedItems),
       price,
       inventory_quantity: inventory,
       setQuantity: setQty,
@@ -1158,10 +1494,19 @@ function ProductCard({
               variety: parent.variety || row.variety,
               colour: parent.colour || row.colour,
               height: parent.height ?? row.height,
+              description: parent.description || row.description || '',
               hubs: (row.hubs ?? []).length > 0 ? row.hubs : [],
               seller: listingMode === 'child' ? row.seller : row.seller || parent.seller || '',
               categories: Array.from(combinedCategories),
               collectionIds: Array.from(combinedCollectionIds),
+              seoTitle:
+                parent.SEO?.title?.trim() ||
+                row.seoTitle?.trim() ||
+                buildDefaultSeoTitle(seoDisplayFromParentAndRow(parent, row)),
+              seoDescription:
+                parent.SEO?.description?.trim() ||
+                row.seoDescription?.trim() ||
+                buildDefaultSeoDescription(seoDisplayFromParentAndRow(parent, row)),
             }
           : { categories: Array.from(combinedCategories), collectionIds: Array.from(combinedCollectionIds) };
       const tempRow: ProductRow = { ...row, parentItems: updatedItems, ...baseUpdates };
@@ -1171,6 +1516,9 @@ function ProductCard({
         ...baseUpdates,
         parentItems: tempRow.parentItems,
         parentSkus: tempRow.parentItems.map((i) => i.parentSku),
+        features: combinedFeaturesFromParentItems(updatedItems),
+        redirects: combinedRedirectsFromParents(updatedItems),
+        tax: maxTaxFromParentItems(updatedItems),
         price,
         inventory_quantity: inventory,
         setQuantity: setQty,
@@ -1271,10 +1619,10 @@ function ProductCard({
           )}
 
           {/* Mini image picker */}
-          {showImagePicker && allImages.length > 0 && (
+          {showImagePicker && imagesForPicker.length > 0 && (
             <div className="mt-3 border border-slate-200 rounded-xl bg-white max-h-40 overflow-y-auto">
               <div className="p-1.5 grid grid-cols-3 gap-1">
-                {allImages.slice(0, 30).map((img) => {
+                {imagesForPicker.slice(0, 30).map((img) => {
                   const isCurrent = displayImage?.url === img.url;
                   return (
                     <button
@@ -1353,6 +1701,95 @@ function ProductCard({
                     options={sellerOptions}
                     placeholder="Seller"
                     searchable={true}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 space-y-3 rounded-lg border border-slate-200/90 bg-white p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Listing copy & metadata
+                </p>
+                <MultiSelectFromDropdown
+                  compact
+                  label="Categories"
+                  hint={
+                    ruleBasedCategories.length > 0
+                      ? `Rule-based additions on save: ${ruleBasedCategories.join(', ')}.`
+                      : 'Choose from category master (alias). Rules may add more on save.'
+                  }
+                  values={row.categories ?? []}
+                  onChange={(categories) => onUpdateRow(row.id, { categories })}
+                  options={categoryOptions}
+                  selectPlaceholder="Add category…"
+                />
+                <MultiSelectFromDropdown
+                  compact
+                  label="Features"
+                  hint="Same options as Parent Master. Plant+pot: only plant features prefilled."
+                  values={row.features ?? []}
+                  onChange={(features) => onUpdateRow(row.id, { features })}
+                  options={featureDropdownOptions}
+                  selectPlaceholder="Add feature…"
+                  allowCreate
+                />
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-500 mb-1">Redirects</label>
+                  <p className="text-[10px] text-slate-500 mb-2 leading-snug">One browse URL only (same as Parent Master).</p>
+                  <CustomSelect
+                    value={row.redirects?.[0] ?? ''}
+                    onChange={(v) =>
+                      onUpdateRow(row.id, {
+                        redirects: String(v ?? '').trim() ? [String(v).trim()] : [],
+                      })
+                    }
+                    options={redirectDropdownOptions}
+                    placeholder="Select redirect…"
+                    allowCreate
+                    searchable
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-500 mb-1">GST / Tax</label>
+                  <select
+                    value={row.tax === 5 || row.tax === 18 ? String(row.tax) : ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      onUpdateRow(row.id, { tax: v === '' ? undefined : Number(v) });
+                    }}
+                    className="w-full px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                  >
+                    <option value="">No tax (server uses max from parents)</option>
+                    <option value="5">5%</option>
+                    <option value="18">18%</option>
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                    Max across all parent lines (plant + pot): {maxTaxFromParentItems(row.parentItems) ?? 0}%
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-500 mb-1">Description</label>
+                  <textarea
+                    value={row.description ?? ''}
+                    onChange={(e) => onUpdateRow(row.id, { description: e.target.value })}
+                    rows={4}
+                    className="w-full px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none resize-y min-h-[5rem]"
+                    placeholder="Product description (HTML allowed)"
+                  />
+                </div>
+                <InlineInput
+                  value={row.seoTitle ?? ''}
+                  onChange={(v) => onUpdateRow(row.id, { seoTitle: String(v) })}
+                  label="SEO title"
+                  placeholder={buildDefaultSeoTitle(rowDisplayNameForSeo(row))}
+                />
+                <div>
+                  <label className="block text-[10px] font-medium text-slate-500 mb-1">SEO description</label>
+                  <textarea
+                    value={row.seoDescription ?? ''}
+                    onChange={(e) => onUpdateRow(row.id, { seoDescription: e.target.value })}
+                    rows={2}
+                    className="w-full px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none resize-y min-h-[3.5rem]"
+                    placeholder={buildDefaultSeoDescription(rowDisplayNameForSeo(row))}
                   />
                 </div>
               </div>
@@ -1568,7 +2005,7 @@ function ProductCard({
                         if (tags.includes(value)) return;
                         onUpdateRow(row.id, { tags: [...tags, value] });
                       }}
-                      options={TAG_OPTIONS.filter((opt) => !(row.tags || []).includes(opt.value))}
+                      options={PRODUCT_TAG_OPTIONS.filter((opt) => !(row.tags || []).includes(opt.value))}
                       placeholder="Add tag..."
                       searchable={false}
                       closeOnSelect={false}
@@ -1608,7 +2045,7 @@ function ProductCard({
                   />
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">Seller</label>
-                    <ChildListingSellerSummary row={row} />
+                    <ChildListingSellerSummary row={row} sellerLabelByKey={sellerLabelByKey} />
                   </div>
                 </div>
               </div>
@@ -1616,12 +2053,8 @@ function ProductCard({
 
             {/* Step 3: Review */}
             {currentStep === 3 && (
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-800">Review</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Review and edit all details before saving</p>
-                </div>
-
+              <div className="space-y-5">
+                {/* Status badge */}
                 <div className="flex items-center gap-2">
                   {row.isSaved ? (
                     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-xs font-medium">
@@ -1638,179 +2071,113 @@ function ProductCard({
                   )}
                 </div>
 
-                {(row.hubs ?? []).length > 0 &&
-                  row.parentItems.some((i) => canonicalBaseSkuForParentItem(i)) && (
-                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
-                      <p className="text-xs font-semibold text-slate-700">Parent SKU in listings (per hub)</p>
-                      <p className="text-[11px] text-slate-500">
-                        Each cell checks that{' '}
-                        <span className="font-mono text-slate-700">[hub letter]+[base parent SKU]</span> exists on a
-                        listing product in this section. Only hubs that pass for every parent are saved.
-                      </p>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-[11px] border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-200 text-left text-slate-500">
-                              <th className="py-1.5 pr-2 font-medium">Hub</th>
-                              {row.parentItems
-                                .filter((i) => canonicalBaseSkuForParentItem(i))
-                                .map((item) => (
-                                  <th key={item.id} className="py-1.5 px-1 font-medium whitespace-nowrap">
-                                    {canonicalBaseSkuForParentItem(item)}
-                                  </th>
-                                ))}
-                              <th className="py-1.5 pl-2 font-medium">Hub OK</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(row.hubs ?? []).map((hub) => {
-                              const canonicals = row.parentItems
-                                .map((i) => canonicalBaseSkuForParentItem(i))
-                                .filter(Boolean);
-                              const allOk = canonicals.every((c) =>
-                                row.hubParentChecks?.some((ch) => ch.hub === hub && ch.canonicalParentSku === c && ch.ok)
-                              );
-                              return (
-                                <tr key={hub} className="border-b border-slate-100 last:border-0">
-                                  <td className="py-1.5 pr-2 font-medium text-slate-800">{hub}</td>
-                                  {row.parentItems
-                                    .filter((i) => canonicalBaseSkuForParentItem(i))
-                                    .map((item) => {
-                                      const c = canonicalBaseSkuForParentItem(item);
-                                      const cell = row.hubParentChecks?.find(
-                                        (ch) => ch.hub === hub && ch.canonicalParentSku === c
-                                      );
-                                      const ok = cell?.ok === true;
-                                      return (
-                                        <td key={item.id} className="py-1.5 px-1 align-top">
-                                          <div className="flex flex-col gap-0.5">
-                                            <span className="font-mono text-slate-700">{cell?.expectedSku ?? '—'}</span>
-                                            <span
-                                              className={
-                                                ok ? 'text-green-600 font-medium' : 'text-red-600 font-medium'
-                                              }
-                                            >
-                                              {ok ? 'Pass' : 'Fail'}
-                                            </span>
-                                          </div>
-                                        </td>
-                                      );
-                                    })}
-                                  <td className="py-1.5 pl-2">
-                                    {allOk ? (
-                                      <Check className="w-4 h-4 text-green-600" />
-                                    ) : (
-                                      <AlertCircle className="w-4 h-4 text-red-500" />
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      {(() => {
-                        const passed = passedHubsFromChecks(
-                          row.hubs ?? [],
-                          row.parentItems,
-                          row.hubParentChecks ?? []
-                        );
-                        const skipped = (row.hubs ?? []).filter((h) => !passed.includes(h));
-                        if (skipped.length === 0) return null;
-                        return (
-                          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
-                            Will not save for: {skipped.join(', ')} until all parent lines pass for that hub.
-                          </p>
-                        );
-                      })()}
+                {/* ── Section 1: Read-only snapshot ── */}
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Listing snapshot (read-only)</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <ReviewField label="Generated name" value={getFinalName()} />
+                    <ReviewField
+                      label="Generated SKU (per hub)"
+                      value={
+                        row.sku
+                          ? row.sku
+                          : selectedHubs.length > 0 && row.plant?.trim()
+                          ? Object.keys(skuPreviews).length > 0
+                            ? selectedHubs.map((h) => `${h}: ${skuPreviews[h] ?? '—'}`).join(', ')
+                            : 'Generating…'
+                          : '—'
+                      }
+                      mono
+                    />
+                    <ReviewField
+                      label="Parent SKUs"
+                      value={
+                        row.parentItems.length > 0
+                          ? row.parentItems.map((i) => i.parentSku || '—').join(', ')
+                          : '—'
+                      }
+                      mono
+                    />
+                    <ReviewField
+                      label="Hubs"
+                      value={(row.hubs ?? []).join(', ') || '—'}
+                    />
+                    <ReviewField label="Set Qty" value={String(row.setQuantity ?? 1)} />
+                    <ReviewField label="Inventory" value={String(row.inventory_quantity)} highlight />
+                    <ReviewField
+                      label="Publish status"
+                      value={(row.inventory_quantity ?? 0) > 0 ? 'Published (1)' : 'Unpublished (0)'}
+                    />
+                    <div className="col-span-2">
+                      <p className="text-[10px] text-slate-500 mb-0.5">Seller (per hub)</p>
+                      <ChildListingSellerSummary row={row} sellerLabelByKey={sellerLabelByKey} />
                     </div>
-                  )}
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <ReviewField label="Product Name" value={getFinalName()} />
-                  <ReviewField
-                    label="SKU"
-                    value={
-                      row.sku
-                        ? row.sku
-                        : selectedHubs.length > 0 && row.plant?.trim()
-                        ? Object.keys(skuPreviews).length > 0
-                          ? selectedHubs.map((h) => `${h}: ${skuPreviews[h] ?? '—'}`).join(', ')
-                          : 'Generating…'
-                        : '—'
-                    }
-                    mono
-                  />
-                  <ReviewField
-                    label="Parents"
-                    value={
-                      row.parentItems.length > 0
-                        ? row.parentItems.filter((i) => i.parent).map((i) => `${i.parent!.plant} ×${i.quantity}`).join(', ') || '—'
-                        : '—'
-                    }
-                  />
-                  <ReviewField label="Set Qty" value={String(row.setQuantity ?? 1)} />
-                  <ReviewField label="Inventory" value={String(row.inventory_quantity)} highlight />
-                  <ReviewField
-                    label="Categories"
-                    value={(() => {
-                      const combined = Array.from(new Set([...(row.categories || []), ...ruleBasedCategories]));
-                      return combined.length ? combined.join(', ') : '—';
-                    })()}
+                </div>
+
+                {/* ── Section 2: Editable hub & seller ── */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Hub & seller</p>
+                  <HubMultiSelect
+                    selectedHubs={row.hubs ?? []}
+                    hubOptions={hubOptions}
+                    onChange={(hubs) => onUpdateRow(row.id, { hubs })}
+                    error={row.validationErrors.hub}
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <HubMultiSelect
-                      selectedHubs={row.hubs ?? []}
-                      hubOptions={hubOptions}
-                      onChange={(hubs) => onUpdateRow(row.id, { hubs })}
-                      error={row.validationErrors.hub}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Seller</label>
-                    <ChildListingSellerSummary row={row} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Price (₹)</label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-[#330033]">₹{row.price.toLocaleString()}</span>
+                {/* ── Section 3: Pricing ── */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Pricing</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1.5">Price (₹) <span className="text-slate-400 font-normal">(auto from parents)</span></label>
                       <input
                         type="number"
                         value={row.price || ''}
                         onChange={(e) => onUpdateRow(row.id, { price: Number(e.target.value) || 0 })}
-                        className="flex-1 px-2 py-2 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
-                        placeholder="Override"
+                        className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                        placeholder="0"
                       />
                     </div>
+                    <InlineInput
+                      value={row.compare_at_price ?? ''}
+                      onChange={(value) => onUpdateRow(row.id, { compare_at_price: value === '' ? undefined : Number(value) })}
+                      type="number"
+                      placeholder="e.g. 499"
+                      label="Compare-at price (₹) (auto from parent)"
+                    />
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1.5">GST / Tax <span className="text-slate-400 font-normal">(max from parents: {maxTaxFromParentItems(row.parentItems) ?? 0}%)</span></label>
+                      <select
+                        value={row.tax === 5 || row.tax === 18 ? String(row.tax) : ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          onUpdateRow(row.id, { tax: v === '' ? undefined : Number(v) });
+                        }}
+                        className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                      >
+                        <option value="">Auto (use max from parents)</option>
+                        <option value="5">5%</option>
+                        <option value="18">18%</option>
+                      </select>
+                    </div>
+                    <InlineInput
+                      value={row.sort_order ?? 3000}
+                      onChange={(value) => onUpdateRow(row.id, { sort_order: value === '' ? 3000 : Number(value) })}
+                      type="number"
+                      placeholder="3000"
+                      label="Sort order"
+                    />
                   </div>
-                  <InlineInput
-                    value={row.compare_at_price ?? ''}
-                    onChange={(value) => onUpdateRow(row.id, { compare_at_price: value === '' ? undefined : Number(value) })}
-                    type="number"
-                    placeholder="Compare at price"
-                    label="Compare at Price (₹) (auto from parent)"
-                  />
-                  <InlineInput
-                    value={row.sort_order ?? 3000}
-                    onChange={(value) => onUpdateRow(row.id, { sort_order: value === '' ? 3000 : Number(value) })}
-                    type="number"
-                    placeholder="3000"
-                    label="Sort Order"
-                  />
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1.5">Tags</label>
-                    <div className="flex flex-wrap gap-2 mb-2">
+                    <div className="flex flex-wrap gap-2 mb-2 min-h-[1.5rem]">
                       {(row.tags || []).map((tag) => (
                         <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium">
                           {tag}
-                          <button
-                            type="button"
-                            onClick={() => onUpdateRow(row.id, { tags: (row.tags || []).filter((t) => t !== tag) })}
-                            className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
-                          >
+                          <button type="button" onClick={() => onUpdateRow(row.id, { tags: (row.tags || []).filter((t) => t !== tag) })} className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700">
                             <X className="w-3 h-3" />
                           </button>
                         </span>
@@ -1824,23 +2191,38 @@ function ProductCard({
                         if (tags.includes(value)) return;
                         onUpdateRow(row.id, { tags: [...tags, value] });
                       }}
-                      options={TAG_OPTIONS.filter((opt) => !(row.tags || []).includes(opt.value))}
-                      placeholder="Add tag..."
+                      options={PRODUCT_TAG_OPTIONS.filter((opt) => !(row.tags || []).includes(opt.value))}
+                      placeholder="Add tag…"
                       searchable={false}
                       closeOnSelect={false}
                     />
                   </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Collections</label>
-                    <div className="flex flex-wrap gap-2 mb-2">
+                </div>
+
+                {/* ── Section 4: Listing copy & metadata (all derived from parents, all editable) ── */}
+                <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Listing copy & metadata <span className="font-normal normal-case text-slate-400">(derived from parents, editable)</span></p>
+
+                  <MultiSelectFromDropdown
+                    label="Categories"
+                    hint={
+                      ruleBasedCategories.length > 0
+                        ? `Rule-based additions on save: ${ruleBasedCategories.join(', ')}.`
+                        : 'Choose from category master. Derived from parents where possible; rules may add more on save.'
+                    }
+                    values={row.categories ?? []}
+                    onChange={(categories) => onUpdateRow(row.id, { categories })}
+                    options={categoryOptions}
+                    selectPlaceholder="Add category…"
+                  />
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Collections <span className="text-slate-400 font-normal">(derived from parents)</span></label>
+                    <div className="flex flex-wrap gap-2 mb-2 min-h-[1.5rem]">
                       {(row.collectionIds || []).map((id) => (
                         <span key={id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium">
                           {collectionNames[id] ?? id}
-                          <button
-                            type="button"
-                            onClick={() => onUpdateRow(row.id, { collectionIds: (row.collectionIds || []).filter((cid) => cid !== id) })}
-                            className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700"
-                          >
+                          <button type="button" onClick={() => onUpdateRow(row.id, { collectionIds: (row.collectionIds || []).filter((cid) => cid !== id) })} className="p-0.5 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-700">
                             <X className="w-3 h-3" />
                           </button>
                         </span>
@@ -1855,13 +2237,82 @@ function ProductCard({
                         onUpdateRow(row.id, { collectionIds: [...ids, value] });
                       }}
                       options={collectionOptions.filter((opt) => !(row.collectionIds || []).includes(opt.value))}
-                      placeholder="Add collection..."
+                      placeholder="Add collection…"
                       searchable={true}
                       closeOnSelect={false}
                     />
                   </div>
+
+                  <MultiSelectFromDropdown
+                    label="Features"
+                    hint="Same options as Parent Master. Plant+pot: only plant features prefilled; multiple plants merge unique values."
+                    values={row.features ?? []}
+                    onChange={(features) => onUpdateRow(row.id, { features })}
+                    options={featureDropdownOptions}
+                    selectPlaceholder="Add feature…"
+                    allowCreate
+                  />
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Redirects</label>
+                    <p className="text-[11px] text-slate-500 mb-2 leading-snug">
+                      One browse URL from category/collection masters (same as Parent Master).
+                    </p>
+                    <CustomSelect
+                      value={row.redirects?.[0] ?? ''}
+                      onChange={(v) =>
+                        onUpdateRow(row.id, {
+                          redirects: String(v ?? '').trim() ? [String(v).trim()] : [],
+                        })
+                      }
+                      options={redirectDropdownOptions}
+                      placeholder="Select redirect…"
+                      allowCreate
+                      searchable
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Description <span className="text-slate-400 font-normal">(from parent)</span></label>
+                    <textarea
+                      value={row.description ?? ''}
+                      onChange={(e) => onUpdateRow(row.id, { description: e.target.value })}
+                      rows={5}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none resize-y min-h-[6rem]"
+                      placeholder="Product description (HTML allowed)"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                      SEO title{' '}
+                      <span className="text-slate-400 font-normal">(uses full product name)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={row.seoTitle ?? ''}
+                      onChange={(e) => onUpdateRow(row.id, { seoTitle: e.target.value })}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
+                      placeholder={buildDefaultSeoTitle(rowDisplayNameForSeo(row))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1.5">
+                      SEO description{' '}
+                      <span className="text-slate-400 font-normal">(uses full product name)</span>
+                    </label>
+                    <textarea
+                      value={row.seoDescription ?? ''}
+                      onChange={(e) => onUpdateRow(row.id, { seoDescription: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none resize-y min-h-[4rem]"
+                      placeholder={buildDefaultSeoDescription(rowDisplayNameForSeo(row))}
+                    />
+                  </div>
                 </div>
 
+                {/* Validation errors */}
                 {Object.keys(row.validationErrors).length > 0 && !row.isValid && (
                   <div className="p-3 bg-red-50 rounded-xl border border-red-100">
                     <p className="text-xs font-medium text-red-700 mb-1">Missing fields:</p>

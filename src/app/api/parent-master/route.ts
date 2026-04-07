@@ -4,7 +4,12 @@ import { ListingProductModel } from '@/models/listingProduct';
 import type { ListingProduct, ListingSection } from '@/models/listingProduct';
 import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
 import { ObjectId } from 'mongodb';
-import { generateParentSKUGlobal, generateParentSKU } from '@/lib/skuGenerator';
+import {
+  baseSkuForParentMasterRow,
+  generateParentSKUGlobal,
+  generateParentSKU,
+  generateParentSKUForHubs,
+} from '@/lib/skuGenerator';
 import { getSubstoresByHub, HUB_MAPPINGS } from '@/shared/constants/hubs';
 import {
   validateListingProductData,
@@ -13,6 +18,9 @@ import {
 import { syncListingProductToSkuMasterNew } from '@/models/skuMasterNew';
 import { ImageCollectionModel } from '@/app/dashboard/listing/image/models/imageCollection';
 import { SellerMasterModel } from '@/models/sellerMaster';
+import { ProductFeatureMasterModel, parseFeatureTokens } from '@/models/productFeatureMaster';
+import { computeProductDisplayName } from '@/lib/productListingDisplayName';
+import { allocateGrowingProductCode } from '@/lib/growingProductCodeSequence';
 
 function isMongoObjectIdString(s: string): boolean {
   return /^[a-f\d]{24}$/i.test(String(s).trim());
@@ -185,6 +193,16 @@ export async function POST(request: NextRequest) {
         validatedItems.push(validated.data!);
       }
 
+      const bulkFeatureKeys = new Set<string>();
+      for (const item of validatedItems) {
+        for (const t of parseFeatureTokens(item.features)) {
+          bulkFeatureKeys.add(t);
+        }
+      }
+      if (bulkFeatureKeys.size > 0) {
+        await ProductFeatureMasterModel.ensureNames([...bulkFeatureKeys]);
+      }
+
       for (let i = 0; i < validatedItems.length; i++) {
         const item = validatedItems[i];
         if (item.plant) {
@@ -192,6 +210,7 @@ export async function POST(request: NextRequest) {
             const sku = await generateParentSKUGlobal(item.plant);
             (validatedItems[i] as Record<string, unknown>).sku = sku;
             (validatedItems[i] as Record<string, unknown>).productCode = sku;
+            (validatedItems[i] as Record<string, unknown>).base_sku = baseSkuForParentMasterRow(sku, undefined);
           } catch (error) {
             console.error('SKU generation failed for bulk row:', error);
             return NextResponse.json(
@@ -232,6 +251,8 @@ export async function POST(request: NextRequest) {
 
     const data = validated.data!;
     const pt = data.productType ?? 'parent';
+
+    await ProductFeatureMasterModel.ensureFromFeaturesField(data.features);
 
     const rawBody = body as Record<string, unknown>;
     const listingHubsRaw = rawBody.listingHubs;
@@ -303,21 +324,25 @@ export async function POST(request: NextRequest) {
 
       try {
         if (listingHubs.length > 0) {
+          // Allocate one shared sequence for all hubs in this batch so
+          // WROS000101 + NROS000101 share the same base_sku (ROS000101).
+          let hubSkus: Map<string, string>;
+          try {
+            hubSkus = await generateParentSKUForHubs(listingHubs, data.plant);
+          } catch (error) {
+            console.error('SKU generation failed:', error);
+            await rollbackParents();
+            return NextResponse.json(
+              {
+                success: false,
+                message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
+              { status: 422 }
+            );
+          }
+
           for (const hub of listingHubs) {
-            let sku: string;
-            try {
-              sku = await generateParentSKU(hub, data.plant);
-            } catch (error) {
-              console.error('SKU generation failed:', error);
-              await rollbackParents();
-              return NextResponse.json(
-                {
-                  success: false,
-                  message: `SKU generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                },
-                { status: 422 }
-              );
-            }
+            const sku = hubSkus.get(hub)!;
             const substores = getSubstoresByHub(hub);
             const storefrontSellerId =
               (await SellerMasterModel.resolveStorefrontSellerIdForHub(hub)) ?? undefined;
@@ -336,6 +361,7 @@ export async function POST(request: NextRequest) {
               productType: 'parent',
               sku,
               productCode: sku,
+              base_sku: baseSkuForParentMasterRow(sku, hub),
               hub,
               seller: storefrontSellerId,
               ...(substores.length > 0 ? { substores } : {}),
@@ -365,6 +391,7 @@ export async function POST(request: NextRequest) {
             productType: 'parent',
             sku,
             productCode: sku,
+            base_sku: baseSkuForParentMasterRow(sku, undefined),
             ...(listing_price !== undefined && { listing_price }),
           };
           const created = await ParentMasterModel.create(dataToSave);
@@ -394,6 +421,9 @@ export async function POST(request: NextRequest) {
           const listingPayload = {
             listingType: 'parent' as const,
             parentItems: [{ parentSku: hubSku, quantity: 1, unitPrice: 0 }],
+            ...(parentDoc.parentKind === 'plant' || parentDoc.parentKind === 'pot'
+              ? { parentKind: parentDoc.parentKind }
+              : {}),
             section: listingSection,
             plant: parentDoc.plant,
             otherNames: parentDoc.otherNames,
@@ -410,6 +440,15 @@ export async function POST(request: NextRequest) {
             collectionIds: parentDoc.collectionIds?.map((id) => String(id)),
             images: imageUrls,
             status: 'listed' as const,
+            ...(Array.isArray(parentDoc.tags) && parentDoc.tags.length > 0
+              ? { tags: [...parentDoc.tags] }
+              : {}),
+            base_sku:
+              parentDoc.base_sku?.trim() ||
+              baseSkuForParentMasterRow(
+                hubSku,
+                parentDoc.hub ? String(parentDoc.hub) : undefined
+              ),
             ...(compareAt !== undefined ? { compare_at_price: compareAt } : {}),
             ...(parentDoc.SEO && (parentDoc.SEO.title || parentDoc.SEO.description)
               ? { SEO: { title: parentDoc.SEO.title, description: parentDoc.SEO.description } }
@@ -455,24 +494,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // growing_product | consumable — productCode = typed code; sku = linked base parent SKU
-    const productCode = String(data.productCode ?? '').trim();
-    if (!productCode) {
-      return NextResponse.json(
-        { success: false, message: 'productCode is required for this product type' },
-        { status: 400 }
-      );
-    }
-
-    const existingPc = await ParentMasterModel.findByProductCode(productCode);
-    if (existingPc) {
-      return NextResponse.json(
-        { success: false, message: 'A product with this product code already exists' },
-        { status: 409 }
-      );
-    }
-
+    // growing_product | consumable — growing: auto productCode; consumable: typed productCode; sku = base parent when set
     const parentLinkSku = String(data.sku ?? '').trim();
+
+    let linkedBaseParent: ParentMaster | null = null;
+    if (parentLinkSku) {
+      linkedBaseParent = await ParentMasterModel.findBaseParentBySkuOrBaseSku(parentLinkSku);
+    }
 
     if (pt === 'growing_product') {
       if (!parentLinkSku) {
@@ -481,8 +509,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const linked = await ParentMasterModel.findBySku(parentLinkSku);
-      if (!linked || !isBaseParent(linked)) {
+      if (!linkedBaseParent || !isBaseParent(linkedBaseParent)) {
         return NextResponse.json(
           { success: false, message: 'sku must be the SKU of an existing base (parent) product' },
           { status: 400 }
@@ -491,13 +518,51 @@ export async function POST(request: NextRequest) {
     }
 
     if (pt === 'consumable' && parentLinkSku) {
-      const linked = await ParentMasterModel.findBySku(parentLinkSku);
-      if (!linked || !isBaseParent(linked)) {
+      if (!linkedBaseParent || !isBaseParent(linkedBaseParent)) {
         return NextResponse.json(
           { success: false, message: 'sku must be the SKU of an existing base (parent) product' },
           { status: 400 }
         );
       }
+    }
+
+    let productCode: string;
+    if (pt === 'growing_product') {
+      const vid = String(data.vendorMasterId ?? '').trim();
+      const vendor = await ProcurementSellerMasterModel.findById(vid);
+      const vName = vendor?.seller_name != null ? String(vendor.seller_name).trim() : '';
+      if (!vendor || !vName) {
+        return NextResponse.json(
+          { success: false, message: 'Primary vendor not found' },
+          { status: 400 }
+        );
+      }
+      try {
+        productCode = await allocateGrowingProductCode({
+          plant: data.plant,
+          vendorName: vName,
+          parentSku: parentLinkSku,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to allocate product code';
+        return NextResponse.json({ success: false, message: msg }, { status: 422 });
+      }
+    } else {
+      productCode = String(data.productCode ?? '').trim();
+      if (!productCode) {
+        return NextResponse.json(
+          { success: false, message: 'productCode is required for this product type' },
+          { status: 400 }
+        );
+      }
+    }
+
+    const existingPc = await ParentMasterModel.findByProductCode(productCode);
+    if (existingPc) {
+      return NextResponse.json(
+        { success: false, message: 'A product with this product code already exists' },
+        { status: 409 }
+      );
     }
 
     let listing_price: number | undefined;
@@ -512,11 +577,20 @@ export async function POST(request: NextRequest) {
 
     const finalName = data.finalName?.trim() || data.plant.trim();
 
+    const baseSkuFromLinked =
+      linkedBaseParent && isBaseParent(linkedBaseParent)
+        ? baseSkuForParentMasterRow(
+            String(linkedBaseParent.sku ?? '').trim(),
+            linkedBaseParent.hub ? String(linkedBaseParent.hub) : undefined
+          )
+        : undefined;
+
     const dataToSave: Omit<ParentMaster, '_id' | 'createdAt' | 'updatedAt'> = {
       ...data,
       productType: pt,
       productCode,
       ...(parentLinkSku ? { sku: parentLinkSku } : {}),
+      ...(baseSkuFromLinked ? { base_sku: baseSkuFromLinked } : {}),
       parentSku: undefined,
       finalName,
       categories: Array.isArray(data.categories) ? data.categories : [],
@@ -567,16 +641,17 @@ export async function PUT(request: NextRequest) {
     if (sanitized.sku !== undefined) {
       const skuTrim = String(sanitized.sku).trim();
       const doc = await ParentMasterModel.findById(_id);
-      const resolved = skuTrim ? await ParentMasterModel.findBySku(skuTrim) : null;
+      const resolvedExact = skuTrim ? await ParentMasterModel.findBySku(skuTrim) : null;
+      const resolvedBase = skuTrim ? await ParentMasterModel.findBaseParentBySkuOrBaseSku(skuTrim) : null;
       if (doc && isBaseParent(doc)) {
-        if (resolved && isBaseParent(resolved) && String(resolved._id) !== String(_id)) {
+        if (resolvedExact && isBaseParent(resolvedExact) && String(resolvedExact._id) !== String(_id)) {
           return NextResponse.json(
             { success: false, message: 'A base parent with this SKU already exists' },
             { status: 409 }
           );
         }
       } else if (doc && skuTrim && !isBaseParent(doc)) {
-        if (!resolved || !isBaseParent(resolved)) {
+        if (!resolvedBase || !isBaseParent(resolvedBase)) {
           return NextResponse.json(
             {
               success: false,
@@ -590,7 +665,9 @@ export async function PUT(request: NextRequest) {
     }
 
     if (sanitized.parentSku !== undefined && sanitized.parentSku) {
-      const linked = await ParentMasterModel.findBySku(String(sanitized.parentSku).trim());
+      const linked = await ParentMasterModel.findBaseParentBySkuOrBaseSku(
+        String(sanitized.parentSku).trim()
+      );
       if (!linked || !isBaseParent(linked)) {
         return NextResponse.json(
           { success: false, message: 'parentSku must be the SKU of an existing base (parent) product' },
@@ -642,6 +719,10 @@ export async function PUT(request: NextRequest) {
         const factor = procurementSeller?.multiplicationFactor ?? 1;
         sanitized = { ...sanitized, listing_price: priceVal * factor };
       }
+    }
+
+    if (sanitized.features !== undefined) {
+      await ProductFeatureMasterModel.ensureFromFeaturesField(sanitized.features);
     }
 
     const result = await ParentMasterModel.update(_id, sanitized);
@@ -712,12 +793,48 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-function defaultSeoForPlant(plant: string): { title: string; description: string } {
-  const n = plant.trim() || 'plant';
+function defaultSeoForDisplayName(displayName: string): { title: string; description: string } {
+  const n = displayName.trim() || 'plant';
   return {
     title: `Free Next Day Delivery | ${n}`,
     description: `Buy ${n} at Urvann. Choose from 10000+ plants, gardening products and essentials. Order now to get free next day home delivery.`,
   };
+}
+
+function seoDisplayNameFromParentBody(d: Record<string, unknown>): string {
+  const plant = String(d.plant ?? '').trim();
+  const h = d.height;
+  const height: number | '' =
+    typeof h === 'number' && !Number.isNaN(h)
+      ? h
+      : h != null && String(h).trim() !== ''
+        ? (() => {
+            const n = parseFloat(String(h));
+            return Number.isNaN(n) ? '' : n;
+          })()
+        : '';
+  const sz = d.size;
+  const size: number | '' =
+    typeof sz === 'number' && !Number.isNaN(sz)
+      ? sz
+      : sz != null && String(sz).trim() !== ''
+        ? (() => {
+            const n = parseFloat(String(sz));
+            return Number.isNaN(n) ? '' : n;
+          })()
+        : '';
+  const merged = computeProductDisplayName({
+    plant,
+    otherNames: d.otherNames != null ? String(d.otherNames) : undefined,
+    variety: d.variety != null ? String(d.variety) : undefined,
+    colour: d.colour != null ? String(d.colour) : undefined,
+    height,
+    size,
+    potType: d.potType != null ? String(d.potType) : undefined,
+    type: d.type != null ? String(d.type) : undefined,
+    mossStick: d.mossStick != null ? String(d.mossStick) : undefined,
+  }).trim();
+  return merged || plant || 'plant';
 }
 
 function validateParentMasterData(data: unknown): {
@@ -801,10 +918,6 @@ function validateParentMasterData(data: unknown): {
     if (!vm) {
       return { success: false, message: 'vendorMasterId is required for growing_product' };
     }
-    const pc = d.productCode != null ? String(d.productCode).trim() : '';
-    if (!pc) {
-      return { success: false, message: 'productCode is required for growing_product' };
-    }
     const parentSkuField =
       d.sku != null ? String(d.sku).trim() : d.parentSku != null ? String(d.parentSku).trim() : '';
     if (!parentSkuField) {
@@ -847,8 +960,21 @@ function validateParentMasterData(data: unknown): {
     if (pk === 'plant' || pk === 'pot') parentKind = pk;
   }
 
+  const tagsFromBody = (() => {
+    const tr = d.tags;
+    if (Array.isArray(tr)) {
+      return tr.map((t) => String(t).trim()).filter(Boolean);
+    }
+    if (typeof tr === 'string' && tr.trim()) {
+      return tr.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return undefined;
+  })();
+  const tagsNormalized =
+    tagsFromBody && tagsFromBody.length > 0 ? tagsFromBody : undefined;
+
   const plantTrim = String(d.plant).trim();
-  const seoDefaults = defaultSeoForPlant(plantTrim);
+  const seoDefaults = defaultSeoForDisplayName(seoDisplayNameFromParentBody(d));
   const seoTitleIn = d.seoTitle != null ? String(d.seoTitle).trim() : '';
   const seoDescIn = d.seoDescription != null ? String(d.seoDescription).trim() : '';
   const SEOForParent = {
@@ -886,6 +1012,7 @@ function validateParentMasterData(data: unknown): {
         ? String(d.vendorMasterId).trim()
         : undefined,
     features: d.features ? String(d.features).trim() : undefined,
+    ...(tagsNormalized ? { tags: tagsNormalized } : {}),
     redirects: d.redirects ? String(d.redirects).trim() : undefined,
     description: d.description ? String(d.description).trim() : undefined,
     finalName: d.finalName ? String(d.finalName).trim() : undefined,
@@ -974,6 +1101,15 @@ export function sanitizeParentMasterUpdate(data: Record<string, unknown>): Parti
   if (data.features !== undefined) {
     sanitized.features = String(data.features).trim() || undefined;
   }
+  if (data.tags !== undefined) {
+    if (Array.isArray(data.tags)) {
+      sanitized.tags = (data.tags as unknown[]).map((t) => String(t).trim()).filter(Boolean);
+    } else if (typeof data.tags === 'string') {
+      sanitized.tags = data.tags.trim()
+        ? data.tags.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+    }
+  }
   if (data.redirects !== undefined) {
     sanitized.redirects = String(data.redirects).trim() || undefined;
   }
@@ -1022,6 +1158,10 @@ export function sanitizeParentMasterUpdate(data: Record<string, unknown>): Parti
   }
   if (data.product_id !== undefined) {
     sanitized.product_id = String(data.product_id).trim();
+  }
+  if (data.storeHippoAlias !== undefined) {
+    const a = String(data.storeHippoAlias).trim();
+    sanitized.storeHippoAlias = a || undefined;
   }
   if (data.hub !== undefined) {
     sanitized.hub = String(data.hub).trim() || undefined;

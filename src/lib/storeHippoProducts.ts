@@ -7,7 +7,8 @@ const ACCESS_KEY = process.env.URVANN_API_ACCESS_KEY || '13945648c9da5fdbfc71e3a
 // StoreHippo product payload format (legacy; parent master no longer syncs to StoreHippo)
 export interface StoreHippoProductPayload {
   name: string;
-  alias: string;
+  /** Omit on create — StoreHippo generates the URL slug; read back via GET after create. */
+  alias?: string;
   price: number;
   publish: string; // "1" for published, "0" for unpublished
   categories: string[]; // category aliases (e.g. indoor-plants)
@@ -37,6 +38,8 @@ export interface StoreHippoProductResponse {
 export interface StoreHippoSyncResult {
   success: boolean;
   storeHippoId?: string;
+  /** Product URL slug as returned by StoreHippo after create/fetch. */
+  storeHippoAlias?: string;
   error?: string;
 }
 
@@ -58,17 +61,11 @@ function convertToStoreHippoFormat(
   options?: StoreHippoSyncOptions
 ): StoreHippoProductPayload {
   const displayName = product.finalName || product.plant;
-  const alias = displayName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 50);
   const primarySku = getPrimarySku(product as ParentMaster);
   const price = getPrice(product as ParentMaster);
 
   const payload: StoreHippoProductPayload = {
     name: displayName,
-    alias: alias,
     price: price ?? 0,
     publish: '0',
     categories: product.categories,
@@ -96,9 +93,29 @@ function convertToStoreHippoFormat(
   return payload;
 }
 
-// Fetch StoreHippo product _id by name (used after creation)
-async function fetchStoreHippoProductIdByName(name: string): Promise<string | null> {
-  const filter = JSON.stringify([{ field: 'name', operator: 'eq', value: name }]);
+function extractProductFromApiPayload(json: unknown): { _id?: string; alias?: string } {
+  if (!json || typeof json !== 'object') return {};
+  const o = json as Record<string, unknown>;
+  const data = o.data;
+  const item: Record<string, unknown> =
+    data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : Array.isArray(data) && data[0] && typeof data[0] === 'object'
+        ? (data[0] as Record<string, unknown>)
+        : o;
+  const id = item._id != null ? String(item._id) : undefined;
+  const alias = item.alias != null ? String(item.alias) : undefined;
+  return { _id: id, alias };
+}
+
+/** GET ms.products with filters — first row’s _id and alias (same pattern as product_id lookup). */
+async function fetchStoreHippoProductByFilter(
+  field: string,
+  value: string
+): Promise<{ _id: string; alias?: string } | null> {
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  const filter = JSON.stringify([{ field, operator: 'eq', value: trimmed }]);
   const url = `${BASE_URL}/api/1.1/entity/ms.products/?filters=${encodeURIComponent(filter)}`;
 
   const response = await fetch(url, {
@@ -106,14 +123,19 @@ async function fetchStoreHippoProductIdByName(name: string): Promise<string | nu
   });
 
   if (!response.ok) {
-    console.error(`[StoreHippo] GET failed: ${response.status}`);
+    console.error(`[StoreHippo] GET failed (${field}): ${response.status}`);
     return null;
   }
 
-  const json: { data?: { _id: string }[] } = await response.json();
-  const products = json.data;
-  if (Array.isArray(products) && products.length > 0 && products[0]._id) {
-    return products[0]._id;
+  const json: unknown = await response.json();
+  const data = (json as { data?: unknown[] })?.data;
+  const products = Array.isArray(data) ? data : [];
+  const first = products[0] as { _id?: string; alias?: string } | undefined;
+  if (first?._id) {
+    return {
+      _id: String(first._id),
+      alias: first.alias != null ? String(first.alias) : undefined,
+    };
   }
   return null;
 }
@@ -148,15 +170,43 @@ export async function syncProductToStoreHippo(
       };
     }
 
-    const productId = await fetchStoreHippoProductIdByName(displayName);
-    if (!productId) {
-      console.warn(`[StoreHippo] Product created but could not fetch _id for name: ${displayName}`);
+    let postJson: unknown = null;
+    try {
+      postJson = await response.json();
+    } catch {
+      /* non-JSON success body */
     }
-    console.log(`[StoreHippo] ✅ Product created with ID: ${productId}`);
+
+    const fromPost = extractProductFromApiPayload(postJson);
+    let productId = fromPost._id;
+    let storeHippoAlias = fromPost.alias;
+
+    if (!productId || !storeHippoAlias) {
+      const byName = await fetchStoreHippoProductByFilter('name', displayName);
+      if (byName) {
+        productId = productId || byName._id;
+        storeHippoAlias = storeHippoAlias || byName.alias;
+      }
+    }
+
+    const sku = getPrimarySku(product as ParentMaster);
+    if ((!productId || !storeHippoAlias) && sku) {
+      const bySku = await fetchStoreHippoProductByFilter('sku', sku);
+      if (bySku) {
+        productId = productId || bySku._id;
+        storeHippoAlias = storeHippoAlias || bySku.alias;
+      }
+    }
+
+    if (!productId) {
+      console.warn(`[StoreHippo] Product created but could not resolve _id for name: ${displayName}`);
+    }
+    console.log(`[StoreHippo] ✅ Product created with ID: ${productId ?? '(unknown)'} alias: ${storeHippoAlias ?? '(unknown)'}`);
 
     return {
       success: true,
-      storeHippoId: productId ?? undefined,
+      storeHippoId: productId,
+      storeHippoAlias,
     };
   } catch (error) {
     console.error('[StoreHippo] Sync error:', error);
@@ -180,11 +230,6 @@ export async function updateProductInStoreHippo(
     const displayName = product.finalName || product.plant;
     if (displayName) {
       payload.name = displayName;
-      payload.alias = displayName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .substring(0, 50);
     }
     
     const priceVal = getPrice(product as ParentMaster);
@@ -226,6 +271,7 @@ export async function updateProductInStoreHippo(
     return {
       success: true,
       storeHippoId: result._id,
+      ...(result.alias ? { storeHippoAlias: String(result.alias) } : {}),
     };
   } catch (error) {
     console.error('[StoreHippo] Update error:', error);

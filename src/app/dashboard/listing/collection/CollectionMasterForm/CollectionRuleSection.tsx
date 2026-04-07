@@ -8,6 +8,10 @@ export const COLLECTION_RULE_FIELDS = [
   'Price',
   'Categories',
   'Collections',
+  /** App-only: stored on collectionMaster; not sent to StoreHippo */
+  'Plant',
+  /** App-only: stored on collectionMaster; not sent to StoreHippo */
+  'Color',
 ] as const;
 
 export const COLLECTION_RULE_OPERATORS = [
@@ -250,7 +254,13 @@ function ConditionRow({
           ) : (
             <input
               type="text"
-              placeholder="Value"
+              placeholder={
+                field === 'Plant'
+                  ? 'Plant / variety'
+                  : field === 'Color'
+                    ? 'Color value'
+                    : 'Value'
+              }
               value={value}
               onChange={(e) => onUpdate(index, { value: e.target.value })}
               className={`${inputClass} w-full`}

@@ -73,6 +73,7 @@ export async function PATCH(
     const body = await request.json();
     const {
       category: categoryName,
+      categoryId: categoryIdBody,
       alias,
       typeOfCategory,
       l1Parent,
@@ -89,6 +90,10 @@ export async function PATCH(
     const updateData: Record<string, unknown> = {};
 
     if (categoryName != null && typeof categoryName === 'string') updateData.category = categoryName.trim();
+    if ('categoryId' in body) {
+      if (categoryIdBody == null || categoryIdBody === '') updateData.categoryId = null;
+      else updateData.categoryId = String(categoryIdBody).trim();
+    }
     if (alias != null && typeof alias === 'string') {
       const trimmed = alias.trim();
       if (trimmed !== (existing as any).alias) {
@@ -114,7 +119,7 @@ export async function PATCH(
     if (type != null && (type === 'Automatic' || type === 'Manual')) updateData.type = type;
     if (description !== undefined) updateData.description = String(description ?? '').trim();
     if (rule !== undefined) {
-      if (rule == null) updateData.rule = undefined;
+      if (rule == null) updateData.rule = null;
       else if (validateRule(rule)) updateData.rule = normalizeRule(rule as Rule);
     }
     if (Array.isArray(substores)) updateData.substores = substores.map((s: unknown) => String(s).trim()).filter(Boolean);
@@ -125,14 +130,7 @@ export async function PATCH(
 
     await CategoryModel.update(id, updateData as any);
     const updated = { ...existing, ...updateData };
-
-    // Sync to StoreHippo (use existing categoryId = StoreHippo _id)
-    const payloadForStoreHippo = {
-      ...existing,
-      ...updateData,
-      categoryId: (existing as any).categoryId,
-    };
-    const storeHippoResult = await updateCategoryInStoreHippo(payloadForStoreHippo);
+    const storeHippoResult = await updateCategoryInStoreHippo(existing, updated);
 
     if (!storeHippoResult.success) {
       console.error('StoreHippo update failed for category:', id, storeHippoResult.error);
@@ -143,7 +141,12 @@ export async function PATCH(
       });
     }
 
-    return NextResponse.json({ success: true, data: updated, storeHippoSync: true });
+    return NextResponse.json({
+      success: true,
+      data: updated,
+      storeHippoSync: true,
+      ...(storeHippoResult.skipped ? { storeHippoPutSkipped: true } : {}),
+    });
   } catch (error) {
     console.error('Error updating category:', error);
     return NextResponse.json(

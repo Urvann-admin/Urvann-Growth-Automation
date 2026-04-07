@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Save, AlertCircle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import type { ListingStepId, ListingFormData } from './types';
-import { LISTING_STEPS, initialListingFormData, buildDefaultSeoTitle, buildDefaultSeoDescription } from './types';
+import { LISTING_STEPS, initialListingFormData, applyListingSeoDefaultsIfStillAuto } from './types';
 import type { ListingSection } from '@/models/listingProduct';
 import type { ParentMaster } from '@/models/parentMaster';
 import { StepListingType } from './steps/StepListingType';
@@ -54,24 +54,27 @@ export function ListingProductForm({
     const parentSku = parent.sku ?? '';
     if (parentSku === lastSyncedParentSkuRef.current) return;
     lastSyncedParentSkuRef.current = parentSku;
-    setFormData(prev => ({
-      ...prev,
-      quantity: 1,
-      plant: parent.plant ?? prev.plant,
-      otherNames: parent.otherNames ?? prev.otherNames,
-      variety: parent.variety ?? prev.variety,
-      colour: parent.colour ?? prev.colour,
-      height: parent.height ?? prev.height,
-      size: parent.size ?? prev.size,
-      mossStick: parent.mossStick ?? prev.mossStick,
-      type: parent.type ?? prev.type,
-      description: parent.description ?? prev.description,
-      categories: parent.categories ? [...parent.categories] : prev.categories,
-      collectionIds: parent.collectionIds ? parent.collectionIds.map(id => String(id)) : prev.collectionIds,
-      images: parent.images ? [...parent.images] : prev.images,
-      seller: parent.seller ?? prev.seller,
-      hub: parent.hub ?? prev.hub,
-    }));
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        quantity: 1,
+        plant: parent.plant ?? prev.plant,
+        otherNames: parent.otherNames ?? prev.otherNames,
+        variety: parent.variety ?? prev.variety,
+        colour: parent.colour ?? prev.colour,
+        height: parent.height ?? prev.height,
+        size: parent.size ?? prev.size,
+        mossStick: parent.mossStick ?? prev.mossStick,
+        type: parent.type ?? prev.type,
+        description: parent.description ?? prev.description,
+        categories: parent.categories ? [...parent.categories] : prev.categories,
+        collectionIds: parent.collectionIds ? parent.collectionIds.map((id) => String(id)) : prev.collectionIds,
+        images: parent.images ? [...parent.images] : prev.images,
+        seller: parent.seller ?? prev.seller,
+        hub: parent.hub ?? prev.hub,
+      };
+      return applyListingSeoDefaultsIfStillAuto(prev, next);
+    });
   }, [formData.listingType, selectedParents]);
 
   const currentStep = LISTING_STEPS[stepIndex];
@@ -146,16 +149,18 @@ export function ListingProductForm({
         const maxTax = taxValues.length > 0 ? Math.max(...taxValues) : 0;
         const derivedTax = maxTax > 0 ? String(maxTax) : '';
 
-        // Redirects: combine unique redirects from all parents
-        const combinedRedirects = new Set<string>();
-        selectedParents.forEach(parent => {
+        // Redirect: single browse URL — first parent's first URL wins
+        let derivedRedirect = '';
+        for (const parent of selectedParents) {
           const r = (parent as any).redirects;
           if (r && typeof r === 'string') {
-            r.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((v: string) => combinedRedirects.add(v));
+            const first = r.split(',').map((s: string) => s.trim()).filter(Boolean)[0];
+            if (first) {
+              derivedRedirect = first;
+              break;
+            }
           }
-        });
-        // Only pre-fill redirect if not already set by user
-        const derivedRedirect = Array.from(combinedRedirects).join(', ');
+        }
 
         // Features: combine unique features, but only from plant parents (ignore pot parents)
         // If all parents are pots, use all; if mix, use only plant parents' features
@@ -183,18 +188,8 @@ export function ListingProductForm({
     }
   }, [selectedParents, formData.quantity, section]);
 
-  // Auto-generate SEO fields when plant name changes (only if not manually edited)
-  useEffect(() => {
-    if (!formData.plant) return;
-    setFormData(prev => ({
-      ...prev,
-      seoTitle: prev.seoTitle || buildDefaultSeoTitle(formData.plant),
-      seoDescription: prev.seoDescription || buildDefaultSeoDescription(formData.plant),
-    }));
-  }, [formData.plant]);
-
   const updateFormData = useCallback((updates: Partial<ListingFormData>) => {
-    setFormData(prev => ({ ...prev, ...updates }));
+    setFormData((prev) => applyListingSeoDefaultsIfStillAuto(prev, { ...prev, ...updates }));
     // Clear validation errors for updated fields
     const updatedFields = Object.keys(updates);
     setValidationErrors(prev => {

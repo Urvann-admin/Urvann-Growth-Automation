@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, RefreshCw, Filter, Hash, ChevronDown, GitBranch, Layers } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import type { ListingProduct, ListingSection, ListingStatus } from '@/models/listingProduct';
+import type { ListingProduct, ListingSection } from '@/models/listingProduct';
 import { ListingProductTable } from './ListingProductTable';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { ReplicateToHubsModal } from './ReplicateToHubsModal';
@@ -21,10 +21,10 @@ export function ViewListingProducts({
   /** Matches final listing SKU or any parent line SKU (hub-prefixed or base). */
   const [skuSearch, setSkuSearch] = useState('');
   const [hubFilter, setHubFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState<ListingStatus | 'all'>('all');
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [isSelectingAllFiltered, setIsSelectingAllFiltered] = useState(false);
   const [showReplicateModal, setShowReplicateModal] = useState(false);
+  const [moveToRevivalLoading, setMoveToRevivalLoading] = useState(false);
   const [listingTab, setListingTab] = useState<'parent' | 'child'>('parent');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [parentTabTotal, setParentTabTotal] = useState(0);
@@ -40,10 +40,9 @@ export function ViewListingProducts({
     (params: URLSearchParams) => {
       if (searchTerm.trim()) params.set('name', searchTerm.trim());
       if (skuSearch.trim()) params.set('sku', skuSearch.trim());
-      if (statusFilter !== 'all') params.set('status', statusFilter);
       if (hubFilter !== 'all') params.set('hub', hubFilter);
     },
-    [searchTerm, skuSearch, statusFilter, hubFilter]
+    [searchTerm, skuSearch, hubFilter]
   );
 
   const buildFilterParams = useCallback(
@@ -114,7 +113,7 @@ export function ViewListingProducts({
     setSelectedProductIds(new Set());
     void fetchProducts(1);
     void refreshTabTotals();
-  }, [section, searchTerm, skuSearch, statusFilter, hubFilter, listingTab, fetchProducts, refreshTabTotals]);
+  }, [section, searchTerm, skuSearch, hubFilter, listingTab, fetchProducts, refreshTabTotals]);
 
   const handleToggleRow = (productId: string, checked: boolean) => {
     setSelectedProductIds((prev) => {
@@ -155,29 +154,6 @@ export function ViewListingProducts({
     }
   };
 
-  // Handle status change
-  const handleStatusChange = async (product: ListingProduct, newStatus: ListingStatus) => {
-    try {
-      const response = await fetch(`/api/listing-product/${product._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        toast.success(`Product status updated to ${newStatus}`);
-        fetchProducts(pagination.page);
-      } else {
-        toast.error(result.message || 'Failed to update status');
-      }
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast.error('Failed to update status');
-    }
-  };
-
   // Handle delete
   const handleDelete = async (product: ListingProduct) => {
     if (!confirm(`Are you sure you want to delete "${product.finalName || product.plant}"?`)) {
@@ -208,31 +184,51 @@ export function ViewListingProducts({
     fetchProducts(newPage);
   };
 
+  const handleMoveToRevival = async () => {
+    if (selectedProductIds.size === 0) return;
+    if (
+      !confirm(
+        `Move ${selectedProductIds.size} selected product(s) to Revival? They will leave the Listing tab and appear under Listing → Revival.`
+      )
+    ) {
+      return;
+    }
+    setMoveToRevivalLoading(true);
+    try {
+      const response = await fetch('/api/listing-product/move-to-revival', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listingProductIds: [...selectedProductIds] }),
+      });
+      const result = await response.json();
+      if (result.moved > 0) {
+        toast.success(result.message || `Moved ${result.moved} product(s) to Revival`);
+      }
+      if (Array.isArray(result.failed) && result.failed.length > 0) {
+        for (const f of result.failed as { id: string; message: string }[]) {
+          toast.error(f.message || `Failed for ${f.id}`);
+        }
+      } else if (!result.success && result.message) {
+        toast.error(result.message);
+      }
+      setSelectedProductIds(new Set());
+      await fetchProducts(pagination.page);
+      await refreshTabTotals();
+    } catch (e) {
+      console.error('Move to revival failed:', e);
+      toast.error('Failed to move to revival');
+    } finally {
+      setMoveToRevivalLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Stats widgets first */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:max-w-xs gap-3">
         <div className="bg-white rounded-xl border border-slate-200 p-3">
           <div className="text-base font-bold text-slate-900">{pagination.total}</div>
           <div className="text-[11px] text-slate-600">Total (this tab)</div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-3">
-          <div className="text-base font-bold text-[#E6007A]">
-            {products.filter(p => p.status === 'published').length}
-          </div>
-          <div className="text-[11px] text-slate-600">Published</div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-3">
-          <div className="text-base font-bold text-[#E6007A]">
-            {products.filter(p => p.status === 'listed').length}
-          </div>
-          <div className="text-[11px] text-slate-600">Listed</div>
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 p-3">
-          <div className="text-base font-bold text-slate-700">
-            {products.filter(p => p.status === 'draft').length}
-          </div>
-          <div className="text-[11px] text-slate-600">Draft</div>
         </div>
       </div>
 
@@ -307,6 +303,18 @@ export function ViewListingProducts({
             >
               Replicate to hubs ({selectedProductIds.size})
             </button>
+            {section === 'listing' && (
+              <button
+                type="button"
+                onClick={() => void handleMoveToRevival()}
+                disabled={
+                  selectedProductIds.size === 0 || isSelectingAllFiltered || moveToRevivalLoading
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl border-2 border-emerald-600 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50 shadow-sm"
+              >
+                {moveToRevivalLoading ? 'Moving…' : `Move to revival (${selectedProductIds.size})`}
+              </button>
+            )}
           </div>
         </div>
         {filtersOpen && (
@@ -358,22 +366,6 @@ export function ViewListingProducts({
                       {hub.hub}
                     </option>
                   ))}
-                </select>
-              </div>
-              <div className="space-y-1.5 sm:min-w-[11rem]">
-                <label htmlFor="listed-status" className="block text-xs font-semibold text-slate-800">
-                  Status
-                </label>
-                <select
-                  id="listed-status"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as ListingStatus | 'all')}
-                  className="w-full px-3 py-2 text-sm border-2 border-slate-200 rounded-xl bg-white text-slate-900 focus:outline-none focus:border-[#E6007A] focus:ring-2 focus:ring-pink-100"
-                >
-                  <option value="all">All statuses</option>
-                  <option value="draft">Draft</option>
-                  <option value="listed">Listed</option>
-                  <option value="published">Published</option>
                 </select>
               </div>
             </div>

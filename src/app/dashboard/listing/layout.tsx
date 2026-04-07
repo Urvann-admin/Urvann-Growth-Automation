@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { ChristmasTheme } from '@/components/theme/ChristmasTheme';
 import { THEME_CONFIG, CHRISTMAS_COLORS } from '@/config/theme';
 import { useListingState } from './hooks/useListingState';
@@ -41,6 +41,27 @@ export default function ListingLayout({
 
   const isChristmasTheme = THEME_CONFIG.ENABLE_CHRISTMAS_THEME;
 
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
+
+  // Fetch initial pending approvals count on mount (sidebar badge)
+  useEffect(() => {
+    fetch('/api/listing-notifications')
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success) setPendingApprovalsCount(json.data?.length ?? 0);
+      })
+      .catch(() => {});
+    const interval = setInterval(() => {
+      fetch('/api/listing-notifications')
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.success) setPendingApprovalsCount(json.data?.length ?? 0);
+        })
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
   const onCategorySectionToggle = useCallback(() => setCategorySectionOpen((o) => !o), [setCategorySectionOpen]);
   const onProductSectionToggle = useCallback(() => setProductSectionOpen((o) => !o), [setProductSectionOpen]);
   const onListingSectionToggle = useCallback(() => setListingSectionOpen((o) => !o), [setListingSectionOpen]);
@@ -77,6 +98,8 @@ export default function ListingLayout({
     onImageSectionToggle,
     sidebarCollapsed,
     onSidebarCollapsedToggle,
+    pendingApprovalsCount,
+    setPendingApprovalsCount,
   };
 
   return (
@@ -114,6 +137,7 @@ export default function ListingLayout({
             onCollectionSectionToggle={onCollectionSectionToggle}
             sidebarCollapsed={sidebarCollapsed}
             onSidebarCollapsedToggle={onSidebarCollapsedToggle}
+            pendingApprovalsCount={pendingApprovalsCount}
           />
           <div className="flex-1 flex flex-col min-w-0 overflow-auto">
             {children}

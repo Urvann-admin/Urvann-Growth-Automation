@@ -2,7 +2,7 @@
 
 import { Package, Tag, Image as ImageIcon, DollarSign, Hash, MapPin, Search, RotateCcw, X, Plus } from 'lucide-react';
 import type { ListingFormData } from '../types';
-import { buildDefaultSeoTitle, buildDefaultSeoDescription } from '../types';
+import { buildDefaultSeoTitle, buildDefaultSeoDescription, computeListingDisplayName } from '../types';
 import type { ListingSection } from '@/models/listingProduct';
 import type { ParentMaster } from '@/models/parentMaster';
 
@@ -20,19 +20,9 @@ export function StepReview({
   selectedParents,
   section,
 }: StepReviewProps) {
-  const generateFinalName = () => {
-    const parts = [formData.plant];
-    
-    if (formData.otherNames) parts.push(formData.otherNames);
-    if (formData.variety) parts.push(formData.variety);
-    if (formData.colour) parts.push(formData.colour);
-    if (formData.size) parts.push('in', String(formData.size), 'inch');
-    if (formData.type) parts.push(formData.type);
-    
-    return parts.filter(Boolean).join(' ');
-  };
-
-  const finalName = generateFinalName();
+  const finalName =
+    computeListingDisplayName(formData).trim() || formData.plant.trim() || 'Product';
+  const seoSeed = finalName;
 
   const handleFeatureRemove = (feature: string) => {
     updateFormData({ features: formData.features.filter(f => f !== feature) });
@@ -244,11 +234,11 @@ export function StepReview({
               type="text"
               value={formData.seoTitle}
               onChange={(e) => updateFormData({ seoTitle: e.target.value })}
-              placeholder={buildDefaultSeoTitle(formData.plant)}
+              placeholder={buildDefaultSeoTitle(seoSeed)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
             {!formData.seoTitle && (
-              <p className="mt-1 text-xs text-gray-400">Will use: {buildDefaultSeoTitle(formData.plant)}</p>
+              <p className="mt-1 text-xs text-gray-400">Will use: {buildDefaultSeoTitle(seoSeed)}</p>
             )}
           </div>
           <div>
@@ -256,20 +246,22 @@ export function StepReview({
             <textarea
               value={formData.seoDescription}
               onChange={(e) => updateFormData({ seoDescription: e.target.value })}
-              placeholder={buildDefaultSeoDescription(formData.plant)}
+              placeholder={buildDefaultSeoDescription(seoSeed)}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y"
             />
             {!formData.seoDescription && (
-              <p className="mt-1 text-xs text-gray-400">Will use: {buildDefaultSeoDescription(formData.plant)}</p>
+              <p className="mt-1 text-xs text-gray-400">Will use: {buildDefaultSeoDescription(seoSeed)}</p>
             )}
           </div>
           <button
             type="button"
-            onClick={() => updateFormData({
-              seoTitle: buildDefaultSeoTitle(formData.plant),
-              seoDescription: buildDefaultSeoDescription(formData.plant),
-            })}
+            onClick={() =>
+              updateFormData({
+                seoTitle: buildDefaultSeoTitle(seoSeed),
+                seoDescription: buildDefaultSeoDescription(seoSeed),
+              })
+            }
             className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700"
           >
             <RotateCcw className="h-3 w-3" />

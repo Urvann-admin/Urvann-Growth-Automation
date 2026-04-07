@@ -1,5 +1,6 @@
 import type { ProductType } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
+import { computeProductDisplayName } from '@/lib/productListingDisplayName';
 
 export type StepId = 'product-info' | 'details' | 'pricing' | 'categories-images' | 'review';
 
@@ -11,7 +12,7 @@ export type ProductFlowType = ProductType;
 export interface NonParentFormData {
   plant: string;
   vendorMasterId: string;
-  /** User-facing product code (API field `productCode`) */
+  /** Consumable: user-entered. Growing product: generated on the server (field unused for submit). */
   productCode: string;
   /** Base parent listing SKU to link to (API field `sku`) */
   parentSku: string;
@@ -27,7 +28,7 @@ export const initialNonParentFormData: NonParentFormData = {
 };
 
 export const SHORT_STEPS: { id: NonParentStepId; label: string; title: string }[] = [
-  { id: 'non-parent-info', label: 'Product details', title: 'Name, vendor, code, and link' },
+  { id: 'non-parent-info', label: 'Product details', title: 'Name, vendor, product code, and link' },
   { id: 'non-parent-review', label: 'Review', title: 'Review and create' },
 ];
 
@@ -58,11 +59,18 @@ export interface ProductFormData {
   inventory_quantity: number | '';
   images: string[];
   features: string;
+  /** Comma-separated tag labels (same option set as listing tags). */
+  tags: string;
   redirects: string;
   /** Hubs where a parent-type listing row is created (same flow as former Listing → Parent listing). */
   listingHubs: string[];
   /** Inventory / listing section for those rows (default main Listing). */
   listingSection: ListingSection;
+  /**
+   * When non-empty, used as the product final/display name instead of the auto-built string.
+   * Empty string means "use auto" from plant + attributes.
+   */
+  finalNameOverride: string;
 }
 
 export const STEPS: { id: StepId; label: string; title: string }[] = [
@@ -95,26 +103,12 @@ export const initialFormData: ProductFormData = {
   inventory_quantity: '',
   images: [],
   features: '',
+  tags: '',
   redirects: '',
   listingHubs: [],
   listingSection: 'listing',
+  finalNameOverride: '',
 };
-
-/** Placeholder options – define exact values later */
-export const FEATURES_OPTIONS = [
-  { value: '', label: 'Select Features' },
-  { value: 'option-a', label: 'Option A' },
-  { value: 'option-b', label: 'Option B' },
-  { value: 'option-c', label: 'Option C' },
-];
-
-/** Placeholder options – define exact values later */
-export const REDIRECTS_OPTIONS = [
-  { value: '', label: 'Select Redirects' },
-  { value: 'redirect-1', label: 'Redirect 1' },
-  { value: 'redirect-2', label: 'Redirect 2' },
-  { value: 'redirect-3', label: 'Redirect 3' },
-];
 
 export const COLOUR_OPTIONS = [
   { value: '', label: 'Select Colour' },
@@ -131,11 +125,13 @@ export const MOSS_STICK_OPTIONS = [
   { value: 'Optional', label: 'Optional' },
 ];
 
-/** Pot type: bag or pot only */
+/** Pot type options for parent product master */
 export const POT_TYPE_OPTIONS = [
   { value: '', label: 'Select Pot Type' },
   { value: 'bag', label: 'Bag' },
   { value: 'pot', label: 'Pot' },
+  { value: 'hanging', label: 'Hanging' },
+  { value: 'terracota', label: 'Terracota' },
 ];
 
 export const TAX_OPTIONS = [
@@ -150,12 +146,64 @@ export const PARENT_KIND_OPTIONS = [
   { value: 'pot', label: 'Pot' },
 ];
 
-export function buildDefaultSeoTitle(plantName: string): string {
-  const n = plantName.trim() || 'plant';
+export function buildDefaultSeoTitle(displayName: string): string {
+  const n = displayName.trim() || 'plant';
   return `Free Next Day Delivery | ${n}`;
 }
 
-export function buildDefaultSeoDescription(plantName: string): string {
-  const n = plantName.trim() || 'plant';
+export function buildDefaultSeoDescription(displayName: string): string {
+  const n = displayName.trim() || 'plant';
   return `Buy ${n} at Urvann. Choose from 10000+ plants, gardening products and essentials. Order now to get free next day home delivery.`;
+}
+
+/** Full product label (plant + variety, size, pot, etc.) — auto-generated final name when override is empty. */
+export function computeProductFinalName(data: ProductFormData): string {
+  return computeProductDisplayName({
+    plant: data.plant,
+    otherNames: data.otherNames,
+    variety: data.variety,
+    colour: data.colour,
+    height: data.height,
+    size: data.size,
+    potType: data.potType,
+    mossStick: data.mossStick,
+  });
+}
+
+/** Resolved label for API, SEO, and previews (override wins when set). */
+export function getEffectiveFinalName(data: ProductFormData): string {
+  const o = data.finalNameOverride.trim();
+  if (o) return o;
+  const c = computeProductFinalName(data).trim();
+  return c || data.plant.trim() || 'plant';
+}
+
+/** After an attribute change, drop override if user was on auto or matched the previous auto string. */
+export function syncFinalNameOverrideAfterAttributeChange(
+  prev: ProductFormData,
+  next: ProductFormData
+): ProductFormData {
+  const oldComputed = computeProductFinalName(prev).trim() || prev.plant.trim();
+  const override = prev.finalNameOverride.trim();
+  if (override === '' || override === oldComputed) {
+    return { ...next, finalNameOverride: '' };
+  }
+  return { ...next, finalNameOverride: prev.finalNameOverride };
+}
+
+/** When plant/attributes change, refresh SEO if the user still has the auto-generated text. */
+export function applySeoDefaultsIfStillAuto(prev: ProductFormData, next: ProductFormData): ProductFormData {
+  const oldFn = getEffectiveFinalName(prev);
+  const newFn = getEffectiveFinalName(next);
+  if (oldFn === newFn) return next;
+  const out = { ...next };
+  const oldT = buildDefaultSeoTitle(oldFn);
+  const oldD = buildDefaultSeoDescription(oldFn);
+  if (!prev.seoTitle.trim() || prev.seoTitle === oldT) {
+    out.seoTitle = buildDefaultSeoTitle(newFn);
+  }
+  if (!prev.seoDescription.trim() || prev.seoDescription === oldD) {
+    out.seoDescription = buildDefaultSeoDescription(newFn);
+  }
+  return out;
 }

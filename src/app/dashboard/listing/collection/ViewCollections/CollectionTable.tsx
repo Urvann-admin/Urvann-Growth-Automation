@@ -12,6 +12,9 @@ export interface CollectionRow {
   storeHippoId?: string;
   default_sort_order?: string;
   substore?: unknown;
+  filters?: unknown[];
+  /** Pretty-printed JSON of sync-only / SH fields (sort_order, SEO, etc.) */
+  extraMetadataJson?: string;
 }
 
 interface CollectionTableProps {

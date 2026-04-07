@@ -22,6 +22,8 @@ export interface StepTypeAndRuleProps {
   onRemoveRuleItem: (path: number[]) => void;
   onUpdateRuleItem: (path: number[], updates: Partial<{ field: RuleConditionField; value: string }> | { rule_operator: 'AND' | 'OR' }) => void;
   onClearError: (key: string) => void;
+  /** Omit outer card (e.g. embedded in edit modal) */
+  variant?: 'card' | 'plain';
 }
 
 function useRuleValueOptions(field: RuleConditionField | '') {
@@ -242,6 +244,7 @@ export function StepTypeAndRule({
   onRemoveRuleItem,
   onUpdateRuleItem,
   onClearError,
+  variant = 'card',
 }: StepTypeAndRuleProps) {
   const handleUpdateOperator = useCallback(
     (path: number[], op: 'AND' | 'OR') => {
@@ -250,8 +253,13 @@ export function StepTypeAndRule({
     [onUpdateRuleItem]
   );
 
+  const shell =
+    variant === 'plain'
+      ? 'space-y-4'
+      : 'rounded-xl border border-slate-200 bg-white p-6 shadow-sm';
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className={shell}>
       <div className="flex flex-col md:flex-row gap-4 md:gap-5">
         <Field label="Type" required error={errors.type} className="shrink-0 max-w-[180px]">
           <CustomSelect

@@ -1,5 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useLayoutEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import {
+  buildDefaultSeoTitle,
+  buildDefaultSeoDescription,
+} from '@/app/dashboard/listing/listing-screen/components/ListingProductForm/types';
+import { computeProductDisplayName } from '@/lib/productListingDisplayName';
 import type { ParentMaster } from '@/models/parentMaster';
 import type { ListingSection } from '@/models/listingProduct';
 import type { ImageItem } from '@/models/imageCollection';
@@ -13,15 +18,34 @@ import type {
   ListingSourcedParentOption,
 } from './types';
 import { validateStep } from '@/lib/listingProductValidation';
-import {
-  buildChildHubParentChecksPayload,
-  mergeVerifyResults,
-  passedHubsFromChecks,
-} from '@/lib/childListingHubSku';
+import { passedHubsForChildListingFromPicker } from '@/lib/childListingHubSku';
 import { compareAtFromFirstParentLine } from '@/lib/childListingCompareAt';
 import { normalizeListingImageUrlForMatch } from '@/lib/listingImageUrl';
+import { redirectsArrayToUrlArray, splitRedirectFormValues } from '@/lib/redirectOptionTokens';
 
 const PARENT_LIST_PAGE_LIMIT = 40;
+
+function displayNameForParentSeo(parent: ParentMaster): string {
+  const fromFinal = parent.finalName?.trim();
+  if (fromFinal) return fromFinal;
+  const built = computeProductDisplayName({
+    plant: parent.plant || '',
+    otherNames: parent.otherNames,
+    variety: parent.variety,
+    colour: parent.colour,
+    height: parent.height ?? '',
+    size: parent.size ?? '',
+    potType: parent.potType,
+    type: parent.type,
+    mossStick: parent.mossStick,
+  }).trim();
+  return built || parent.plant?.trim() || 'plant';
+}
+
+/** Child split-screen saves go live as listed; parent flow stays draft until promoted elsewhere. */
+function newListingStatusOnSave(listingMode: ListingScreenMode): 'draft' | 'listed' {
+  return listingMode === 'child' ? 'listed' : 'draft';
+}
 
 async function fetchSellerIdForHub(hub: string): Promise<string> {
   const h = String(hub ?? '').trim();
@@ -94,6 +118,11 @@ function buildChildRowFromImage(img: SelectedImage, serial: number): ProductRow 
     seller: '',
     categories: [],
     collectionIds: [],
+    features: [],
+    redirects: [],
+    seoTitle: '',
+    seoDescription: '',
+    tax: undefined,
     isValid: false,
     isSaved: false,
     validationErrors: { parent: 'Parent selection is required' },
@@ -107,6 +136,7 @@ export function useListingState(section: ListingSection) {
     selectedImages: [],
     productRows: [],
     childContextHub: '',
+    childImageCollectionFilter: '',
     childHubSellerId: '',
     availableParents: [],
     selectedParent: null,
@@ -211,34 +241,44 @@ export function useListingState(section: ListingSection) {
     }
   }, [section]);
 
-  // Load available parents — fetch all, no section filter so pots/zero-inventory items appear
-  const loadAvailableParents = useCallback(async () => {
-    setState((prev) => ({ ...prev, isLoading: true }));
-    try {
-      const response = await fetch(
-        `/api/listing-product/for-parent-picker?section=${encodeURIComponent(section)}&limit=1000`
-      );
-      const result = await response.json();
-      if (result.success) {
-        const data = ((result.data || []) as ListingSourcedParentOption[]).map((o) => ({
-          ...o,
-          listingHub: o.listingHub ?? '',
-        }));
-        setState((prev) => ({
-          ...prev,
-          availableParents: data,
-          isLoading: false,
-        }));
-      } else {
-        toast.error(result.message || 'Failed to load parents from listings');
+  /**
+   * Child listing: pass `hub` so the API returns only parent-type listings for that hub.
+   * Parent listing mode: omit `hub` (full section list; child UI is not used).
+   */
+  const loadAvailableParents = useCallback(
+    async (opts?: { hub?: string }) => {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      try {
+        const params = new URLSearchParams({
+          section,
+          limit: '1000',
+        });
+        const hub = opts?.hub?.trim();
+        if (hub) params.set('hub', hub);
+        const response = await fetch(`/api/listing-product/for-parent-picker?${params}`);
+        const result = await response.json();
+        if (result.success) {
+          const data = ((result.data || []) as ListingSourcedParentOption[]).map((o) => ({
+            ...o,
+            listingHub: o.listingHub ?? '',
+          }));
+          setState((prev) => ({
+            ...prev,
+            availableParents: data,
+            isLoading: false,
+          }));
+        } else {
+          toast.error(result.message || 'Failed to load parents from listings');
+          setState((prev) => ({ ...prev, isLoading: false }));
+        }
+      } catch (error) {
+        console.error('Failed to load listing parents:', error);
+        toast.error('Failed to load parents from listings');
         setState((prev) => ({ ...prev, isLoading: false }));
       }
-    } catch (error) {
-      console.error('Failed to load listing parents:', error);
-      toast.error('Failed to load parents from listings');
-      setState((prev) => ({ ...prev, isLoading: false }));
-    }
-  }, [section]);
+    },
+    [section]
+  );
 
   // Generate unique ID for new rows / parent items
   const generateRowId = useCallback(() => {
@@ -327,6 +367,20 @@ export function useListingState(section: ListingSection) {
         seller: parent.seller || '',
         categories: parent.categories || [],
         collectionIds: parent.collectionIds?.map(id => String(id)) || [],
+        features: String(parent.features || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        redirects: splitRedirectFormValues(String(parent.redirects || '')).slice(0, 1),
+        seoTitle:
+          parent.SEO?.title?.trim() || buildDefaultSeoTitle(displayNameForParentSeo(parent)),
+        seoDescription:
+          parent.SEO?.description?.trim() ||
+          buildDefaultSeoDescription(displayNameForParentSeo(parent)),
+        tax:
+          parent.tax != null && String(parent.tax).trim() !== ''
+            ? Number(parent.tax)
+            : undefined,
         
         // Status (validation runs in effect and will set correct isValid)
         isValid: false,
@@ -590,6 +644,11 @@ export function useListingState(section: ListingSection) {
           ctxHub && prev.childHubSellerId ? { [ctxHub]: prev.childHubSellerId } : {},
         categories: [],
         collectionIds: [],
+        features: [],
+        redirects: [],
+        seoTitle: '',
+        seoDescription: '',
+        tax: undefined,
         
         // Status
         isValid: false,
@@ -604,6 +663,11 @@ export function useListingState(section: ListingSection) {
     });
   }, [generateRowId, getNextSerial]);
 
+  const setChildImageCollectionFilter = useCallback((collectionId: string) => {
+    const id = String(collectionId ?? '').trim();
+    setState((prev) => ({ ...prev, childImageCollectionFilter: id }));
+  }, []);
+
   /** Child listing: change global hub filter; clears parent composition on every row (new hub = new picker scope). */
   const setChildContextHub = useCallback((hub: string) => {
     const h = String(hub ?? '').trim();
@@ -612,6 +676,7 @@ export function useListingState(section: ListingSection) {
       ...prev,
       childContextHub: h,
       childHubSellerId: '',
+      ...(h ? {} : { childImageCollectionFilter: '' }),
       productRows: prev.productRows.map((row) => ({
         ...row,
         parentItems: [],
@@ -626,6 +691,11 @@ export function useListingState(section: ListingSection) {
         description: '',
         categories: [],
         collectionIds: [],
+        features: [],
+        redirects: [],
+        seoTitle: '',
+        seoDescription: '',
+        tax: undefined,
         price: 0,
         inventory_quantity: 0,
         setQuantity: 1,
@@ -786,7 +856,7 @@ export function useListingState(section: ListingSection) {
         const imageUrls = getListingImageUrlsForRow(row, listingMode, allImages);
         const passedHubsChild =
           listingMode === 'child'
-            ? passedHubsFromChecks(row.hubs ?? [], row.parentItems, row.hubParentChecks ?? [])
+            ? passedHubsForChildListingFromPicker(row.hubs ?? [], row.parentItems)
             : [];
         const hubForForm =
           listingMode === 'child'
@@ -813,7 +883,7 @@ export function useListingState(section: ListingSection) {
           categories: row.categories,
           collectionIds: row.collectionIds,
           images: imageUrls,
-          status: 'draft' as const,
+          status: newListingStatusOnSave(listingMode),
         };
 
         const selectedParents = row.parentItems
@@ -834,7 +904,7 @@ export function useListingState(section: ListingSection) {
             passedHubsChild.length === 0
           ) {
             errors.hubParentSku =
-              'No hub has all parent lines listed for this section (see Review for details)';
+              'Complete parent selection for each line for the selected hub(s).';
           }
           const isValid =
             Object.keys(errors).length === 0 &&
@@ -876,7 +946,7 @@ export function useListingState(section: ListingSection) {
         const imageUrls = getListingImageUrlsForRow(row, listingMode, allImages);
         const passedHubsChild =
           listingMode === 'child'
-            ? passedHubsFromChecks(row.hubs ?? [], row.parentItems, row.hubParentChecks ?? [])
+            ? passedHubsForChildListingFromPicker(row.hubs ?? [], row.parentItems)
             : [];
         const hubForForm =
           listingMode === 'child'
@@ -903,7 +973,7 @@ export function useListingState(section: ListingSection) {
           categories: row.categories,
           collectionIds: row.collectionIds,
           images: imageUrls,
-          status: 'draft' as const,
+          status: newListingStatusOnSave(listingMode),
         };
 
         const selectedParents = row.parentItems
@@ -924,7 +994,7 @@ export function useListingState(section: ListingSection) {
             passedHubsChild.length === 0
           ) {
             errors.hubParentSku =
-              'No hub has all parent lines listed for this section (see Review for details)';
+              'Complete parent selection for each line for the selected hub(s).';
           }
           isValid =
             Object.keys(errors).length === 0 &&
@@ -1003,21 +1073,28 @@ export function useListingState(section: ListingSection) {
           compare_at_price: row.compare_at_price ?? undefined,
           sort_order: row.sort_order ?? 3000,
           publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
+          tax: row.tax === 5 || row.tax === 18 ? row.tax : undefined,
           seller: row.seller,
           categories: row.categories,
           collectionIds: row.collectionIds,
+          features: row.features?.length ? row.features : undefined,
+          redirects: row.redirects?.length ? redirectsArrayToUrlArray(row.redirects) : undefined,
+          ...(row.seoTitle?.trim() || row.seoDescription?.trim()
+            ? {
+                SEO: {
+                  title: row.seoTitle?.trim() || '',
+                  description: row.seoDescription?.trim() || '',
+                },
+              }
+            : {}),
           images: rowImageUrls,
-          status: 'draft',
+          status: newListingStatusOnSave(listingMode),
         };
         if (listingMode === 'child') {
-          const passed = passedHubsFromChecks(
-            row.hubs ?? [],
-            row.parentItems,
-            row.hubParentChecks ?? []
-          );
+          const passed = passedHubsForChildListingFromPicker(row.hubs ?? [], row.parentItems);
           const skipped = (row.hubs ?? []).filter((h) => !passed.includes(h));
           if (skipped.length > 0) {
-            hubSkipMessages.push(`Row ${row.serial}: not saved for ${skipped.join(', ')} (parent SKU missing in listings)`);
+            hubSkipMessages.push(`Row ${row.serial}: not saved for ${skipped.join(', ')} (incomplete parent selection)`);
           }
           return passed.map((hub) => ({
             ...basePayload,
@@ -1084,7 +1161,7 @@ export function useListingState(section: ListingSection) {
     const imageUrls = getListingImageUrlsForRow(row, listingMode, allImages);
     const passedHubsChild =
       listingMode === 'child'
-        ? passedHubsFromChecks(row.hubs ?? [], row.parentItems, row.hubParentChecks ?? [])
+        ? passedHubsForChildListingFromPicker(row.hubs ?? [], row.parentItems)
         : [];
     const hubForForm =
       listingMode === 'child'
@@ -1111,7 +1188,7 @@ export function useListingState(section: ListingSection) {
       categories: row.categories,
       collectionIds: row.collectionIds,
       images: imageUrls,
-      status: 'draft' as const,
+      status: newListingStatusOnSave(listingMode),
     };
     const selectedParents = row.parentItems.map((item) => item.parent).filter(Boolean) as ParentMaster[];
     const { errors } = validateStep('review', formData as any, selectedParents, section);
@@ -1128,7 +1205,7 @@ export function useListingState(section: ListingSection) {
         passedHubsChild.length === 0
       ) {
         errors.hubParentSku =
-          'No hub has all parent lines listed for this section (see Review for details)';
+          'Complete parent selection for each line for the selected hub(s).';
       }
       isValid =
         Object.keys(errors).length === 0 &&
@@ -1173,11 +1250,22 @@ export function useListingState(section: ListingSection) {
         compare_at_price: row.compare_at_price ?? undefined,
         sort_order: row.sort_order ?? 3000,
         publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
+        tax: row.tax === 5 || row.tax === 18 ? row.tax : undefined,
         seller: row.seller,
         categories: row.categories,
         collectionIds: row.collectionIds,
+        features: row.features?.length ? row.features : undefined,
+        redirects: row.redirects?.length ? redirectsArrayToUrlArray(row.redirects) : undefined,
+        ...(row.seoTitle?.trim() || row.seoDescription?.trim()
+          ? {
+              SEO: {
+                title: row.seoTitle?.trim() || '',
+                description: row.seoDescription?.trim() || '',
+              },
+            }
+          : {}),
         images: imageUrls,
-        status: 'draft',
+        status: newListingStatusOnSave(listingMode),
       };
       const hubsToSave = listingMode === 'child' ? passedHubsChild : row.hubs ?? [];
       const skipped =
@@ -1259,94 +1347,14 @@ export function useListingState(section: ListingSection) {
       ...prev,
       selectedImages: [],
       productRows: [],
-      ...(mode === 'child' ? { childContextHub: '', childHubSellerId: '' } : {}),
+      ...(mode === 'child'
+        ? { childContextHub: '', childHubSellerId: '', childImageCollectionFilter: '' }
+        : {}),
     }));
 
     // Reset all images to untagged
     setAllImages(prev => prev.map(img => ({ ...img, isTagged: false })));
   }, [loadParentListingPage]);
-
-  // Debounced hub × parent SKU existence checks (child listing only)
-  useEffect(() => {
-    if (state.listingMode !== 'child') return;
-
-    const timer = setTimeout(() => {
-      const rows = stateRef.current.productRows;
-      const byRowChecks = new Map<string, { hub: string; canonicalParentSku: string }[]>();
-      const dedupe = new Map<string, { hub: string; canonicalParentSku: string }>();
-
-      for (const row of rows) {
-        const p = buildChildHubParentChecksPayload(section, row.hubs ?? [], row.parentItems);
-        byRowChecks.set(row.id, p.checks);
-        for (const c of p.checks) {
-          dedupe.set(`${c.hub}\0${c.canonicalParentSku}`, c);
-        }
-      }
-
-      void (async () => {
-        if (dedupe.size === 0) {
-          setState((prev) => ({
-            ...prev,
-            productRows: prev.productRows.map((r) => ({ ...r, hubParentChecks: [] })),
-          }));
-          return;
-        }
-
-        try {
-          const res = await fetch('/api/listing-product/verify-child-hub-parents', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              section,
-              checks: Array.from(dedupe.values()),
-            }),
-          });
-          const json = await res.json();
-          if (!json.success || !Array.isArray(json.data)) {
-            console.error('[verify-child-hub-parents]', json.message);
-            return;
-          }
-
-          const resultByKey = new Map<
-            string,
-            { hub: string; canonicalParentSku: string; expectedSku: string; exists: boolean }
-          >(
-            json.data.map(
-              (r: {
-                hub: string;
-                canonicalParentSku: string;
-                expectedSku: string;
-                exists: boolean;
-              }) => [`${r.hub}\0${r.canonicalParentSku}`, r]
-            )
-          );
-
-          setState((prev) => ({
-            ...prev,
-            productRows: prev.productRows.map((r) => {
-              const checks = byRowChecks.get(r.id) ?? [];
-              if (checks.length === 0) {
-                return { ...r, hubParentChecks: [] };
-              }
-              const apiSlice = checks
-                .map((c) => resultByKey.get(`${c.hub}\0${c.canonicalParentSku}`))
-                .filter(Boolean) as {
-                hub: string;
-                canonicalParentSku: string;
-                expectedSku: string;
-                exists: boolean;
-              }[];
-              return { ...r, hubParentChecks: mergeVerifyResults(apiSlice) };
-            }),
-          }));
-        } catch (e) {
-          console.error('verify-child-hub-parents', e);
-        }
-      })();
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [state.listingMode, state.productRows, section]);
 
   // Re-validate rows when row content or images change (keeps UI "Valid" in sync with save validation)
   const prevValidationInputRef = useRef<string>('');
@@ -1362,7 +1370,6 @@ export function useListingState(section: ListingSection) {
         parentItems: r.parentItems,
         plant: r.plant,
         hubs: r.hubs,
-        hubParentChecks: r.hubParentChecks,
         seller: r.seller,
         sellersByHub: r.sellersByHub,
         categories: r.categories,
@@ -1380,9 +1387,24 @@ export function useListingState(section: ListingSection) {
 
   // Load data on mount
   useEffect(() => {
-    loadImageCollections();
-    loadAvailableParents();
-  }, [loadImageCollections, loadAvailableParents]);
+    void loadImageCollections();
+  }, [loadImageCollections]);
+
+  /** Child: parent picker options = listed parents for the selected hub only. Parent mode: load full section list. */
+  useEffect(() => {
+    if (state.listingMode === 'child') {
+      const h = state.childContextHub?.trim();
+      if (!h) {
+        setState((prev) =>
+          prev.availableParents.length === 0 ? prev : { ...prev, availableParents: [] }
+        );
+        return;
+      }
+      void loadAvailableParents({ hub: h });
+      return;
+    }
+    void loadAvailableParents();
+  }, [section, state.listingMode, state.childContextHub, loadAvailableParents]);
 
   // Child listing: one row per photo from completed image collections (exclude listed + user-skipped).
   // Photo rows are hidden until a global hub filter is selected (`childContextHub`).
@@ -1412,7 +1434,12 @@ export function useListingState(section: ListingSection) {
       }
 
       const skipped = skippedChildImageUrlsRef.current;
-      const imgs = allImages.filter((img) => !skipped.has(img.url));
+      const collectionFilter = prev.childImageCollectionFilter?.trim() ?? '';
+      const imgs = allImages.filter((img) => {
+        if (skipped.has(img.url)) return false;
+        if (collectionFilter && String(img.collectionId) !== collectionFilter) return false;
+        return true;
+      });
       const hub = prev.childContextHub.trim();
 
       const imageRows: ProductRow[] = imgs.map((img, idx) => {
@@ -1473,7 +1500,13 @@ export function useListingState(section: ListingSection) {
 
       return { ...prev, productRows: nextRows };
     });
-  }, [allImages, state.listingMode, state.childContextHub, state.childHubSellerId]);
+  }, [
+    allImages,
+    state.listingMode,
+    state.childContextHub,
+    state.childHubSellerId,
+    state.childImageCollectionFilter,
+  ]);
 
   // Merge allImages with selectedImages state for the ImagePanel
   const mergedImages = allImages.map(img => {
@@ -1504,6 +1537,7 @@ export function useListingState(section: ListingSection) {
       loadAvailableParents,
       setListingMode,
       setChildContextHub,
+      setChildImageCollectionFilter,
       loadMoreParentListingPage,
       refreshParentInRows,
       uploadParentPhotoAndRefresh,
