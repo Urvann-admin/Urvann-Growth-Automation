@@ -30,7 +30,10 @@ import type {
 import type { ParentMaster } from '@/models/parentMaster';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { CustomSelect } from '@/app/dashboard/listing/components/CustomSelect';
-import { compareAtFromFirstParentLine } from '@/lib/childListingCompareAt';
+import { compareAtFromCalculatedChildListingPrice } from '@/lib/childListingCompareAt';
+import { childListingSetQuantityFromParentItems } from '@/lib/childListingSetQuantity';
+import { buildChildListingAutoProductName } from '@/lib/childListingProductName';
+import { mergeParentDescriptionsForChildListing } from '@/lib/childListingDescription';
 import { computeProductDisplayName } from '@/lib/productListingDisplayName';
 import { redirectOptionTokenToUrl } from '@/lib/redirectOptionTokens';
 import {
@@ -68,8 +71,61 @@ function parseCommaList(s: string | undefined): string[] {
   return s.split(',').map((x) => x.trim()).filter(Boolean);
 }
 
-/** Full product label for SEO defaults: row fields, else first parent / finalName. */
-function rowDisplayNameForSeo(row: ProductRow): string {
+/** Child listing: same label as product name snapshot (plant or auto-composed from parents). */
+function childListingPreviewDisplayName(row: ProductRow): string {
+  const trimmed = row.plant?.trim();
+  if (trimmed) return trimmed;
+  const auto = buildChildListingAutoProductName(row);
+  if (auto && auto !== '—') return auto;
+  return 'plant';
+}
+
+/**
+ * When parent line(s) change, refresh default SEO if the user has not customized it.
+ * Uses combined child name (not the first parent alone). Handles stale `row.plant` before the
+ * auto-sync effect runs after parent changes.
+ */
+function childListingSeoPatch(
+  rowBefore: ProductRow,
+  rowAfter: ProductRow
+): Partial<Pick<ProductRow, 'seoTitle' | 'seoDescription'>> | undefined {
+  const plantBefore = rowBefore.plant?.trim() ?? '';
+  const autoBefore = buildChildListingAutoProductName(rowBefore);
+  const autoAfter = buildChildListingAutoProductName(rowAfter);
+
+  const prevSeed =
+    plantBefore || (autoBefore && autoBefore !== '—' ? autoBefore : 'plant');
+
+  const nameWasSynced =
+    !plantBefore ||
+    (autoBefore && autoBefore !== '—' && plantBefore === autoBefore);
+
+  const newSeed = nameWasSynced
+    ? autoAfter && autoAfter !== '—'
+      ? autoAfter
+      : prevSeed
+    : plantBefore || (autoAfter && autoAfter !== '—' ? autoAfter : 'plant');
+
+  if (newSeed === prevSeed) return undefined;
+
+  const oldT = buildDefaultSeoTitle(prevSeed);
+  const oldD = buildDefaultSeoDescription(prevSeed);
+  const stillAuto =
+    (!rowBefore.seoTitle?.trim() || rowBefore.seoTitle.trim() === oldT) &&
+    (!rowBefore.seoDescription?.trim() || rowBefore.seoDescription.trim() === oldD);
+  if (!stillAuto) return undefined;
+
+  return {
+    seoTitle: buildDefaultSeoTitle(newSeed),
+    seoDescription: buildDefaultSeoDescription(newSeed),
+  };
+}
+
+/** Full product label for SEO defaults: child = combined listing name; parent = row / first parent. */
+function rowDisplayNameForSeo(row: ProductRow, listingMode: ListingScreenMode): string {
+  if (listingMode === 'child') {
+    return childListingPreviewDisplayName(row);
+  }
   const fromRow = computeProductDisplayName({
     plant: row.plant,
     otherNames: row.otherNames,
@@ -1103,9 +1159,13 @@ export function ProductTable({
     );
   }
 
+  // Child listing: show only the queue head; next row appears after Save or Remove.
+  const rowsToRender = listingMode === 'child' ? productRows.slice(0, 1) : productRows;
+
   return (
     <div className="space-y-6">
-      {productRows.map((row, index) => {
+      {rowsToRender.map((row, sliceIndex) => {
+        const index = listingMode === 'child' ? 0 : sliceIndex;
         const displayImage = resolveDisplayImage(row, index, listingMode, allImages, poolForChild);
         return (
           <ProductCard
@@ -1217,6 +1277,8 @@ function ProductCard({
 }: ProductCardProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  /** Child listing: after user edits product name on step 0, stop auto-overwriting `plant`. */
+  const childListingNameTouchedRef = useRef(false);
 
   const imagesForPicker =
     listingMode === 'child' ? (childPhotoPool ?? allImages) : allImages;
@@ -1248,6 +1310,64 @@ function ProductCard({
       setSkuPreviews(Object.fromEntries(results.map((r) => [r.hub, r.sku])));
     });
   }, [row.sku, row.plant, row.setQuantity, selectedHubs.join(',')]);
+
+  useEffect(() => {
+    childListingNameTouchedRef.current = false;
+  }, [row.id]);
+
+  useEffect(() => {
+    if (listingMode !== 'child') return;
+    if (childListingNameTouchedRef.current) return;
+    const auto = buildChildListingAutoProductName(row);
+    if (!auto || auto === '—') {
+      if (row.plant?.trim()) onUpdateRow(row.id, { plant: '' });
+      return;
+    }
+    if (row.plant === auto) return;
+    onUpdateRow(row.id, { plant: auto });
+  }, [
+    listingMode,
+    row.id,
+    row.parentItems,
+    row.size,
+    row.type,
+    row.setQuantity,
+    row.plant,
+    onUpdateRow,
+  ]);
+
+  // If SEO still matches defaults built from parent line 1 only, but the listing name is multi-parent, align SEO.
+  useEffect(() => {
+    if (listingMode !== 'child') return;
+    const withParent = row.parentItems.filter((i) => i.parent);
+    if (withParent.length < 2) return;
+    const display = childListingPreviewDisplayName(row);
+    const expectedT = buildDefaultSeoTitle(display);
+    const expectedD = buildDefaultSeoDescription(display);
+    if (row.seoTitle?.trim() === expectedT && row.seoDescription?.trim() === expectedD) return;
+    const p0 = row.parentItems[0]?.parent;
+    if (!p0) return;
+    const wrongSeed = seoDisplayFromParentAndRow(p0, row);
+    const wrongT = buildDefaultSeoTitle(wrongSeed);
+    const wrongD = buildDefaultSeoDescription(wrongSeed);
+    if (row.seoTitle?.trim() !== wrongT || row.seoDescription?.trim() !== wrongD) return;
+    onUpdateRow(row.id, { seoTitle: expectedT, seoDescription: expectedD });
+  }, [
+    listingMode,
+    row.id,
+    row.parentItems,
+    row.plant,
+    row.size,
+    row.type,
+    row.setQuantity,
+    row.seoTitle,
+    row.seoDescription,
+    row.otherNames,
+    row.variety,
+    row.colour,
+    row.height,
+    onUpdateRow,
+  ]);
 
   // Per-card rule-based categories (child: review step; parent: whenever plant is set)
   const [ruleBasedCategories, setRuleBasedCategories] = useState<string[]>([]);
@@ -1298,33 +1418,22 @@ function ProductCard({
     return { price: totalPrice, inventory: minInventory === Infinity ? 0 : minInventory };
   };
 
-  const calcSetQuantity = (items: ParentItemRow[]): number =>
-    items.reduce((sum, i) => sum + (i.quantity || 0), 0) || 1;
-
-  const getFinalName = (): string => {
-    const parentNames = row.parentItems
-      .filter((item) => item.parent)
-      .map((item) => {
-        const name = String((item.parent!.finalName || item.parent!.plant || '').trim());
-        const idx = name.toLowerCase().indexOf(' in ');
-        return idx >= 0 ? name.slice(0, idx).trim() : name;
-      })
-      .filter(Boolean);
-    const size = typeof row.size === 'number' ? row.size : Number(row.size);
-    const setQty = row.setQuantity ?? 1;
-    if (parentNames.length === 0) {
-      const fallbackParts = [row.plant];
-      if (size) fallbackParts.push(`in ${size} inch`);
-      if (row.type) fallbackParts.push(row.type);
-      return row.plant ? fallbackParts.join(' ').trim() || '—' : '—';
+  const calcSetQuantity = (items: ParentItemRow[]): number => {
+    if (listingMode === 'child') {
+      return childListingSetQuantityFromParentItems(items);
     }
-    const parts = [parentNames.length === 1 ? parentNames[0] : parentNames.join(' & ')];
-    if (size) parts.push(`in ${size} inch`);
-    if (row.type) parts.push(row.type);
-    const base = parts.join(' ');
-    if (setQty > 1) return `Set of ${setQty} ${base}`;
-    return base;
+    return items.reduce((sum, i) => sum + (i.quantity || 0), 0) || 1;
   };
+
+  /** Listing product name: saved `plant`, or auto preview when empty. */
+  const getFinalName = (): string => {
+    const trimmed = row.plant?.trim();
+    if (trimmed) return trimmed;
+    const auto = buildChildListingAutoProductName(row);
+    return auto && auto !== '—' ? auto : '—';
+  };
+
+  const autoProductNamePlaceholder = buildChildListingAutoProductName(row);
 
   const stepComplete = (step: number): boolean => {
     switch (step) {
@@ -1369,6 +1478,12 @@ function ProductCard({
     const cleanedItems = updatedItems.filter((item) => item.parentSku && item.quantity > 0);
     const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: cleanedItems });
     const setQty = calcSetQuantity(cleanedItems);
+    const rowAfter: ProductRow = {
+      ...row,
+      parentItems: cleanedItems,
+      setQuantity: setQty,
+      quantity: setQty,
+    };
     onUpdateRow(row.id, {
       parentItems: cleanedItems,
       parentSkus: cleanedItems.map((i) => i.parentSku),
@@ -1377,7 +1492,11 @@ function ProductCard({
       setQuantity: setQty,
       quantity: setQty,
       ...(listingMode === 'child'
-        ? { compare_at_price: compareAtFromFirstParentLine(cleanedItems) }
+        ? {
+            compare_at_price: compareAtFromCalculatedChildListingPrice(price),
+            description: mergeParentDescriptionsForChildListing(cleanedItems),
+            ...childListingSeoPatch(row, rowAfter),
+          }
         : {}),
     });
   };
@@ -1409,12 +1528,15 @@ function ProductCard({
     onUpdateRow(row.id, {
       parentItems: [newItem],
       parentSkus: [parent.sku || ''],
-      plant: parent.plant || row.plant,
+      ...(listingMode !== 'child' ? { plant: parent.plant || row.plant } : {}),
       otherNames: parent.otherNames || row.otherNames,
       variety: parent.variety || row.variety,
       colour: parent.colour || row.colour,
       height: parent.height ?? row.height,
-      description: parent.description || row.description || '',
+      description:
+        listingMode === 'child'
+          ? mergeParentDescriptionsForChildListing([newItem])
+          : parent.description || row.description || '',
       hubs: (row.hubs ?? []).length > 0 ? row.hubs : [],
       seller: listingMode === 'child' ? row.seller : row.seller || parent.seller || '',
       categories: Array.from(new Set([...(row.categories || []), ...(parent.categories || [])])),
@@ -1424,19 +1546,35 @@ function ProductCard({
       features: combinedFeaturesFromParentItems([newItem]),
       redirects: combinedRedirectsFromParents([newItem]),
       tax: maxTaxFromParentItems([newItem]),
-      seoTitle:
-        parent.SEO?.title?.trim() ||
-        row.seoTitle?.trim() ||
-        buildDefaultSeoTitle(seoDisplayFromParentAndRow(parent, row)),
-      seoDescription:
-        parent.SEO?.description?.trim() ||
-        row.seoDescription?.trim() ||
-        buildDefaultSeoDescription(seoDisplayFromParentAndRow(parent, row)),
+      ...(listingMode === 'child'
+        ? (() => {
+            const rowForSeo: ProductRow = {
+              ...row,
+              parentItems: [newItem],
+              setQuantity: setQty,
+              quantity: setQty,
+            };
+            const seed = childListingPreviewDisplayName(rowForSeo);
+            return {
+              seoTitle: buildDefaultSeoTitle(seed),
+              seoDescription: buildDefaultSeoDescription(seed),
+            };
+          })()
+        : {
+            seoTitle:
+              parent.SEO?.title?.trim() ||
+              row.seoTitle?.trim() ||
+              buildDefaultSeoTitle(seoDisplayFromParentAndRow(parent, row)),
+            seoDescription:
+              parent.SEO?.description?.trim() ||
+              row.seoDescription?.trim() ||
+              buildDefaultSeoDescription(seoDisplayFromParentAndRow(parent, row)),
+          }),
       price,
       inventory_quantity: inventory,
       setQuantity: setQty,
       quantity: setQty,
-      ...(listingMode === 'child' ? { compare_at_price: compareAtFromFirstParentLine([newItem]) } : {}),
+      ...(listingMode === 'child' ? { compare_at_price: compareAtFromCalculatedChildListingPrice(price) } : {}),
     });
   };
 
@@ -1452,6 +1590,12 @@ function ProductCard({
     });
     const { price, inventory } = recalculatePriceAndInventory({ ...row, parentItems: updatedItems });
     const setQty = calcSetQuantity(updatedItems);
+    const rowAfter: ProductRow = {
+      ...row,
+      parentItems: updatedItems,
+      setQuantity: setQty,
+      quantity: setQty,
+    };
     onUpdateRow(row.id, {
       parentItems: updatedItems,
       parentSkus: updatedItems.map((i) => i.parentSku),
@@ -1465,7 +1609,11 @@ function ProductCard({
       setQuantity: setQty,
       quantity: setQty,
       ...(listingMode === 'child'
-        ? { compare_at_price: compareAtFromFirstParentLine(updatedItems) }
+        ? {
+            compare_at_price: compareAtFromCalculatedChildListingPrice(price),
+            description: mergeParentDescriptionsForChildListing(updatedItems),
+            ...childListingSeoPatch(row, rowAfter),
+          }
         : {}),
     });
   };
@@ -1489,29 +1637,36 @@ function ProductCard({
       const baseUpdates: Partial<ProductRow> =
         itemIndex === 0
           ? {
-              plant: parent.plant || row.plant,
+              ...(listingMode !== 'child' ? { plant: parent.plant || row.plant } : {}),
               otherNames: parent.otherNames || row.otherNames,
               variety: parent.variety || row.variety,
               colour: parent.colour || row.colour,
               height: parent.height ?? row.height,
-              description: parent.description || row.description || '',
+              ...(listingMode !== 'child'
+                ? { description: parent.description || row.description || '' }
+                : {}),
               hubs: (row.hubs ?? []).length > 0 ? row.hubs : [],
               seller: listingMode === 'child' ? row.seller : row.seller || parent.seller || '',
               categories: Array.from(combinedCategories),
               collectionIds: Array.from(combinedCollectionIds),
-              seoTitle:
-                parent.SEO?.title?.trim() ||
-                row.seoTitle?.trim() ||
-                buildDefaultSeoTitle(seoDisplayFromParentAndRow(parent, row)),
-              seoDescription:
-                parent.SEO?.description?.trim() ||
-                row.seoDescription?.trim() ||
-                buildDefaultSeoDescription(seoDisplayFromParentAndRow(parent, row)),
+              ...(listingMode === 'parent'
+                ? {
+                    seoTitle:
+                      parent.SEO?.title?.trim() ||
+                      row.seoTitle?.trim() ||
+                      buildDefaultSeoTitle(seoDisplayFromParentAndRow(parent, row)),
+                    seoDescription:
+                      parent.SEO?.description?.trim() ||
+                      row.seoDescription?.trim() ||
+                      buildDefaultSeoDescription(seoDisplayFromParentAndRow(parent, row)),
+                  }
+                : {}),
             }
           : { categories: Array.from(combinedCategories), collectionIds: Array.from(combinedCollectionIds) };
       const tempRow: ProductRow = { ...row, parentItems: updatedItems, ...baseUpdates };
       const { price, inventory } = recalculatePriceAndInventory(tempRow);
       const setQty = calcSetQuantity(tempRow.parentItems);
+      const rowAfterForSeo: ProductRow = { ...tempRow, setQuantity: setQty, quantity: setQty };
       onUpdateRow(row.id, {
         ...baseUpdates,
         parentItems: tempRow.parentItems,
@@ -1524,7 +1679,11 @@ function ProductCard({
         setQuantity: setQty,
         quantity: setQty,
         ...(listingMode === 'child'
-          ? { compare_at_price: compareAtFromFirstParentLine(tempRow.parentItems) }
+          ? {
+              compare_at_price: compareAtFromCalculatedChildListingPrice(price),
+              description: mergeParentDescriptionsForChildListing(updatedItems),
+              ...childListingSeoPatch(row, rowAfterForSeo),
+            }
           : {}),
       });
     } else {
@@ -1780,7 +1939,7 @@ function ProductCard({
                   value={row.seoTitle ?? ''}
                   onChange={(v) => onUpdateRow(row.id, { seoTitle: String(v) })}
                   label="SEO title"
-                  placeholder={buildDefaultSeoTitle(rowDisplayNameForSeo(row))}
+                  placeholder={buildDefaultSeoTitle(rowDisplayNameForSeo(row, listingMode))}
                 />
                 <div>
                   <label className="block text-[10px] font-medium text-slate-500 mb-1">SEO description</label>
@@ -1789,7 +1948,7 @@ function ProductCard({
                     onChange={(e) => onUpdateRow(row.id, { seoDescription: e.target.value })}
                     rows={2}
                     className="w-full px-2.5 py-2 text-[11px] border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none resize-y min-h-[3.5rem]"
-                    placeholder={buildDefaultSeoDescription(rowDisplayNameForSeo(row))}
+                    placeholder={buildDefaultSeoDescription(rowDisplayNameForSeo(row, listingMode))}
                   />
                 </div>
               </div>
@@ -1873,11 +2032,6 @@ function ProductCard({
               <div className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-800">Parent Products</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Choose a base parent from an existing listing on{' '}
-                    <span className="font-medium text-[#E6007A]">{childContextHub || '—'}</span>
-                    ; then set quantities
-                  </p>
                 </div>
                 {row.validationErrors.contextHub && (
                   <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
@@ -1940,6 +2094,23 @@ function ProductCard({
                     </div>
                   ))}
                 </div>
+                {listingMode === 'child' && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <InlineInput
+                      label="Product name"
+                      value={row.plant ?? ''}
+                      onChange={(v) => {
+                        childListingNameTouchedRef.current = true;
+                        onUpdateRow(row.id, { plant: String(v) });
+                      }}
+                      placeholder={
+                        autoProductNamePlaceholder !== '—'
+                          ? autoProductNamePlaceholder
+                          : 'Select a parent above to auto-generate'
+                      }
+                    />
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={handleAddParentItem}
@@ -2018,13 +2189,6 @@ function ProductCard({
                     placeholder="3000"
                     label="Sort Order"
                   />
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1.5">Set Quantity</label>
-                    <div className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-700 font-medium">
-                      {row.setQuantity ?? 1}
-                      <span className="ml-2 text-xs text-slate-400 font-normal">(auto from parents)</span>
-                    </div>
-                  </div>
                 </div>
               </div>
             )}
@@ -2075,7 +2239,7 @@ function ProductCard({
                 <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-3">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Listing snapshot (read-only)</p>
                   <div className="grid grid-cols-2 gap-3">
-                    <ReviewField label="Generated name" value={getFinalName()} />
+                    <ReviewField label="Product name" value={getFinalName()} />
                     <ReviewField
                       label="Generated SKU (per hub)"
                       value={
@@ -2293,7 +2457,7 @@ function ProductCard({
                       value={row.seoTitle ?? ''}
                       onChange={(e) => onUpdateRow(row.id, { seoTitle: e.target.value })}
                       className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none"
-                      placeholder={buildDefaultSeoTitle(rowDisplayNameForSeo(row))}
+                      placeholder={buildDefaultSeoTitle(rowDisplayNameForSeo(row, listingMode))}
                     />
                   </div>
 
@@ -2307,7 +2471,7 @@ function ProductCard({
                       onChange={(e) => onUpdateRow(row.id, { seoDescription: e.target.value })}
                       rows={3}
                       className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:ring-2 focus:ring-pink-500 focus:border-pink-500 outline-none resize-y min-h-[4rem]"
-                      placeholder={buildDefaultSeoDescription(rowDisplayNameForSeo(row))}
+                      placeholder={buildDefaultSeoDescription(rowDisplayNameForSeo(row, listingMode))}
                     />
                   </div>
                 </div>

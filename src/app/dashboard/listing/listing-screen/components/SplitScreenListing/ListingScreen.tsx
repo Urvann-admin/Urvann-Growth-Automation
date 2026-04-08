@@ -68,7 +68,9 @@ export function ListingScreen({ section, onSuccess }: ListingScreenProps) {
           <Box className="w-5 h-5 text-[#E6007A] shrink-0" />
           <h2 className="text-sm font-semibold text-slate-800">Products</h2>
           <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-            {state.productRows.length} {state.productRows.length === 1 ? 'item' : 'items'}
+            {state.listingMode === 'child' && state.productRows.length > 0
+              ? `1 of ${state.productRows.length} in queue`
+              : `${state.productRows.length} ${state.productRows.length === 1 ? 'item' : 'items'}`}
           </span>
         </div>
 
@@ -89,20 +91,22 @@ export function ListingScreen({ section, onSuccess }: ListingScreenProps) {
             <RotateCcw className="w-4 h-4" />
             Clear
           </button>
-          <button
-            onClick={handleSaveAll}
-            disabled={
-              savingAll ||
-              state.isSaving ||
-              state.productRows.length === 0 ||
-              !childHubReady
-            }
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
-            style={{ backgroundColor: '#E6007A' }}
-          >
-            {savingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save All
-          </button>
+          {state.listingMode !== 'child' ? (
+            <button
+              onClick={handleSaveAll}
+              disabled={
+                savingAll ||
+                state.isSaving ||
+                state.productRows.length === 0 ||
+                !childHubReady
+              }
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm hover:shadow-md"
+              style={{ backgroundColor: '#E6007A' }}
+            >
+              {savingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save All
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -135,8 +139,8 @@ export function ListingScreen({ section, onSuccess }: ListingScreenProps) {
             />
           </div>
           <p className="text-xs text-slate-500 pb-0.5 max-w-2xl min-w-[min(100%,16rem)]">
-            Photo rows load after you choose a hub. Optionally narrow photos by completed image collection.
-            Parent options are limited to listing products for that hub. Changing the hub clears parent selections on all rows.
+            One product is shown at a time; after you save (or remove) a row, the next photo in the queue appears.
+            Optionally narrow photos by collection. Parent options match the selected hub; changing the hub clears parent selections.
           </p>
         </div>
 

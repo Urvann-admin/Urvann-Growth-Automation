@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ModalContainer, ModalHeader, ModalFooter, ModalSection } from '../../shared';
 import { Notification } from '@/components/ui/Notification';
 import { CustomSelect, type SelectOption } from '@/app/dashboard/listing/components/CustomSelect';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
+import { inferHubFromParentRecord } from '@/lib/inferHubFromParent';
+
+type ResolvedProductType = 'parent' | 'growing_product' | 'consumable';
 
 interface ParentFromApi {
   _id: string;
@@ -12,6 +16,8 @@ interface ParentFromApi {
   finalName?: string;
   productCode?: string;
   vendor_id?: string;
+  /** Hub for hub-scoped parent rows; SKU may include this hub’s letter prefix. */
+  hub?: string;
 }
 
 function displayProductName(p: ParentFromApi): string {
@@ -27,13 +33,14 @@ function displayProductName(p: ParentFromApi): string {
 const NO_PRODUCT = '__no_product__';
 
 export interface AddInvoiceFormState {
-  billNumber: string;
+  hub: string;
   productCode: string;
   productName: string;
   quantity: string;
   amount: string;
   parentSku: string;
-  seller: string;
+  resolvedProductType: ResolvedProductType | '';
+  vendor: string;
   listing: string;
   revival: string;
   growth: string;
@@ -41,13 +48,14 @@ export interface AddInvoiceFormState {
 }
 
 const emptyForm: AddInvoiceFormState = {
-  billNumber: '',
+  hub: '',
   productCode: '',
   productName: '',
   quantity: '',
   amount: '',
   parentSku: '',
-  seller: '',
+  resolvedProductType: '',
+  vendor: '',
   listing: '',
   revival: '',
   growth: '',
@@ -60,6 +68,48 @@ interface AddInvoiceFormModalProps {
   onSuccess: () => void;
 }
 
+async function fetchResolveParentSku(
+  productCode: string,
+  hub: string
+): Promise<{
+  ok: boolean;
+  parentSku?: string;
+  productType?: ResolvedProductType;
+  vendorId?: string | null;
+  message?: string;
+}> {
+  const code = productCode.trim();
+  const h = hub.trim();
+  if (!code || !h) return { ok: false, message: 'Product code and hub are required.' };
+  const res = await fetch(
+    `/api/purchase-master/resolve-parent-sku?productCode=${encodeURIComponent(code)}&hub=${encodeURIComponent(h)}`
+  );
+  const data = await res.json();
+  if (!res.ok || !data.success) {
+    return { ok: false, message: String(data.message ?? 'Could not resolve parent SKU') };
+  }
+  return {
+    ok: true,
+    parentSku: String(data.parentSku ?? '').trim(),
+    productType: data.productType as ResolvedProductType,
+    vendorId: data.vendorId ?? null,
+  };
+}
+
+function applyTypeDefaultsForProductType(
+  productType: ResolvedProductType | '',
+  quantity: number
+): Pick<AddInvoiceFormState, 'listing' | 'revival' | 'growth' | 'consumers'> {
+  if (quantity <= 0) {
+    return { listing: '', revival: '', growth: '', consumers: '' };
+  }
+  const q = String(quantity);
+  if (productType === 'growing_product' || productType === 'consumable') {
+    return { listing: '0', revival: '0', growth: q, consumers: '0' };
+  }
+  return { listing: q, revival: '0', growth: '0', consumers: '0' };
+}
+
 export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFormModalProps) {
   const [form, setForm] = useState<AddInvoiceFormState>(emptyForm);
   const [parents, setParents] = useState<ParentFromApi[]>([]);
@@ -69,6 +119,11 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
   >([]);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  /** Hub came from selected parent’s `hub` field — user cannot change (SKU is hub-scoped). */
+  const [hubLockedFromParent, setHubLockedFromParent] = useState(false);
+  const formRef = useRef(form);
+  formRef.current = form;
 
   const fetchParents = useCallback(async () => {
     try {
@@ -78,7 +133,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
         setParents(json.data);
       }
     } catch {
-      setMessage({ type: 'error', text: 'Failed to load parent SKUs' });
+      setMessage({ type: 'error', text: 'Failed to load products' });
     }
   }, []);
 
@@ -101,27 +156,60 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
     return [{ value: NO_PRODUCT, label: 'Select product…' }, ...opts];
   }, [parents]);
 
-  /** All unique SKUs from parent master (Parent SKU dropdown; stays in sync when picking product name). */
-  const parentOptions = useMemo(() => {
-    const set = new Set<string>();
-    parents.forEach((p: ParentFromApi) => {
-      if (p.sku && String(p.sku).trim()) set.add(String(p.sku).trim());
-    });
-    return Array.from(set)
-      .sort()
-      .map((sku) => ({ value: sku, label: sku }));
-  }, [parents]);
+  const resolveAndApply = useCallback(
+    async (productCode: string, hub: string, quantityStr: string) => {
+      const h = hub.trim();
+      if (!productCode.trim() || !h) {
+        setForm((f) => ({
+          ...f,
+          parentSku: '',
+          resolvedProductType: '',
+        }));
+        return;
+      }
+      setResolving(true);
+      try {
+        const result = await fetchResolveParentSku(productCode, h);
+        if (!result.ok) {
+          setForm((f) => ({
+            ...f,
+            parentSku: '',
+            resolvedProductType: '',
+          }));
+          setMessage({ type: 'error', text: result.message ?? 'Resolve failed' });
+          return;
+        }
+        const qty = Math.max(0, Math.floor(Number(quantityStr) || 0));
+        const typePatch = applyTypeDefaultsForProductType(result.productType ?? 'parent', qty);
+        const vid = result.vendorId?.trim();
+        setForm((f) => ({
+          ...f,
+          parentSku: result.parentSku ?? '',
+          resolvedProductType: (result.productType ?? 'parent') as ResolvedProductType,
+          ...typePatch,
+          ...(vid && sellers.some((s) => s._id === vid) ? { vendor: vid } : {}),
+        }));
+        setMessage(null);
+      } finally {
+        setResolving(false);
+      }
+    },
+    [sellers]
+  );
 
   const applyParentSelection = useCallback(
-    (parentId: string) => {
+    async (parentId: string) => {
       if (!parentId || parentId === NO_PRODUCT) {
         setSelectedParentId('');
+        setHubLockedFromParent(false);
         setForm((f) => ({
           ...f,
           productName: '',
           productCode: '',
           parentSku: '',
-          seller: '',
+          resolvedProductType: '',
+          vendor: '',
+          hub: '',
         }));
         return;
       }
@@ -132,17 +220,26 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       const productName = displayProductName(p) || sku;
       const productCode = (p.productCode?.trim() || sku).trim();
       const vid = p.vendor_id?.trim();
-      const seller =
-        vid && sellers.some((s) => s._id === vid) ? vid : '';
+      const vendorGuess = vid && sellers.some((s) => s._id === vid) ? vid : '';
+      const inferredHub = inferHubFromParentRecord(p);
+      const lockHub = !!String(p.hub ?? '').trim();
+      setHubLockedFromParent(lockHub);
+
+      const qty = formRef.current.quantity;
       setForm((f) => ({
         ...f,
         productName,
         productCode,
-        parentSku: sku,
-        seller,
+        vendor: vendorGuess || f.vendor,
+        hub: inferredHub ?? '',
       }));
+
+      const hubToUse = (inferredHub ?? '').trim();
+      if (hubToUse) {
+        await resolveAndApply(productCode, hubToUse, qty);
+      }
     },
-    [parents, sellers]
+    [parents, sellers, resolveAndApply]
   );
 
   useEffect(() => {
@@ -151,7 +248,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       parents.find((x) => String(x._id) === selectedParentId)?.vendor_id ?? ''
     ).trim();
     if (!vid || !sellers.some((s) => s._id === vid)) return;
-    setForm((f) => (f.seller === vid ? f : { ...f, seller: vid }));
+    setForm((f) => (f.vendor === vid ? f : { ...f, vendor: vid }));
   }, [sellers, selectedParentId, parents]);
 
   const sellerOptions = useMemo(
@@ -181,7 +278,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
         );
       }
     } catch {
-      setMessage({ type: 'error', text: 'Failed to load procurement sellers' });
+      setMessage({ type: 'error', text: 'Failed to load vendors' });
     }
   }, []);
 
@@ -189,6 +286,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
     if (isOpen) {
       setForm(emptyForm);
       setSelectedParentId('');
+      setHubLockedFromParent(false);
       setMessage(null);
       fetchParents();
       fetchSellers();
@@ -199,8 +297,8 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
     setMessage(null);
     const quantity = Math.max(0, Math.floor(Number(form.quantity) || 0));
     const amount = Math.max(0, Math.floor(Number(form.amount) || 0));
-    if (!form.billNumber.trim()) {
-      setMessage({ type: 'error', text: 'Bill number is required.' });
+    if (!form.hub.trim()) {
+      setMessage({ type: 'error', text: 'Hub is required.' });
       return;
     }
     if (!form.productCode.trim()) {
@@ -208,7 +306,7 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
       return;
     }
     if (!form.parentSku.trim()) {
-      setMessage({ type: 'error', text: 'Parent SKU is required.' });
+      setMessage({ type: 'error', text: 'Parent SKU could not be resolved. Check hub and product code.' });
       return;
     }
     if (quantity < 0 || amount < 0) {
@@ -222,8 +320,11 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
     let consumers = Math.max(0, Math.floor(Number(form.consumers) || 0));
     const typeSum = listing + revival + growth + consumers;
     if (typeSum === 0 && quantity > 0) {
-      listing = quantity;
-      revival = growth = consumers = 0;
+      const patch = applyTypeDefaultsForProductType(form.resolvedProductType || 'parent', quantity);
+      listing = Math.max(0, Math.floor(Number(patch.listing) || 0));
+      revival = Math.max(0, Math.floor(Number(patch.revival) || 0));
+      growth = Math.max(0, Math.floor(Number(patch.growth) || 0));
+      consumers = Math.max(0, Math.floor(Number(patch.consumers) || 0));
     } else if (typeSum !== quantity) {
       setMessage({ type: 'error', text: 'Type split must equal Quantity.' });
       return;
@@ -232,14 +333,13 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
     const productPrice = quantity > 0 ? Math.round(amount / quantity) : 0;
 
     const payload = {
-      billNumber: form.billNumber.trim(),
       productCode: form.productCode.trim(),
       productName: form.productName.trim() || undefined,
       quantity,
       productPrice,
       amount,
       parentSku: form.parentSku.trim(),
-      ...(form.seller.trim() && { seller: form.seller.trim() }),
+      ...(form.vendor.trim() && { seller: form.vendor.trim() }),
       type: {
         ...(listing > 0 && { listing }),
         ...(revival > 0 && { revival }),
@@ -261,7 +361,11 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
         setSaving(false);
         return;
       }
-      setMessage({ type: 'success', text: 'Invoice line added.' });
+      const bill = data?.data?.billNumber != null ? String(data.data.billNumber) : '';
+      setMessage({
+        type: 'success',
+        text: bill ? `Invoice line added (bill ${bill}).` : 'Invoice line added.',
+      });
       onSuccess();
       onClose();
       setForm(emptyForm);
@@ -290,27 +394,10 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
           <p className="text-sm text-slate-600">Add a line item below.</p>
 
           <ModalSection title="Line details">
+            <p className="text-xs text-slate-500 -mt-2 mb-2">
+              Bill number is assigned automatically when you save.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Bill number</span>
-                <input
-                  type="text"
-                  value={form.billNumber}
-                  onChange={(e) => setForm((f) => ({ ...f, billNumber: e.target.value }))}
-                  className={inputClass}
-                  placeholder="e.g. BILL001"
-                />
-              </label>
-              <label className="block">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Product code</span>
-                <input
-                  type="text"
-                  value={form.productCode}
-                  onChange={(e) => setForm((f) => ({ ...f, productCode: e.target.value }))}
-                  className={inputClass}
-                  placeholder="e.g. SKU001"
-                />
-              </label>
               <div className="block sm:col-span-2">
                 <CustomSelect
                   label="Product name"
@@ -321,6 +408,51 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
                   searchable
                 />
               </div>
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Hub</span>
+                {hubLockedFromParent && (
+                  <p className="text-xs text-slate-500 mb-1">From selected product (hub-scoped SKU).</p>
+                )}
+                <select
+                  value={form.hub}
+                  disabled={hubLockedFromParent}
+                  onChange={async (e) => {
+                    const hub = e.target.value;
+                    const pc = formRef.current.productCode.trim();
+                    const qty = formRef.current.quantity;
+                    if (!hub.trim()) {
+                      setForm((f) => ({ ...f, hub, parentSku: '', resolvedProductType: '' }));
+                      return;
+                    }
+                    setForm((f) => ({ ...f, hub }));
+                    if (pc) await resolveAndApply(pc, hub, qty);
+                  }}
+                  className={`${inputClass} ${hubLockedFromParent ? 'bg-slate-50 text-slate-700 cursor-not-allowed' : ''}`}
+                >
+                  <option value="">Select hub</option>
+                  {HUB_MAPPINGS.map((m) => (
+                    <option key={m.hub} value={m.hub}>
+                      {m.hub}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Product code</span>
+                <input
+                  type="text"
+                  value={form.productCode}
+                  onChange={(e) => setForm((f) => ({ ...f, productCode: e.target.value }))}
+                  onBlur={async () => {
+                    const { hub, productCode, quantity } = formRef.current;
+                    if (hub.trim() && productCode.trim()) {
+                      await resolveAndApply(productCode, hub, quantity);
+                    }
+                  }}
+                  className={inputClass}
+                  placeholder="e.g. SKU001"
+                />
+              </label>
               <label className="block">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Quantity</span>
                 <input
@@ -335,6 +467,20 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
                       const rev = Math.max(0, Math.floor(Number(f.revival) || 0));
                       const gro = Math.max(0, Math.floor(Number(f.growth) || 0));
                       const con = Math.max(0, Math.floor(Number(f.consumers) || 0));
+                      const isGrowing =
+                        f.resolvedProductType === 'growing_product' ||
+                        f.resolvedProductType === 'consumable';
+                      if (isGrowing) {
+                        const othersZero = listVal === 0 && rev === 0 && con === 0;
+                        const growthUnset = !String(f.growth ?? '').trim();
+                        const syncGrowth =
+                          othersZero && (growthUnset || gro === prevQty);
+                        return {
+                          ...f,
+                          quantity: nextQuantity,
+                          ...(syncGrowth ? { growth: nextQuantity } : {}),
+                        };
+                      }
                       const othersZero = rev === 0 && gro === 0 && con === 0;
                       const listingUnset = !String(f.listing ?? '').trim();
                       const syncListing =
@@ -359,26 +505,20 @@ export function AddInvoiceFormModal({ isOpen, onClose, onSuccess }: AddInvoiceFo
                   className={inputClass}
                 />
               </label>
-              <label className="block sm:col-span-2">
+              <div className="block sm:col-span-2">
                 <span className="block text-sm font-medium text-slate-700 mb-1.5">Parent SKU</span>
-                <select
-                  value={form.parentSku}
-                  onChange={(e) => setForm((f) => ({ ...f, parentSku: e.target.value }))}
-                  className={inputClass}
+                <div
+                  className={`${inputClass} bg-slate-50 text-slate-700 flex items-center min-h-[2.5rem]`}
+                  aria-live="polite"
                 >
-                  <option value="">Select</option>
-                  {parentOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {resolving ? 'Resolving…' : form.parentSku || '—'}
+                </div>
+              </div>
               <label className="block sm:col-span-2">
-                <span className="block text-sm font-medium text-slate-700 mb-1.5">Seller</span>
+                <span className="block text-sm font-medium text-slate-700 mb-1.5">Vendor</span>
                 <select
-                  value={form.seller}
-                  onChange={(e) => setForm((f) => ({ ...f, seller: e.target.value }))}
+                  value={form.vendor}
+                  onChange={(e) => setForm((f) => ({ ...f, vendor: e.target.value }))}
                   className={inputClass}
                 >
                   <option value="">Select</option>

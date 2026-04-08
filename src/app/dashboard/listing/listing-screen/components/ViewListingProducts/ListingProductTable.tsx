@@ -1,7 +1,7 @@
 'use client';
 
-import { Package, Image as ImageIcon, GitBranch, Layers } from 'lucide-react';
-import type { ListingProduct, ListingStatus } from '@/models/listingProduct';
+import { Package, Image as ImageIcon } from 'lucide-react';
+import type { ListingProduct } from '@/models/listingProduct';
 
 function parentSkusDisplay(product: ListingProduct): string[] {
   const fromItems = product.parentItems?.length
@@ -12,12 +12,19 @@ function parentSkusDisplay(product: ListingProduct): string[] {
   return [...new Set(legacy)];
 }
 
-function listingKindLabel(product: ListingProduct): 'Parent' | 'Child' {
-  return product.listingType === 'parent' ? 'Parent' : 'Child';
+function inventoryDisplay(product: ListingProduct): number {
+  return Math.max(0, Math.floor(Number(product.inventory_quantity) || 0));
+}
+
+/** Storefront publish flag: 0 or 1 */
+function publishBinary(product: ListingProduct): 0 | 1 {
+  return product.publish_status === 1 ? 1 : 0;
 }
 
 export interface ListingProductTableProps {
   products: ListingProduct[];
+  /** Which sub-tab is active on All listed products — drives visible columns. */
+  listingTab: 'parent' | 'child';
   loading?: boolean;
   selectedIds: Set<string>;
   allVisibleSelected: boolean;
@@ -28,6 +35,7 @@ export interface ListingProductTableProps {
 
 export function ListingProductTable({
   products,
+  listingTab,
   loading = false,
   selectedIds,
   allVisibleSelected,
@@ -35,19 +43,7 @@ export function ListingProductTable({
   onToggleRow,
   onToggleVisible,
 }: ListingProductTableProps) {
-  const getStatusBadge = (status: ListingStatus) => {
-    const styles = {
-      draft: 'bg-slate-100 text-slate-800',
-      listed: 'bg-pink-100 text-[#E6007A]',
-      published: 'bg-pink-100 text-[#E6007A]',
-    };
-
-    return (
-      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium ${styles[status]}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
-    );
-  };
+  const isParentTab = listingTab === 'parent';
 
   if (loading) {
     return (
@@ -76,7 +72,6 @@ export function ListingProductTable({
 
   return (
     <div className="bg-white shadow-sm rounded-lg border border-gray-200">
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -96,17 +91,13 @@ export function ListingProductTable({
                 Product
               </th>
               <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
-                Type
-              </th>
-              <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Parent SKUs
               </th>
-              <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
-                Parents
-              </th>
-              <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
-                Section
-              </th>
+              {!isParentTab && (
+                <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                  Parents
+                </th>
+              )}
               <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Quantity
               </th>
@@ -114,7 +105,10 @@ export function ListingProductTable({
                 Price
               </th>
               <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
-                Status
+                Inventory
+              </th>
+              <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                {isParentTab ? 'Publish status' : 'Publish'}
               </th>
               <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                 Created
@@ -126,111 +120,87 @@ export function ListingProductTable({
               const lineParentSkus = parentSkusDisplay(product);
               const parentCount = lineParentSkus.length || product.parentSkus?.length || 0;
               return (
-              <tr key={String(product._id)} className="hover:bg-gray-50">
-                <td className="px-4 py-2.5">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(String(product._id))}
-                    onChange={(e) => onToggleRow(String(product._id), e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-slate-300 text-[#E6007A] focus:ring-[#E6007A]"
-                  />
-                </td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-8 w-8">
-                      {product.images && product.images.length > 0 ? (
-                        <img
-                          className="h-8 w-8 rounded-lg object-cover"
-                          src={product.images[0].startsWith('/') ? product.images[0] : `/api/image-collection/proxy?url=${encodeURIComponent(product.images[0])}`}
-                          alt={product.plant}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="h-8 w-8 rounded-lg bg-gray-200 flex items-center justify-center">
-                          <ImageIcon className="h-4 w-4 text-gray-400" />
+                <tr key={String(product._id)} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(String(product._id))}
+                      onChange={(e) => onToggleRow(String(product._id), e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-[#E6007A] focus:ring-[#E6007A]"
+                    />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 h-8 w-8">
+                        {product.images && product.images.length > 0 ? (
+                          <img
+                            className="h-8 w-8 rounded-lg object-cover"
+                            src={
+                              product.images[0].startsWith('/')
+                                ? product.images[0]
+                                : `/api/image-collection/proxy?url=${encodeURIComponent(product.images[0])}`
+                            }
+                            alt={product.plant}
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="h-8 w-8 rounded-lg bg-gray-200 flex items-center justify-center">
+                            <ImageIcon className="h-4 w-4 text-gray-400" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="ml-3">
+                        <div className="text-xs font-medium text-gray-900">
+                          {product.finalName || product.plant}
                         </div>
-                      )}
-                    </div>
-                    <div className="ml-3">
-                      <div className="text-xs font-medium text-gray-900">
-                        {product.finalName || product.plant}
-                      </div>
-                      <div className="text-[11px] text-gray-500">
-                        SKU: {product.sku || 'Pending'}
+                        <div className="text-[11px] text-gray-500">SKU: {product.sku || 'Pending'}</div>
                       </div>
                     </div>
-                  </div>
-                </td>
+                  </td>
 
-                <td className="px-4 py-2.5">
-                  {listingKindLabel(product) === 'Parent' ? (
-                    <span
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-violet-100 text-violet-800"
-                      title="Single base parent listed as its own SKU"
-                    >
-                      <GitBranch className="h-3 w-3 shrink-0" />
-                      Parent
-                    </span>
-                  ) : (
-                    <span
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800"
-                      title="Composed from one or more parents"
-                    >
-                      <Layers className="h-3 w-3 shrink-0" />
-                      Child
-                    </span>
-                  )}
-                </td>
+                  <td className="px-4 py-2.5 max-w-[220px]">
+                    {lineParentSkus.length === 0 ? (
+                      <span className="text-[11px] text-gray-400">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        {lineParentSkus.map((sku) => (
+                          <span
+                            key={sku}
+                            className="text-[11px] font-mono text-gray-800 truncate"
+                            title={sku}
+                          >
+                            {sku}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
 
-                <td className="px-4 py-2.5 max-w-[220px]">
-                  {lineParentSkus.length === 0 ? (
-                    <span className="text-[11px] text-gray-400">—</span>
-                  ) : (
-                    <div className="flex flex-col gap-0.5">
-                      {lineParentSkus.map((sku) => (
-                        <span
-                          key={sku}
-                          className="text-[11px] font-mono text-gray-800 truncate"
-                          title={sku}
-                        >
-                          {sku}
-                        </span>
-                      ))}
-                    </div>
+                  {!isParentTab && (
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-1">
+                        <Package className="h-3.5 w-3.5 text-gray-400" />
+                        <span className="text-xs text-gray-900">{parentCount}</span>
+                      </div>
+                    </td>
                   )}
-                </td>
-                
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-1">
-                    <Package className="h-3.5 w-3.5 text-gray-400" />
-                    <span className="text-xs text-gray-900">
-                      {parentCount}
-                    </span>
-                  </div>
-                </td>
-                
-                <td className="px-4 py-2.5">
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[11px] font-medium bg-pink-100 text-[#E6007A] capitalize">
-                    {product.section}
-                  </span>
-                </td>
-                
-                <td className="px-4 py-2.5 text-xs text-gray-900">
-                  {product.quantity}
-                </td>
-                
-                <td className="px-4 py-2.5 text-xs text-gray-900">
-                  ₹{product.price.toFixed(2)}
-                </td>
-                
-                <td className="px-4 py-2.5">
-                  {getStatusBadge(product.status)}
-                </td>
-                
-                <td className="px-4 py-2.5 text-xs text-gray-500">
-                  {product.createdAt ? new Date(product.createdAt).toLocaleDateString() : '—'}
-                </td>
-              </tr>
+
+                  <td className="px-4 py-2.5 text-xs text-gray-900">{product.quantity}</td>
+
+                  <td className="px-4 py-2.5 text-xs text-gray-900">₹{product.price.toFixed(2)}</td>
+
+                  <td className="px-4 py-2.5 text-xs text-gray-900 tabular-nums">
+                    {inventoryDisplay(product)}
+                  </td>
+
+                  <td className="px-4 py-2.5 text-xs text-gray-900 tabular-nums font-mono">
+                    {publishBinary(product)}
+                  </td>
+
+                  <td className="px-4 py-2.5 text-xs text-gray-500">
+                    {product.createdAt ? new Date(product.createdAt).toLocaleDateString() : '—'}
+                  </td>
+                </tr>
               );
             })}
           </tbody>

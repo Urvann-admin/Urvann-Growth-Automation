@@ -3,8 +3,9 @@ import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
-// Excel format: Bill no., Product Code, Quantity, Price, Amount, Parent, optional Seller (procurement seller: name, vendor code, or Mongo _id). Product name optional.
-const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'quantity', 'productPrice', 'amount', 'parentSku', 'seller'] as const;
+// Excel format: Bill no. (optional), Product Code, Product name (optional), Quantity, Price (optional), Amount.
+// Parent SKU and vendor are chosen in the UI (hub + resolve from product master).
+const EXCEL_COLUMNS = ['billNumber', 'productCode', 'productName', 'quantity', 'productPrice', 'amount'] as const;
 const COLUMN_MAP: Record<string, (typeof EXCEL_COLUMNS)[number]> = {
   'bill number': 'billNumber',
   'bill no': 'billNumber',
@@ -12,15 +13,9 @@ const COLUMN_MAP: Record<string, (typeof EXCEL_COLUMNS)[number]> = {
   'product code': 'productCode',
   'product name': 'productName',
   'product quantity': 'quantity',
-  'quantity': 'quantity',
-  'price': 'productPrice',
-  'amount': 'amount',
-  'parent': 'parentSku',
-  'parent sku': 'parentSku',
-  'parent sku.': 'parentSku',
-  'seller': 'seller',
-  'seller id': 'seller',
-  'seller_id': 'seller',
+  quantity: 'quantity',
+  price: 'productPrice',
+  amount: 'amount',
 };
 
 function normalizeHeader(h: string): (typeof EXCEL_COLUMNS)[number] | null {

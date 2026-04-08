@@ -19,9 +19,16 @@ import type {
 } from './types';
 import { validateStep } from '@/lib/listingProductValidation';
 import { passedHubsForChildListingFromPicker } from '@/lib/childListingHubSku';
-import { compareAtFromFirstParentLine } from '@/lib/childListingCompareAt';
+import {
+  calculatedListingPriceFromParentItems,
+  compareAtFromCalculatedChildListingPrice,
+  listingInventoryFromParentItems,
+} from '@/lib/childListingCompareAt';
+import { childListingSetQuantityFromParentItems } from '@/lib/childListingSetQuantity';
+import { mergeParentDescriptionsForChildListing } from '@/lib/childListingDescription';
 import { normalizeListingImageUrlForMatch } from '@/lib/listingImageUrl';
 import { redirectsArrayToUrlArray, splitRedirectFormValues } from '@/lib/redirectOptionTokens';
+import { CHILD_LISTING_NEW_IN_TAG, tagsWithChildListingNewIn } from '@/lib/productTagOptions';
 
 const PARENT_LIST_PAGE_LIMIT = 40;
 
@@ -110,7 +117,7 @@ function buildChildRowFromImage(img: SelectedImage, serial: number): ProductRow 
     potQuantity: 0,
     price: 0,
     inventory_quantity: 0,
-    tags: [],
+    tags: [CHILD_LISTING_NEW_IN_TAG],
     compare_at_price: undefined,
     sort_order: 3000,
     hubParentChecks: [],
@@ -527,11 +534,24 @@ export function useListingState(section: ListingSection) {
               : item
           );
           const firstStillThisParent = String(nextItems[0]?.parent?._id) === String(parentId);
+          const recalculatedPrice = calculatedListingPriceFromParentItems(nextItems);
+          const nextInventory = listingInventoryFromParentItems(nextItems);
+          const nextSetQty =
+            prev.listingMode === 'child'
+              ? childListingSetQuantityFromParentItems(nextItems)
+              : nextItems.reduce((s, i) => s + (i.quantity || 0), 0) || 1;
           return {
             ...row,
             parentItems: nextItems,
+            price: recalculatedPrice,
+            inventory_quantity: nextInventory,
+            setQuantity: nextSetQty,
+            quantity: nextSetQty,
             ...(prev.listingMode === 'child' && firstStillThisParent
-              ? { compare_at_price: compareAtFromFirstParentLine(nextItems) }
+              ? { compare_at_price: compareAtFromCalculatedChildListingPrice(recalculatedPrice) }
+              : {}),
+            ...(prev.listingMode === 'child'
+              ? { description: mergeParentDescriptionsForChildListing(nextItems) }
               : {}),
           };
         }),
@@ -632,7 +652,7 @@ export function useListingState(section: ListingSection) {
         potQuantity: 0,
         price: 0,
         inventory_quantity: 0,
-        tags: [],
+        tags: [CHILD_LISTING_NEW_IN_TAG],
         compare_at_price: undefined,
         sort_order: 3000,
         
@@ -1069,7 +1089,12 @@ export function useListingState(section: ListingSection) {
           quantity: qty,
           price: row.price,
           inventory_quantity: row.inventory_quantity,
-          tags: row.tags?.length ? row.tags : undefined,
+          tags:
+            listingMode === 'child'
+              ? tagsWithChildListingNewIn(row.tags)
+              : row.tags?.length
+                ? row.tags
+                : undefined,
           compare_at_price: row.compare_at_price ?? undefined,
           sort_order: row.sort_order ?? 3000,
           publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,
@@ -1246,7 +1271,12 @@ export function useListingState(section: ListingSection) {
         quantity: qty,
         price: row.price,
         inventory_quantity: row.inventory_quantity,
-        tags: row.tags?.length ? row.tags : undefined,
+        tags:
+          listingMode === 'child'
+            ? tagsWithChildListingNewIn(row.tags)
+            : row.tags?.length
+              ? row.tags
+              : undefined,
         compare_at_price: row.compare_at_price ?? undefined,
         sort_order: row.sort_order ?? 3000,
         publish_status: (row.inventory_quantity ?? 0) > 0 ? 1 : 0,

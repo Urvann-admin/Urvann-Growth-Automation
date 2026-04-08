@@ -3,6 +3,7 @@ import {
   ProcurementSellerMasterModel,
   type ProcurementSellerMaster,
 } from '@/models/procurementSellerMaster';
+import { parseOptionalProcurementPhone } from '@/lib/procurementSellerPhone';
 
 export async function GET(request: NextRequest) {
   try {
@@ -99,7 +100,13 @@ export async function PUT(request: NextRequest) {
     }
 
     const sanitized = sanitizeUpdateData(updateData);
-    const result = await ProcurementSellerMasterModel.update(_id, sanitized);
+    if (!sanitized.ok) {
+      return NextResponse.json(
+        { success: false, message: sanitized.message },
+        { status: 400 }
+      );
+    }
+    const result = await ProcurementSellerMasterModel.update(_id, sanitized.data);
 
     if (result.matchedCount === 0) {
       return NextResponse.json(
@@ -225,6 +232,11 @@ function validateSellerData(data: unknown): {
     if (valid.length > 0) productType = valid;
   }
 
+  const phoneParsed = parseOptionalProcurementPhone(d.phoneNumber);
+  if (!phoneParsed.ok) {
+    return { success: false, message: phoneParsed.message };
+  }
+
   return {
     success: true,
     data: {
@@ -232,14 +244,16 @@ function validateSellerData(data: unknown): {
       place: d.place ? String(d.place).trim() : undefined,
       multiplicationFactor,
       productType,
-      phoneNumber: d.phoneNumber ? String(d.phoneNumber).trim() : undefined,
+      phoneNumber: phoneParsed.value,
     },
   };
 }
 
 function sanitizeUpdateData(
   data: Record<string, unknown>
-): Partial<Omit<ProcurementSellerMaster, '_id' | 'createdAt'>> {
+):
+  | { ok: true; data: Partial<Omit<ProcurementSellerMaster, '_id' | 'createdAt'>> }
+  | { ok: false; message: string } {
   const sanitized: Partial<
     Omit<ProcurementSellerMaster, '_id' | 'createdAt'>
   > = {};
@@ -265,8 +279,12 @@ function sanitizeUpdateData(
     sanitized.productType = valid.length > 0 ? valid : undefined;
   }
   if (data.phoneNumber !== undefined) {
-    sanitized.phoneNumber = String(data.phoneNumber).trim() || undefined;
+    const p = parseOptionalProcurementPhone(data.phoneNumber);
+    if (!p.ok) {
+      return { ok: false, message: p.message };
+    }
+    sanitized.phoneNumber = p.value;
   }
 
-  return sanitized;
+  return { ok: true, data: sanitized };
 }

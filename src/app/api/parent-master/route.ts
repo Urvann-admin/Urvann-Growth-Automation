@@ -21,6 +21,9 @@ import { SellerMasterModel } from '@/models/sellerMaster';
 import { ProductFeatureMasterModel, parseFeatureTokens } from '@/models/productFeatureMaster';
 import { computeProductDisplayName } from '@/lib/productListingDisplayName';
 import { allocateGrowingProductCode } from '@/lib/growingProductCodeSequence';
+import { getListingProductStoreHippoEnv } from '@/lib/storeHippoProducts';
+import { createParentWithStoreHippo } from '@/app/api/parent-master/storeHippoParentPersist';
+import { persistParentListingFromParentMaster } from '@/app/api/listing-product/storeHippoListingPersist';
 
 function isMongoObjectIdString(s: string): boolean {
   return /^[a-f\d]{24}$/i.test(String(s).trim());
@@ -232,11 +235,31 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const result = await ParentMasterModel.createMany(validatedItems);
+      const shEnv = getListingProductStoreHippoEnv();
+      if (!shEnv.ok) {
+        return NextResponse.json({ success: false, message: shEnv.error }, { status: 503 });
+      }
+
+      const bulkErrors: { index: number; message: string }[] = [];
+      let insertedCount = 0;
+      for (let i = 0; i < validatedItems.length; i++) {
+        const item = validatedItems[i]!;
+        const r = await createParentWithStoreHippo(item, shEnv);
+        if (!r.ok) {
+          bulkErrors.push({ index: i, message: r.error });
+          continue;
+        }
+        insertedCount += 1;
+      }
+
       return NextResponse.json({
-        success: true,
-        message: `Created ${result.insertedCount} products`,
-        insertedCount: result.insertedCount,
+        success: bulkErrors.length === 0,
+        message:
+          bulkErrors.length === 0
+            ? `Created ${insertedCount} products`
+            : `Created ${insertedCount} of ${validatedItems.length} products`,
+        insertedCount,
+        ...(bulkErrors.length > 0 ? { errors: bulkErrors } : {}),
       });
     }
 
@@ -305,6 +328,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (pt === 'parent') {
+      const shEnv = getListingProductStoreHippoEnv();
+      if (!shEnv.ok) {
+        return NextResponse.json({ success: false, message: shEnv.error }, { status: 503 });
+      }
+
       let listing_price: number | undefined;
       const vendorIdForPrice = data.vendor_id?.trim();
       if (vendorIdForPrice && data.sellingPrice != null) {
@@ -367,7 +395,15 @@ export async function POST(request: NextRequest) {
               ...(substores.length > 0 ? { substores } : {}),
               ...(listing_price !== undefined && { listing_price }),
             };
-            const created = await ParentMasterModel.create(dataToSave);
+            const hubCreate = await createParentWithStoreHippo(dataToSave, shEnv);
+            if (!hubCreate.ok) {
+              await rollbackParents();
+              return NextResponse.json(
+                { success: false, message: hubCreate.error },
+                { status: 502 }
+              );
+            }
+            const created = hubCreate.created;
             createdParentIds.push(created._id as ObjectId);
             parentRows.push(created as ParentMaster);
             console.log('Parent (hub-scoped) saved to DB:', created._id, hub, sku);
@@ -394,7 +430,15 @@ export async function POST(request: NextRequest) {
             base_sku: baseSkuForParentMasterRow(sku, undefined),
             ...(listing_price !== undefined && { listing_price }),
           };
-          const created = await ParentMasterModel.create(dataToSave);
+          const globalCreate = await createParentWithStoreHippo(dataToSave, shEnv);
+          if (!globalCreate.ok) {
+            await rollbackParents();
+            return NextResponse.json(
+              { success: false, message: globalCreate.error },
+              { status: 502 }
+            );
+          }
+          const created = globalCreate.created;
           parentRows.push(created as ParentMaster);
           console.log('Product saved to DB:', created._id);
         }
@@ -466,12 +510,35 @@ export async function POST(request: NextRequest) {
           validatedListings.push(v.data!);
         }
 
-        await ListingProductModel.createMany(validatedListings);
-        await updateParentQuantitiesAfterCreation(validatedListings);
-        for (const item of validatedListings) {
-          await syncListingProductToSkuMasterNew(item as ListingProduct);
+        const persistedListings: ListingProduct[] = [];
+        const createdListingIds: (string | ObjectId)[] = [];
+        for (let li = 0; li < validatedListings.length; li++) {
+          const v = validatedListings[li]!;
+          const parentRow = parentRows[li]!;
+          const shIds = {
+            storeHippoId: (parentRow as ParentMaster & { storeHippoId?: string }).storeHippoId,
+            storeHippoAlias: (parentRow as ParentMaster & { storeHippoAlias?: string }).storeHippoAlias,
+          };
+          const lpRes = await persistParentListingFromParentMaster(v, shIds);
+          if (!lpRes.ok) {
+            if (createdListingIds.length > 0) {
+              await ListingProductModel.deleteMany(createdListingIds);
+            }
+            await rollbackParents();
+            return NextResponse.json(
+              { success: false, message: lpRes.error },
+              { status: 502 }
+            );
+          }
+          persistedListings.push(lpRes.created as ListingProduct);
+          createdListingIds.push(lpRes.created._id as ObjectId);
         }
-        const allListedImageUrls = validatedListings.flatMap((i) => (i.images || []).filter(Boolean));
+
+        await updateParentQuantitiesAfterCreation(validatedListings);
+        for (const item of persistedListings) {
+          await syncListingProductToSkuMasterNew(item);
+        }
+        const allListedImageUrls = persistedListings.flatMap((i) => (i.images || []).filter(Boolean));
         if (allListedImageUrls.length > 0) {
           ImageCollectionModel.markImagesAsListed(allListedImageUrls).catch((err) =>
             console.error('Failed to mark images as listed:', err)

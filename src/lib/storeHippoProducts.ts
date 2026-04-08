@@ -93,7 +93,7 @@ function convertToStoreHippoFormat(
   return payload;
 }
 
-function extractProductFromApiPayload(json: unknown): { _id?: string; alias?: string } {
+export function extractProductFromApiPayload(json: unknown): { _id?: string; alias?: string } {
   if (!json || typeof json !== 'object') return {};
   const o = json as Record<string, unknown>;
   const data = o.data;
@@ -108,18 +108,32 @@ function extractProductFromApiPayload(json: unknown): { _id?: string; alias?: st
   return { _id: id, alias };
 }
 
+/** Required env for listing-product create → StoreHippo (no hardcoded key fallback). */
+export function getListingProductStoreHippoEnv():
+  | { ok: true; baseUrl: string; accessKey: string }
+  | { ok: false; error: string } {
+  const baseUrl = String(process.env.STOREHIPPO_BASE_URL ?? '').trim();
+  const accessKey = String(process.env.URVANN_API_ACCESS_KEY ?? '').trim();
+  if (!baseUrl) return { ok: false, error: 'STOREHIPPO_BASE_URL is required to create listing products on StoreHippo' };
+  if (!accessKey) return { ok: false, error: 'URVANN_API_ACCESS_KEY is required to create listing products on StoreHippo' };
+  return { ok: true, baseUrl, accessKey };
+}
+
 /** GET ms.products with filters — first row’s _id and alias (same pattern as product_id lookup). */
 async function fetchStoreHippoProductByFilter(
   field: string,
-  value: string
+  value: string,
+  creds?: { baseUrl: string; accessKey: string }
 ): Promise<{ _id: string; alias?: string } | null> {
   const trimmed = String(value).trim();
   if (!trimmed) return null;
+  const baseUrl = creds?.baseUrl ?? BASE_URL;
+  const accessKey = creds?.accessKey ?? ACCESS_KEY;
   const filter = JSON.stringify([{ field, operator: 'eq', value: trimmed }]);
-  const url = `${BASE_URL}/api/1.1/entity/ms.products/?filters=${encodeURIComponent(filter)}`;
+  const url = `${baseUrl}/api/1.1/entity/ms.products/?filters=${encodeURIComponent(filter)}`;
 
   const response = await fetch(url, {
-    headers: { 'access-key': ACCESS_KEY },
+    headers: { 'access-key': accessKey },
   });
 
   if (!response.ok) {
@@ -138,6 +152,79 @@ async function fetchStoreHippoProductByFilter(
     };
   }
   return null;
+}
+
+/**
+ * POST a raw JSON body to `ms.products` (listing flow). Use {@link getListingProductStoreHippoEnv} for credentials.
+ */
+export async function postMsProductCreate(
+  body: Record<string, unknown>,
+  hints: { displayName: string; sku?: string },
+  creds: { baseUrl: string; accessKey: string }
+): Promise<StoreHippoSyncResult> {
+  const { displayName, sku } = hints;
+  try {
+    const response = await fetch(`${creds.baseUrl}/api/1.1/entity/ms.products`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'access-key': creds.accessKey,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[StoreHippo] POST ms.products HTTP ${response.status}: ${errorText}`);
+      return {
+        success: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+      };
+    }
+
+    let postJson: unknown = null;
+    try {
+      postJson = await response.json();
+    } catch {
+      /* non-JSON success body */
+    }
+
+    const fromPost = extractProductFromApiPayload(postJson);
+    let productId = fromPost._id;
+    let storeHippoAlias = fromPost.alias;
+
+    if (!productId || !storeHippoAlias) {
+      const byName = await fetchStoreHippoProductByFilter('name', displayName, creds);
+      if (byName) {
+        productId = productId || byName._id;
+        storeHippoAlias = storeHippoAlias || byName.alias;
+      }
+    }
+
+    if ((!productId || !storeHippoAlias) && sku) {
+      const bySku = await fetchStoreHippoProductByFilter('sku', sku, creds);
+      if (bySku) {
+        productId = productId || bySku._id;
+        storeHippoAlias = storeHippoAlias || bySku.alias;
+      }
+    }
+
+    if (!productId) {
+      console.warn(`[StoreHippo] Product created but could not resolve _id for name: ${displayName}`);
+    }
+
+    return {
+      success: true,
+      storeHippoId: productId,
+      storeHippoAlias,
+    };
+  } catch (error) {
+    console.error('[StoreHippo] postMsProductCreate error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
 }
 
 // Sync product to StoreHippo

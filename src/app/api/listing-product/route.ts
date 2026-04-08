@@ -17,6 +17,10 @@ import {
   updateParentQuantitiesAfterCreation,
   generateFinalName,
 } from './listingProductCore';
+import { getListingProductStoreHippoEnv } from '@/lib/storeHippoProducts';
+import { persistListingProductAfterStoreHippo } from './storeHippoListingPersist';
+
+type ListingCreateError = { index: number; message: string };
 
 function escapeRegexFragment(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -134,19 +138,26 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
+
+    const shEnv = getListingProductStoreHippoEnv();
+    if (!shEnv.ok) {
+      return NextResponse.json({ success: false, message: shEnv.error }, { status: 503 });
+    }
+    const creds = { baseUrl: shEnv.baseUrl, accessKey: shEnv.accessKey };
+
     // Handle bulk create
     if (Array.isArray(body)) {
-      const validatedItems: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'>[] = [];
+      const errors: ListingCreateError[] = [];
+      const successfulValidated: Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'>[] = [];
+      const createdDocs: ListingProduct[] = [];
       const seenParentHubSection = new Set<string>();
 
-      for (const item of body) {
+      for (let index = 0; index < body.length; index++) {
+        const item = body[index];
         const validated = await validateListingProductData(item);
         if (!validated.success) {
-          return NextResponse.json(
-            { success: false, message: validated.message },
-            { status: 400 }
-          );
+          errors.push({ index, message: validated.message || 'Validation failed' });
+          continue;
         }
         const data = validated.data!;
         if (data.listingType === 'parent' && data.hub && data.parentItems?.[0]) {
@@ -157,44 +168,51 @@ export async function POST(request: NextRequest) {
           );
           const key = `${data.section}\0${data.hub}\0${canon}`;
           if (seenParentHubSection.has(key)) {
-            return NextResponse.json(
-              {
-                success: false,
-                message: `Duplicate parent listing for hub "${data.hub}" in this save batch.`,
-              },
-              { status: 400 }
-            );
+            errors.push({
+              index,
+              message: `Duplicate parent listing for hub "${data.hub}" in this save batch.`,
+            });
+            continue;
           }
           seenParentHubSection.add(key);
         }
-        validatedItems.push(data);
-      }
-      
-      const result = await ListingProductModel.createMany(validatedItems);
 
-      // Update parent quantities after successful creation
-      await updateParentQuantitiesAfterCreation(validatedItems);
-
-      // Sync each to Inventory_Master.Sku_Master_New (best-effort; errors logged only)
-      for (const item of validatedItems) {
-        await syncListingProductToSkuMasterNew(item);
+        const persisted = await persistListingProductAfterStoreHippo(data, creds);
+        if (!persisted.ok) {
+          errors.push({ index, message: persisted.error });
+          continue;
+        }
+        successfulValidated.push(data);
+        createdDocs.push(persisted.created as ListingProduct);
       }
 
-      // Mark used images as listed in image collections (so they are hidden from listing form)
-      const allImageUrls = validatedItems.flatMap((item) => (item.images || []).filter(Boolean));
-      if (allImageUrls.length > 0) {
-        ImageCollectionModel.markImagesAsListed(allImageUrls).catch((err) =>
-          console.error('Failed to mark images as listed:', err)
-        );
+      if (successfulValidated.length > 0) {
+        await updateParentQuantitiesAfterCreation(successfulValidated);
+        for (const doc of createdDocs) {
+          await syncListingProductToSkuMasterNew(doc);
+        }
+        const allImageUrls = successfulValidated.flatMap((row) => (row.images || []).filter(Boolean));
+        if (allImageUrls.length > 0) {
+          ImageCollectionModel.markImagesAsListed(allImageUrls).catch((err) =>
+            console.error('Failed to mark images as listed:', err)
+          );
+        }
       }
 
       return NextResponse.json({
-        success: true,
-        message: `Created ${result.insertedCount} listing products`,
-        insertedCount: result.insertedCount,
+        success: errors.length === 0,
+        message:
+          createdDocs.length === body.length
+            ? `Created ${createdDocs.length} listing product(s)`
+            : createdDocs.length > 0
+              ? `Created ${createdDocs.length} of ${body.length} listing product(s) (some failed StoreHippo or validation)`
+              : 'No listing products were created',
+        insertedCount: createdDocs.length,
+        data: createdDocs.map((d) => withDerivedParentSkus(d)),
+        ...(errors.length > 0 ? { errors } : {}),
       });
     }
-    
+
     // Single create
     const validated = await validateListingProductData(body);
     if (!validated.success) {
@@ -204,15 +222,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const created = await ListingProductModel.create(validated.data!);
+    const persisted = await persistListingProductAfterStoreHippo(validated.data!, creds);
+    if (!persisted.ok) {
+      return NextResponse.json(
+        { success: false, message: persisted.error },
+        { status: 502 }
+      );
+    }
 
-    // Update parent quantities after successful creation
+    const created = persisted.created as ListingProduct;
+
     await updateParentQuantitiesAfterCreation([validated.data!]);
-
-    // Sync to Inventory_Master.Sku_Master_New (best-effort; errors logged only)
     await syncListingProductToSkuMasterNew(created);
 
-    // Mark used images as listed in image collections (so they are hidden from listing form)
     const imageUrls = (validated.data!.images || []).filter(Boolean);
     if (imageUrls.length > 0) {
       ImageCollectionModel.markImagesAsListed(imageUrls).catch((err) =>
@@ -220,10 +242,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('Listing product saved to DB:', created._id);
+    console.log('Listing product saved to DB after StoreHippo:', created._id);
     return NextResponse.json({
       success: true,
-      data: withDerivedParentSkus(created as ListingProduct),
+      data: withDerivedParentSkus(created),
     });
   } catch (error) {
     console.error('Error creating listing product:', error);

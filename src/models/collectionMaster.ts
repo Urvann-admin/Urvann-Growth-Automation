@@ -47,6 +47,29 @@ export class CollectionMasterModel {
     return collection.findOne({ _id: queryId as any });
   }
 
+  /** Collection `alias` values for StoreHippo `collections` (deduped, stable order). */
+  static async findAliasesByIds(ids: (string | ObjectId)[]): Promise<string[]> {
+    if (!ids.length) return [];
+    const collection = await getCollection(COLLECTION_NAME);
+    const oids = ids.map((id) => {
+      if (typeof id === 'string' && ObjectId.isValid(id)) return new ObjectId(id);
+      return id;
+    });
+    const docs = await collection
+      .find({ _id: { $in: oids as any } }, { projection: { alias: 1 } })
+      .toArray();
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const d of docs) {
+      const a = String((d as { alias?: string }).alias ?? '').trim();
+      if (a && !seen.has(a)) {
+        seen.add(a);
+        out.push(a);
+      }
+    }
+    return out;
+  }
+
   static async findByStoreHippoId(storeHippoId: string) {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.findOne({ storeHippoId });

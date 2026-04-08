@@ -15,6 +15,8 @@ export interface ParentMaster {
   productType?: ProductType;
   /** procurement_seller_master _id — primary vendor for growing/consumable (Vendor Master list) */
   vendorMasterId?: string;
+  /** All procurement vendor _ids linked to this product (merged from product master + purchases); unique. */
+  vendorIds?: string[];
   /** @deprecated Prefer `sku` for base-parent link on non-parent rows; may exist on older documents */
   parentSku?: string;
   /**

@@ -3,18 +3,25 @@ import { PurchaseMasterModel } from '@/models/purchaseMaster';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { syncParentFromPurchases } from '@/app/api/purchase-master/syncParent';
 import { deleteSkuMasterNewBySku, syncListingProductToSkuMasterNew } from '@/models/skuMasterNew';
-import { toCanonicalParentSkuForPurchases } from '@/lib/skuGenerator';
+import { generateSKU, toCanonicalParentSkuForPurchases } from '@/lib/skuGenerator';
 
-function parentKeysAndUnits(product: ListingProduct): { key: string; units: number }[] {
-  const items: ListingParentItem[] =
-    product.parentItems?.length > 0
-      ? product.parentItems
-      : (product.parentSkus ?? []).map((sku) => ({
-          parentSku: sku,
-          quantity: product.quantity,
-          unitPrice: 0,
-        }));
+function parentItemsResolved(product: ListingProduct): ListingParentItem[] {
+  return product.parentItems?.length > 0
+    ? product.parentItems
+    : (product.parentSkus ?? []).map((sku) => ({
+        parentSku: sku,
+        quantity: product.quantity,
+        unitPrice: 0,
+      }));
+}
 
+/** Purchase units per parent key for `setCount` sets (not full listing inventory). */
+function parentKeysAndUnitsForSetCount(
+  product: ListingProduct,
+  setCount: number
+): { key: string; units: number }[] {
+  const items = parentItemsResolved(product);
+  const sets = Math.max(0, Math.floor(Number(setCount) || 0));
   const hubStr = product.hub?.trim();
   const map = new Map<string, number>();
 
@@ -27,12 +34,17 @@ function parentKeysAndUnits(product: ListingProduct): { key: string; units: numb
             product.hub,
             item.parentSku
           );
-    const totalUnits = Math.max(0, Math.floor(Number(product.inventory_quantity) || 0)) * Math.max(0, Number(item.quantity) || 0);
+    const totalUnits = sets * Math.max(0, Number(item.quantity) || 0);
     if (!key || totalUnits <= 0) continue;
     map.set(key, (map.get(key) || 0) + totalUnits);
   }
 
   return [...map.entries()].map(([key, units]) => ({ key, units }));
+}
+
+function parentKeysAndUnits(product: ListingProduct): { key: string; units: number }[] {
+  const inv = Math.max(0, Math.floor(Number(product.inventory_quantity) || 0));
+  return parentKeysAndUnitsForSetCount(product, inv);
 }
 
 /** Undo listed_quantity increases from when this listing-line was created (listing section only). */
@@ -118,11 +130,14 @@ async function movePurchaseListingToRevival(parentSku: string, units: number): P
   }
 }
 
-async function adjustPurchasesForMoveToRevival(product: ListingProduct): Promise<void> {
+async function adjustPurchasesForMoveToRevival(
+  product: ListingProduct,
+  setCount: number
+): Promise<void> {
   if (product.section !== 'listing') return;
 
   const hub = product.hub?.trim();
-  const pairs = parentKeysAndUnits(product);
+  const pairs = parentKeysAndUnitsForSetCount(product, setCount);
 
   for (const { key, units } of pairs) {
     if (units <= 0) continue;
@@ -144,12 +159,31 @@ function stripForInsert(doc: ListingProduct): Omit<ListingProduct, '_id' | 'crea
   };
 }
 
+/** New revival row from a partial child move: new SKU, no StoreHippo carry-over. */
+function stripForPartialRevivalChild(
+  doc: ListingProduct,
+  setInventory: number,
+  sku: string
+): Omit<ListingProduct, '_id' | 'createdAt' | 'updatedAt'> {
+  const base = stripForInsert(doc);
+  return {
+    ...base,
+    sku,
+    inventory_quantity: Math.max(0, Math.floor(setInventory)),
+    publish_status: setInventory > 0 ? 1 : 0,
+    storeHippoId: undefined,
+    product_id: undefined,
+    storeHippoAlias: undefined,
+  };
+}
+
 /**
  * For one listing product in section `listing`: migrate purchases, remove DB row, re-insert under `revival`,
  * refresh Sku_Master_New (delete then sync).
  */
 export async function moveOneListingProductToRevival(
-  id: string
+  id: string,
+  options?: { quantity?: number }
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const doc = await ListingProductModel.findById(id);
   if (!doc) {
@@ -159,6 +193,27 @@ export async function moveOneListingProductToRevival(
   const product = doc as ListingProduct;
   if (product.section !== 'listing') {
     return { ok: false, message: 'Only products in the Listing section can be moved to Revival' };
+  }
+
+  const inv = Math.max(0, Math.floor(Number(product.inventory_quantity) || 0));
+  if (inv <= 0) {
+    return { ok: false, message: 'No inventory to move' };
+  }
+
+  let q =
+    options?.quantity != null ? Math.floor(Number(options.quantity)) : inv;
+  if (!Number.isFinite(q) || q <= 0) {
+    return { ok: false, message: 'Quantity must be a positive number' };
+  }
+  q = Math.min(q, inv);
+
+  const isParentListing = product.listingType === 'parent';
+  if (isParentListing && q < inv) {
+    return {
+      ok: false,
+      message:
+        'Parent listings must be moved in full. Use the full quantity shown, or adjust inventory before moving.',
+    };
   }
 
   if (product.listingType === 'parent' && product.hub && product.parentItems?.[0]?.parentSku) {
@@ -176,31 +231,105 @@ export async function moveOneListingProductToRevival(
     }
   }
 
-  await adjustPurchasesForMoveToRevival(product);
+  const isFullMove = q >= inv;
 
-  const sku = product.sku ? String(product.sku).trim() : '';
-  if (sku) {
-    await deleteSkuMasterNewBySku(sku);
+  if (isFullMove) {
+    await adjustPurchasesForMoveToRevival(product, inv);
+
+    const sku = product.sku ? String(product.sku).trim() : '';
+    if (sku) {
+      await deleteSkuMasterNewBySku(sku);
+    }
+
+    const insertPayload = stripForInsert(product);
+    await ListingProductModel.delete(id);
+    const created = await ListingProductModel.create(insertPayload);
+    await syncListingProductToSkuMasterNew(created as ListingProduct);
+
+    return { ok: true };
   }
 
-  const insertPayload = stripForInsert(product);
-  await ListingProductModel.delete(id);
+  // Partial move: child-style rows only (anything that is not an explicit parent listing)
+  if (product.listingType === 'parent') {
+    return { ok: false, message: 'Partial move to Revival is only supported for child listings' };
+  }
+
+  const hub = product.hub?.trim();
+  const plant = String(product.plant || '').trim();
+  if (!hub || !plant) {
+    return { ok: false, message: 'Child listing must have hub and product name to allocate a revival SKU' };
+  }
+
+  await adjustPurchasesForMoveToRevival(product, q);
+
+  const remaining = inv - q;
+  await ListingProductModel.update(id, {
+    inventory_quantity: remaining,
+    publish_status: remaining > 0 ? 1 : 0,
+  });
+
+  const setQuantity = Number(product.setQuantity || 0);
+  const skuQty = setQuantity > 0 ? setQuantity : Number(product.quantity || 1);
+  let newSku: string | undefined;
+  for (let attempt = 0; attempt < 25; attempt++) {
+    try {
+      const candidate = await generateSKU(hub, plant, skuQty || 1);
+      const clash = await ListingProductModel.findBySku(candidate);
+      if (!clash) {
+        newSku = candidate;
+        break;
+      }
+    } catch {
+      break;
+    }
+  }
+  if (!newSku) {
+    return { ok: false, message: 'Could not allocate a unique SKU for the Revival row' };
+  }
+
+  const insertPayload = stripForPartialRevivalChild(product, q, newSku);
   const created = await ListingProductModel.create(insertPayload);
   await syncListingProductToSkuMasterNew(created as ListingProduct);
+
+  const updatedListing = await ListingProductModel.findById(id);
+  if (updatedListing) {
+    await syncListingProductToSkuMasterNew(updatedListing as ListingProduct);
+  }
 
   return { ok: true };
 }
 
+export type MoveToRevivalEntry = { id: string; quantity?: number };
+
+function normalizeMoveToRevivalEntries(entries: MoveToRevivalEntry[] | string[]): MoveToRevivalEntry[] {
+  if (!Array.isArray(entries) || entries.length === 0) return [];
+  if (typeof entries[0] === 'string') {
+    return (entries as string[])
+      .map((id) => ({ id: String(id).trim() }))
+      .filter((e) => e.id);
+  }
+  return (entries as MoveToRevivalEntry[])
+    .map((e) => ({
+      id: String(e.id ?? '').trim(),
+      quantity: e.quantity,
+    }))
+    .filter((e) => e.id);
+}
+
 export async function moveListingProductsToRevival(
-  ids: string[]
+  entries: MoveToRevivalEntry[] | string[]
 ): Promise<{ moved: number; failed: { id: string; message: string }[] }> {
   const failed: { id: string; message: string }[] = [];
   let moved = 0;
 
-  for (const id of ids) {
-    const trimmed = String(id).trim();
+  const normalized = normalizeMoveToRevivalEntries(entries);
+
+  for (const entry of normalized) {
+    const trimmed = String(entry.id).trim();
     if (!trimmed) continue;
-    const result = await moveOneListingProductToRevival(trimmed);
+    const result = await moveOneListingProductToRevival(trimmed, {
+      quantity: entry.quantity,
+    });
     if (result.ok) {
       moved += 1;
     } else {

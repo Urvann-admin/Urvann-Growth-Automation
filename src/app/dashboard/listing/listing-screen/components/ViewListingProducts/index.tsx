@@ -7,6 +7,7 @@ import type { ListingProduct, ListingSection } from '@/models/listingProduct';
 import { ListingProductTable } from './ListingProductTable';
 import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 import { ReplicateToHubsModal } from './ReplicateToHubsModal';
+import { MoveToRevivalModal } from './MoveToRevivalModal';
 
 export interface ViewListingProductsProps {
   section: ListingSection;
@@ -24,7 +25,7 @@ export function ViewListingProducts({
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set());
   const [isSelectingAllFiltered, setIsSelectingAllFiltered] = useState(false);
   const [showReplicateModal, setShowReplicateModal] = useState(false);
-  const [moveToRevivalLoading, setMoveToRevivalLoading] = useState(false);
+  const [showMoveToRevivalModal, setShowMoveToRevivalModal] = useState(false);
   const [listingTab, setListingTab] = useState<'parent' | 'child'>('parent');
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [parentTabTotal, setParentTabTotal] = useState(0);
@@ -184,42 +185,10 @@ export function ViewListingProducts({
     fetchProducts(newPage);
   };
 
-  const handleMoveToRevival = async () => {
-    if (selectedProductIds.size === 0) return;
-    if (
-      !confirm(
-        `Move ${selectedProductIds.size} selected product(s) to Revival? They will leave the Listing tab and appear under Listing → Revival.`
-      )
-    ) {
-      return;
-    }
-    setMoveToRevivalLoading(true);
-    try {
-      const response = await fetch('/api/listing-product/move-to-revival', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ listingProductIds: [...selectedProductIds] }),
-      });
-      const result = await response.json();
-      if (result.moved > 0) {
-        toast.success(result.message || `Moved ${result.moved} product(s) to Revival`);
-      }
-      if (Array.isArray(result.failed) && result.failed.length > 0) {
-        for (const f of result.failed as { id: string; message: string }[]) {
-          toast.error(f.message || `Failed for ${f.id}`);
-        }
-      } else if (!result.success && result.message) {
-        toast.error(result.message);
-      }
-      setSelectedProductIds(new Set());
-      await fetchProducts(pagination.page);
-      await refreshTabTotals();
-    } catch (e) {
-      console.error('Move to revival failed:', e);
-      toast.error('Failed to move to revival');
-    } finally {
-      setMoveToRevivalLoading(false);
-    }
+  const handleAfterMoveToRevival = async () => {
+    setSelectedProductIds(new Set());
+    await fetchProducts(pagination.page);
+    await refreshTabTotals();
   };
 
   return (
@@ -306,13 +275,11 @@ export function ViewListingProducts({
             {section === 'listing' && (
               <button
                 type="button"
-                onClick={() => void handleMoveToRevival()}
-                disabled={
-                  selectedProductIds.size === 0 || isSelectingAllFiltered || moveToRevivalLoading
-                }
+                onClick={() => setShowMoveToRevivalModal(true)}
+                disabled={selectedProductIds.size === 0 || isSelectingAllFiltered}
                 className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl border-2 border-emerald-600 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-50 shadow-sm"
               >
-                {moveToRevivalLoading ? 'Moving…' : `Move to revival (${selectedProductIds.size})`}
+                Move to revival ({selectedProductIds.size})
               </button>
             )}
           </div>
@@ -376,6 +343,7 @@ export function ViewListingProducts({
       {/* Table */}
       <ListingProductTable
         products={products}
+        listingTab={listingTab}
         loading={loading}
         selectedIds={selectedProductIds}
         allVisibleSelected={products.length > 0 && products.every((p) => selectedProductIds.has(String(p._id)))}
@@ -435,6 +403,15 @@ export function ViewListingProducts({
           selectedProductIds={[...selectedProductIds]}
           onClose={() => setShowReplicateModal(false)}
           onReplicated={() => fetchProducts(pagination.page)}
+        />
+      )}
+
+      {showMoveToRevivalModal && section === 'listing' && (
+        <MoveToRevivalModal
+          open={showMoveToRevivalModal}
+          selectedIds={[...new Set([...selectedProductIds])]}
+          onClose={() => setShowMoveToRevivalModal(false)}
+          onMoved={() => void handleAfterMoveToRevival()}
         />
       )}
     </div>

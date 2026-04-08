@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { PurchaseMasterModel } from '@/models/purchaseMaster';
 import { ParentMasterModel, isBaseParent } from '@/models/parentMaster';
 import { syncParentFromPurchases } from '@/app/api/purchase-master/syncParent';
+import {
+  recalculateListingChildrenInventory,
+  sendInventoryWebhook,
+} from '@/app/api/purchase-master/recalculateChildren';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 
 export async function POST(request: NextRequest) {
@@ -98,6 +102,15 @@ export async function POST(request: NextRequest) {
     }
 
     await syncParentFromPurchases(parentSku);
+
+    // Recalculate listing children inventory and fire outbound webhook,
+    // mirroring what the purchase-master route does when a listing invoice is added.
+    recalculateListingChildrenInventory([parentSku]).catch((err) =>
+      console.error('[growth-products] move-to-listing: child inventory recalculation failed:', err)
+    );
+    sendInventoryWebhook(parentSku, quantityToMove).catch((err) =>
+      console.error('[growth-products] move-to-listing: webhook failed for', parentSku, err)
+    );
 
     const updatedParent = await ParentMasterModel.findBySku(parentSku);
 

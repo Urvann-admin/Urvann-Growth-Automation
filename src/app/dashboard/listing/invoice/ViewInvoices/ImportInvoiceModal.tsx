@@ -1,34 +1,36 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, Fragment } from 'react';
 import { Upload, Plus, Download } from 'lucide-react';
 import { ModalContainer } from '../../shared';
 import { Notification } from '@/components/ui/Notification';
 import type { DraftPurchaseRow } from '../AddInvoiceForm/types';
 import type { PurchaseTypeBreakdown } from '@/models/purchaseMaster';
 import { OverheadModal, type OverheadFormState } from '../AddInvoiceForm/OverheadModal';
+import { HUB_MAPPINGS } from '@/shared/constants/hubs';
 
-const TYPE_OPTIONS: { value: '' | keyof PurchaseTypeBreakdown; label: string }[] = [
-  { value: '', label: 'Select product type breakdown' },
-  { value: 'listing', label: 'Listing' },
-  { value: 'revival', label: 'Revival' },
-  { value: 'growth', label: 'Growth' },
-  { value: 'consumers', label: 'Consumers' },
-];
-
-function typeDropdownToBreakdown(value: '' | keyof PurchaseTypeBreakdown, quantity: number): PurchaseTypeBreakdown {
-  if (!value) return {};
-  return { [value]: quantity };
+function sumTypeBreakdown(t: PurchaseTypeBreakdown | undefined): number {
+  return (
+    Math.floor(Math.max(0, Number(t?.listing ?? 0) || 0)) +
+    Math.floor(Math.max(0, Number(t?.revival ?? 0) || 0)) +
+    Math.floor(Math.max(0, Number(t?.growth ?? 0) || 0)) +
+    Math.floor(Math.max(0, Number(t?.consumers ?? 0) || 0))
+  );
 }
 
-function typeBreakdownToSlug(t: PurchaseTypeBreakdown | undefined): '' | keyof PurchaseTypeBreakdown {
-  if (!t) return '';
-  const has = (v: number | undefined) => v != null && Number(v) > 0;
-  if (has(t.listing)) return 'listing';
-  if (has(t.revival)) return 'revival';
-  if (has(t.growth)) return 'growth';
-  if (has(t.consumers)) return 'consumers';
-  return '';
+function patchTypeField(
+  row: DraftPurchaseRow,
+  key: keyof PurchaseTypeBreakdown,
+  raw: string
+): PurchaseTypeBreakdown {
+  const n = Math.max(0, Math.floor(Number(raw) || 0));
+  const next: PurchaseTypeBreakdown = { ...row.type };
+  if (n <= 0) {
+    delete next[key];
+  } else {
+    next[key] = n;
+  }
+  return next;
 }
 
 const emptyOverheadForm: OverheadFormState = {
@@ -37,6 +39,16 @@ const emptyOverheadForm: OverheadFormState = {
   bill: '',
   allocationMethod: 'Equal',
 };
+
+function defaultTypeForProductType(
+  productType: string,
+  quantity: number
+): PurchaseTypeBreakdown {
+  if (productType === 'growing_product' || productType === 'consumable') {
+    return { growth: quantity };
+  }
+  return { listing: quantity };
+}
 
 function parsedToDraftRow(parsed: Record<string, unknown>): DraftPurchaseRow {
   const q = Number(parsed.quantity);
@@ -50,8 +62,6 @@ function parsedToDraftRow(parsed: Record<string, unknown>): DraftPurchaseRow {
       : quantity > 0
         ? Math.round(amount / quantity)
         : 0;
-  const parentSku = parsed.parentSku != null ? String(parsed.parentSku).trim() : '';
-  const sellerRaw = parsed.seller != null ? String(parsed.seller).trim() : '';
   return {
     billNumber: String(parsed.billNumber ?? '').trim(),
     productCode: String(parsed.productCode ?? '').trim(),
@@ -59,8 +69,7 @@ function parsedToDraftRow(parsed: Record<string, unknown>): DraftPurchaseRow {
     quantity,
     productPrice,
     amount,
-    parentSku,
-    seller: sellerRaw || undefined,
+    parentSku: '',
     type: {},
   };
 }
@@ -80,14 +89,20 @@ interface ProcurementSellerRow {
 export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoiceModalProps) {
   const [rows, setRows] = useState<DraftPurchaseRow[]>([]);
   const [sellers, setSellers] = useState<ProcurementSellerRow[]>([]);
+  const [importHub, setImportHub] = useState('');
+  const [importVendor, setImportVendor] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [parsing, setParsing] = useState(false);
+  const [resolving, setResolving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [overheadModalOpen, setOverheadModalOpen] = useState(false);
   const [overheadForm, setOverheadForm] = useState<OverheadFormState>(emptyOverheadForm);
   const [manualAmounts, setManualAmounts] = useState<number[]>([]);
   const [manualTotalError, setManualTotalError] = useState<string | null>(null);
+  const [uploadNonce, setUploadNonce] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -112,8 +127,68 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
     })();
   }, [isOpen]);
 
+  const resolveRowsForHub = useCallback(async (hub: string, rowList: DraftPurchaseRow[]) => {
+    const h = hub.trim();
+    if (!h || rowList.length === 0) return;
+    setResolving(true);
+    try {
+      const next = await Promise.all(
+        rowList.map(async (r) => {
+          const code = r.productCode.trim();
+          if (!code) {
+            return {
+              ...r,
+              parentSku: '',
+              resolveError: 'Product code is required',
+              type: {},
+            };
+          }
+          try {
+            const res = await fetch(
+              `/api/purchase-master/resolve-parent-sku?productCode=${encodeURIComponent(code)}&hub=${encodeURIComponent(h)}`
+            );
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              return {
+                ...r,
+                parentSku: '',
+                resolveError: String(data.message ?? 'Could not resolve parent SKU'),
+                type: {},
+              };
+            }
+            const productType = String(data.productType ?? 'parent');
+            return {
+              ...r,
+              parentSku: String(data.parentSku ?? '').trim(),
+              resolveError: undefined,
+              type: defaultTypeForProductType(productType, r.quantity),
+            };
+          } catch {
+            return {
+              ...r,
+              parentSku: '',
+              resolveError: 'Network error resolving SKU',
+              type: {},
+            };
+          }
+        })
+      );
+      setRows(next);
+    } finally {
+      setResolving(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen || rowsRef.current.length === 0 || !importHub.trim()) return;
+    void resolveRowsForHub(importHub, rowsRef.current);
+  }, [importHub, rows.length, uploadNonce, isOpen, resolveRowsForHub]);
+
   const handleClose = useCallback(() => {
     setRows([]);
+    setImportHub('');
+    setImportVendor('');
+    setUploadNonce(0);
     setMessage(null);
     onClose();
   }, [onClose]);
@@ -121,16 +196,7 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
   const handleDownloadTemplate = useCallback(async () => {
     try {
       const XLSX = await import('xlsx');
-      const headers = [
-        'Bill no.',
-        'Product Code',
-        'Product name',
-        'Product quantity',
-        'Price',
-        'Amount',
-        'Parent',
-        'Seller',
-      ];
+      const headers = ['Product name', 'Product Code', 'Amount', 'Quantity'];
       const ws = XLSX.utils.aoa_to_sheet([headers]);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Invoice');
@@ -147,6 +213,19 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
       return next;
     });
   }, []);
+
+  const updateRowTypeField = useCallback(
+    (index: number, key: keyof PurchaseTypeBreakdown, raw: string) => {
+      setRows((prev) => {
+        const next = [...prev];
+        const cur = next[index];
+        if (!cur) return prev;
+        next[index] = { ...cur, type: patchTypeField(cur, key, raw) };
+        return next;
+      });
+    },
+    []
+  );
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -171,9 +250,10 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
       const parsedRows = (data.rows ?? []).map(parsedToDraftRow);
       setRows(parsedRows);
       setManualAmounts(parsedRows.map(() => 0));
+      setUploadNonce((n) => n + 1);
       setMessage({
         type: 'success',
-        text: `Parsed ${parsedRows.length} row(s). Choose product type breakdown and seller per line, then save.`,
+        text: `Loaded ${parsedRows.length} line(s). Choose hub and vendor, review the preview, then save.`,
       });
     } catch {
       setMessage({ type: 'error', text: 'Failed to parse file' });
@@ -274,24 +354,21 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
     }
     setManualAmounts(rows.map(() => 0));
     setManualTotalError(null);
-    const billFromFile = rows[0]?.billNumber?.trim() ?? '';
+    const billFromFile = rows[0]?.billNumber?.trim() || '';
     setOverheadForm((prev) => ({ ...prev, bill: billFromFile }));
     setOverheadModalOpen(true);
   };
 
   const rowReadyForSave = useCallback((r: DraftPurchaseRow) => {
-    const hasSeller = !!r.seller?.trim();
-    const t = r.type;
-    const hasType =
-      !!t &&
-      (Number(t.listing ?? 0) > 0 ||
-        Number(t.revival ?? 0) > 0 ||
-        Number(t.growth ?? 0) > 0 ||
-        Number(t.consumers ?? 0) > 0);
-    return hasSeller && hasType;
+    const sumOk = sumTypeBreakdown(r.type) === r.quantity;
+    return sumOk && !!r.parentSku.trim() && !r.resolveError;
   }, []);
 
-  const allRowsComplete = rows.length > 0 && rows.every(rowReadyForSave);
+  const allRowsComplete =
+    rows.length > 0 &&
+    rows.every(rowReadyForSave) &&
+    !!importHub.trim() &&
+    !!importVendor.trim();
   const incompleteRows = rows.filter((r) => !rowReadyForSave(r)).length;
 
   const handleSave = async () => {
@@ -299,23 +376,29 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
       setMessage({ type: 'error', text: 'Upload a file first.' });
       return;
     }
+    if (!importHub.trim()) {
+      setMessage({ type: 'error', text: 'Select a hub.' });
+      return;
+    }
+    if (!importVendor.trim()) {
+      setMessage({ type: 'error', text: 'Select a vendor.' });
+      return;
+    }
     if (!allRowsComplete) {
       setMessage({
         type: 'error',
-        text: `Select product type breakdown and seller for every line before saving. ${incompleteRows} row(s) incomplete.`,
+        text: `Fix errors, select product type breakdown for every line, and ensure hub/vendor are set. ${incompleteRows} row(s) incomplete.`,
       });
       return;
     }
     const invalid = rows.find(
-      (r) =>
-        !r.billNumber.trim() ||
-        !r.productCode.trim() ||
-        !r.parentSku.trim() ||
-        r.quantity < 0 ||
-        r.amount < 0
+      (r) => !r.productCode.trim() || !r.parentSku.trim() || r.quantity < 0 || r.amount < 0
     );
     if (invalid) {
-      setMessage({ type: 'error', text: 'Each row must have Bill no., Product code, and Parent from the file.' });
+      setMessage({
+        type: 'error',
+        text: 'Each row needs product code and resolved parent SKU.',
+      });
       return;
     }
     setMessage(null);
@@ -327,14 +410,14 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
         const productPrice = quantity > 0 ? Math.round(amount / quantity) : r.productPrice ?? 0;
         const type = r.type;
         return {
-          billNumber: r.billNumber,
+          billNumber: r.billNumber.trim(),
           productCode: r.productCode,
           productName: r.productName?.trim() || undefined,
           quantity,
           productPrice,
           amount,
           parentSku: r.parentSku,
-          ...(r.seller?.trim() && { seller: r.seller.trim() }),
+          seller: importVendor.trim(),
           type,
           overhead: r.overhead
             ? {
@@ -358,9 +441,12 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
         setSaving(false);
         return;
       }
+      const bill = data.billNumber != null ? String(data.billNumber) : '';
       setMessage({
         type: 'success',
-        text: data.insertedCount ? `Saved ${data.insertedCount} purchase record(s).` : 'Saved.',
+        text: data.insertedCount
+          ? `Saved ${data.insertedCount} line(s)${bill ? ` — bill ${bill}` : ''}.`
+          : 'Saved.',
       });
       onSuccess();
       handleClose();
@@ -400,45 +486,125 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
               <Notification type={message.type} text={message.text} onDismiss={() => setMessage(null)} />
             )}
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
-              <h3 className="text-base font-semibold text-slate-800 mb-2">Upload file</h3>
-              <p className="text-sm text-slate-600 mb-4">
-                Download the template or upload a CSV/Excel file with columns:{' '}
-                <strong>
-                  Bill no., Product Code, Product name, Product quantity, Price, Amount, Parent, Seller
-                </strong>
-                . Use procurement <strong>seller name</strong>, <strong>vendor code</strong>, or <strong>Mongo _id</strong>. After upload, set{' '}
-                <strong>Product type breakdown</strong> and <strong>Seller</strong> for each row if not in the file.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="inline-flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleFileChange}
-                    disabled={parsing}
-                    className="sr-only"
-                    ref={fileInputRef}
-                  />
-                  <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700">
-                    <Upload className="w-4 h-4" />
-                    {parsing ? 'Parsing...' : 'Upload Excel or CSV'}
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  onClick={handleDownloadTemplate}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                  title="Download Excel template"
-                >
-                  <Download className="w-4 h-4" />
-                  Download template
-                </button>
-              </div>
-            </div>
+            <input
+              id="import-invoice-file-input"
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileChange}
+              disabled={parsing}
+              className="sr-only"
+              aria-label="Choose Excel or CSV file for import"
+            />
 
+            {/* Step 1: upload only (opening the modal) */}
+            {rows.length === 0 && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6">
+                <h3 className="text-base font-semibold text-slate-800 mb-2">Upload file</h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Download the template or upload a CSV/Excel file with columns:{' '}
+                  <strong>Product name, Product Code, Amount, Quantity</strong>. Optional columns{' '}
+                  <strong>Bill no.</strong>, <strong>Price</strong> are still accepted. After the file loads, you will
+                  choose hub and vendor, see a preview, then save.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label
+                    htmlFor="import-invoice-file-input"
+                    className="inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700">
+                      <Upload className="w-4 h-4" />
+                      {parsing ? 'Parsing...' : 'Upload Excel or CSV'}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    title="Download Excel template"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download template
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: after file parsed — hub & vendor, then preview & save */}
             {rows.length > 0 && (
               <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600">
+                    <span className="font-medium text-slate-800">{rows.length}</span> line(s) loaded.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={parsing}
+                      className="text-sm font-medium text-emerald-700 hover:text-emerald-800 underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      {parsing ? 'Parsing…' : 'Replace file'}
+                    </button>
+                    {resolving && (
+                      <span className="text-sm text-slate-600">Resolving parent SKUs…</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-6 space-y-4">
+                  <h3 className="text-base font-semibold text-slate-800">Import settings</h3>
+                  <p className="text-sm text-slate-600">
+                    Choose <strong>Hub</strong> and <strong>Vendor</strong> for this bill. Parent SKUs are resolved from
+                    each row&apos;s product code and the hub you select. Bill numbers are assigned automatically (or use
+                    the <strong>Bill no.</strong> column in the file when present).
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1">Hub</span>
+                      <select
+                        value={importHub}
+                        onChange={(e) => setImportHub(e.target.value)}
+                        className={inputClass}
+                        aria-label="Hub"
+                      >
+                        <option value="">Select hub</option>
+                        {HUB_MAPPINGS.map((m) => (
+                          <option key={m.hub} value={m.hub}>
+                            {m.hub}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="block text-sm font-medium text-slate-700 mb-1">Vendor</span>
+                      <select
+                        value={importVendor}
+                        onChange={(e) => setImportVendor(e.target.value)}
+                        className={inputClass}
+                        aria-label="Vendor"
+                      >
+                        <option value="">Select vendor</option>
+                        {sellers.map((s) => (
+                          <option key={s._id} value={s._id}>
+                            {s.seller_name}
+                            {s.vendorCode ? ` (${s.vendorCode})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-base font-semibold text-slate-800">Preview</h3>
+                  <p className="text-sm text-slate-600">
+                    Defaults: parent-type → full qty in <strong>Listing</strong>; growing/consumable → full qty in{' '}
+                    <strong>Growth</strong>. Split quantity across Listing, Revival, Growth, and Consumers as needed —
+                    the four must <strong>sum to Qty</strong> for each row. Parent SKU appears when hub is set.
+                  </p>
+                </div>
+
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -449,87 +615,114 @@ export function ImportInvoiceModal({ isOpen, onClose, onSuccess }: ImportInvoice
                   </button>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200">
+                      <tr className="border-b border-slate-200 bg-slate-50">
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Bill no.</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Product code</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Product name</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Qty</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Price</th>
                         <th className="text-left py-2 px-2 font-semibold text-slate-700">Amount</th>
-                        <th className="text-left py-2 px-2 font-semibold text-slate-700">Parent</th>
-                        <th className="text-left py-2 px-2 font-semibold text-slate-700 min-w-[140px]">
-                          Product type breakdown
+                        <th className="text-left py-2 px-2 font-semibold text-slate-700">Parent SKU</th>
+                        <th className="text-center py-2 px-1 font-semibold text-slate-700 text-xs w-[72px]">Listing</th>
+                        <th className="text-center py-2 px-1 font-semibold text-slate-700 text-xs w-[72px]">Revival</th>
+                        <th className="text-center py-2 px-1 font-semibold text-slate-700 text-xs w-[72px]">Growth</th>
+                        <th className="text-center py-2 px-1 font-semibold text-slate-700 text-xs w-[72px]">
+                          Consumers
                         </th>
-                        <th className="text-left py-2 px-2 font-semibold text-slate-700 min-w-[160px]">Seller</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((row, i) => (
-                        <tr key={i} className="border-b border-slate-100">
-                          <td className="py-1 px-2 text-slate-600">{row.billNumber}</td>
-                          <td className="py-1 px-2 text-slate-600">{row.productCode}</td>
-                          <td className="py-1 px-2 text-slate-600 truncate max-w-[120px]">{row.productName || '—'}</td>
-                          <td className="py-1 px-2 text-slate-600">{row.quantity}</td>
-                          <td className="py-1 px-2 text-slate-600">{row.productPrice}</td>
-                          <td className="py-1 px-2 text-slate-600">{row.amount}</td>
-                          <td className="py-1 px-2 text-slate-600 min-w-[100px]">{row.parentSku || '—'}</td>
-                          <td className="py-1 px-2 min-w-[140px]">
-                            <select
-                              value={typeBreakdownToSlug(row.type)}
-                              onChange={(e) => {
-                                const v = e.target.value as '' | keyof PurchaseTypeBreakdown;
-                                updateRow(i, { type: typeDropdownToBreakdown(v, row.quantity) });
-                              }}
-                              className={inputClass}
-                              aria-label={`Product type breakdown row ${i + 1}`}
-                            >
-                              {TYPE_OPTIONS.map((opt) => (
-                                <option key={opt.value || 'empty'} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-1 px-2 min-w-[160px]">
-                            <select
-                              value={row.seller ?? ''}
-                              onChange={(e) => updateRow(i, { seller: e.target.value || undefined })}
-                              className={inputClass}
-                              aria-label={`Seller row ${i + 1}`}
-                            >
-                              <option value="">Select seller</option>
-                              {row.seller &&
-                                !sellers.some((s) => s._id === row.seller) && (
-                                  <option value={row.seller}>{row.seller} (from file)</option>
+                      {rows.map((row, i) => {
+                        const hasError = !!row.resolveError;
+                        const typeSum = sumTypeBreakdown(row.type);
+                        const sumMismatch = !hasError && typeSum !== row.quantity;
+                        const typeInputClass = `${inputClass} text-center px-1`;
+                        const typeKeys: (keyof PurchaseTypeBreakdown)[] = [
+                          'listing',
+                          'revival',
+                          'growth',
+                          'consumers',
+                        ];
+                        return (
+                          <Fragment key={i}>
+                            <tr className={`border-b ${hasError ? 'bg-red-50 border-red-100' : 'border-slate-100'}`}>
+                              <td className="py-1.5 px-2 text-slate-600">{row.billNumber || '—'}</td>
+                              <td className="py-1.5 px-2 text-slate-600">{row.productCode}</td>
+                              <td className="py-1.5 px-2 text-slate-600 truncate max-w-[120px]">{row.productName || '—'}</td>
+                              <td className="py-1.5 px-2 text-slate-600">{row.quantity}</td>
+                              <td className="py-1.5 px-2 text-slate-600">{row.productPrice}</td>
+                              <td className="py-1.5 px-2 text-slate-600">{row.amount}</td>
+                              <td className="py-1.5 px-2 min-w-[180px]">
+                                {hasError ? (
+                                  <div className="flex items-start gap-1">
+                                    <svg className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-red-600 text-xs leading-snug">{row.resolveError}</span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-600 text-sm">
+                                    {row.parentSku || (importHub ? (resolving ? '…' : '—') : 'Select hub')}
+                                  </span>
                                 )}
-                              {sellers.map((s) => (
-                                <option key={s._id} value={s._id}>
-                                  {s.seller_name}
-                                  {s.vendorCode ? ` (${s.vendorCode})` : ''}
-                                </option>
+                              </td>
+                              {typeKeys.map((key) => (
+                                <td key={key} className="py-1.5 px-1 align-top">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    disabled={hasError}
+                                    value={row.type?.[key] ?? ''}
+                                    onChange={(e) => updateRowTypeField(i, key, e.target.value)}
+                                    className={typeInputClass}
+                                    aria-label={`${key} row ${i + 1}`}
+                                  />
+                                </td>
                               ))}
-                            </select>
-                          </td>
-                        </tr>
-                      ))}
+                            </tr>
+                            {sumMismatch && (
+                              <tr className="bg-amber-50/80 border-b border-amber-100">
+                                <td colSpan={7} className="py-0" />
+                                <td colSpan={4} className="py-0 pb-2 px-2 text-xs text-amber-800">
+                                  Sum is {typeSum}; must equal Qty ({row.quantity}).
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 <div className="flex flex-col items-end gap-2">
-                  {!allRowsComplete && (
-                    <p className="text-sm text-amber-600">
-                      Select <strong>Product type breakdown</strong> and <strong>Seller</strong> for every row to enable Save.
-                      {incompleteRows > 0 && ` ${incompleteRows} row(s) incomplete.`}
-                    </p>
-                  )}
+                  {(() => {
+                    const errorRows = rows.filter((r) => r.resolveError);
+                    if (errorRows.length > 0) {
+                      return (
+                        <p className="text-sm text-red-600">
+                          <strong>{errorRows.length}</strong> row{errorRows.length === 1 ? '' : 's'} in red — fix before saving.
+                        </p>
+                      );
+                    }
+                    if (!allRowsComplete) {
+                      return (
+                        <p className="text-sm text-amber-600">
+                          Set <strong>Hub</strong> and <strong>Vendor</strong>, resolve parent SKUs, and make{' '}
+                          <strong>Listing + Revival + Growth + Consumers = Qty</strong> on every row.
+                          {incompleteRows > 0 && ` ${incompleteRows} row(s) incomplete.`}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                   <button
                     type="button"
                     onClick={handleSave}
-                    disabled={saving || !allRowsComplete}
+                    disabled={saving || !allRowsComplete || resolving}
                     className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {saving ? 'Saving...' : 'Save invoice'}

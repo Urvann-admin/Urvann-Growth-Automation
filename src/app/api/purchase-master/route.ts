@@ -11,6 +11,53 @@ import {
   recalculateListingChildrenInventory,
   sendInventoryWebhook,
 } from './recalculateChildren';
+import type { ParentMaster } from '@/models/parentMaster';
+import { mergeParentMasterVendorFields } from '@/lib/mergeParentMasterVendors';
+import { getNextInvoiceBillNumber } from '@/lib/nextInvoiceBillNumber';
+
+/** Fill missing bill numbers: reuse first bill in batch if present; otherwise one new sequence per POST. */
+async function assignAutoBillNumbers(body: unknown): Promise<unknown> {
+  if (Array.isArray(body)) {
+    const rows = body.map((r) =>
+      r && typeof r === 'object' ? { ...(r as Record<string, unknown>) } : ({} as Record<string, unknown>)
+    );
+    const firstBill = rows.map((r) => String(r.billNumber ?? '').trim()).find((b) => b);
+    if (firstBill) {
+      return rows.map((r) => ({
+        ...r,
+        billNumber: String(r.billNumber ?? '').trim() || firstBill,
+      }));
+    }
+    const next = await getNextInvoiceBillNumber();
+    return rows.map((r) => ({ ...r, billNumber: next }));
+  }
+  if (body && typeof body === 'object') {
+    const d = body as Record<string, unknown>;
+    if (!String(d.billNumber ?? '').trim()) {
+      return { ...d, billNumber: await getNextInvoiceBillNumber() };
+    }
+  }
+  return body;
+}
+
+async function mergeProcurementVendorIntoParents(
+  items: { parentSku: string; seller?: string }[]
+): Promise<void> {
+  for (const item of items) {
+    const sid = item.seller?.trim();
+    if (!sid) continue;
+    const sku = String(item.parentSku || '').trim();
+    if (!sku) continue;
+    try {
+      const parent = await ParentMasterModel.findBySku(sku);
+      if (!parent?._id || !isBaseParent(parent)) continue;
+      const merged = mergeParentMasterVendorFields(parent as ParentMaster, sid);
+      await ParentMasterModel.update(parent._id, merged);
+    } catch (err) {
+      console.warn('[purchase-master] Failed to merge vendor for parent sku:', sku, err);
+    }
+  }
+}
 
 /** Add type breakdown amounts (existing + incoming); used to accumulate on parent when same SKU appears in multiple bills. Stores exact integer quantities. */
 function addTypeBreakdown(
@@ -110,7 +157,7 @@ async function validateParentSkusExist(
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await assignAutoBillNumbers(await request.json());
 
     if (Array.isArray(body)) {
       const validated: Omit<PurchaseMaster, '_id' | 'createdAt' | 'updatedAt'>[] = [];
@@ -139,7 +186,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
               {
                 success: false,
-                message: `Unknown seller: "${raw}". Use procurement seller _id, vendor code, or seller name as in Procurement seller master.`,
+                message: `Unknown vendor: "${raw}". Use procurement vendor _id, vendor code, or vendor name as in Procurement vendor master.`,
               },
               { status: 400 }
             );
@@ -148,6 +195,7 @@ export async function POST(request: NextRequest) {
         }
       }
       const result = await PurchaseMasterModel.createMany(validated);
+      await mergeProcurementVendorIntoParents(validated);
       // Update parent master typeBreakdown and inventory_quantity (when type is Listing)
       const skuToType = new Map<string, PurchaseTypeBreakdown>();
       const skuToListingQuantity = new Map<string, number>();
@@ -156,10 +204,10 @@ export async function POST(request: NextRequest) {
         if (sku && (row.type?.listing != null || row.type?.revival != null || row.type?.growth != null || row.type?.consumers != null)) {
           const current = skuToType.get(sku);
           skuToType.set(sku, addTypeBreakdown(current, row.type));
-          // Sum quantity for rows with Listing type to add to parent inventory_quantity
+          // Sum the listing allocation (not full quantity) to add to parent inventory_quantity
           if (row.type?.listing != null && row.type.listing > 0) {
-            const q = Number(row.quantity) || 0;
-            skuToListingQuantity.set(sku, (skuToListingQuantity.get(sku) ?? 0) + q);
+            const listingQty = Math.floor(Number(row.type.listing) || 0);
+            skuToListingQuantity.set(sku, (skuToListingQuantity.get(sku) ?? 0) + listingQty);
           }
         }
       }
@@ -203,6 +251,7 @@ export async function POST(request: NextRequest) {
         success: true,
         message: `Created ${result.insertedCount} purchase record(s)`,
         insertedCount: result.insertedCount,
+        billNumber: validated[0]?.billNumber,
       });
     }
 
@@ -228,7 +277,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: `Unknown seller: "${rawSeller}". Use procurement seller _id, vendor code, or seller name as in Procurement seller master.`,
+            message: `Unknown vendor: "${rawSeller}". Use procurement vendor _id, vendor code, or vendor name as in Procurement vendor master.`,
           },
           { status: 400 }
         );
@@ -236,6 +285,7 @@ export async function POST(request: NextRequest) {
       single.seller = resolved;
     }
     const created = await PurchaseMasterModel.create(single);
+    await mergeProcurementVendorIntoParents([single]);
     const data = validated.data!;
     const sku = String(data.parentSku || '').trim();
     if (sku && (data.type?.listing != null || data.type?.revival != null || data.type?.growth != null || data.type?.consumers != null)) {
@@ -243,7 +293,7 @@ export async function POST(request: NextRequest) {
         const parent = await ParentMasterModel.findBySku(sku);
         if (parent?._id && isBaseParent(parent)) {
           const newTypeBreakdown = addTypeBreakdown(parent.typeBreakdown, data.type);
-          const listingQty = data.type?.listing != null && data.type.listing > 0 ? (Number(data.quantity) || 0) : 0;
+          const listingQty = data.type?.listing != null && data.type.listing > 0 ? Math.floor(Number(data.type.listing) || 0) : 0;
           const newInventory =
             listingQty > 0 ? (parent.inventory_quantity ?? 0) + listingQty : undefined;
           await ParentMasterModel.update(parent._id, {
@@ -260,7 +310,7 @@ export async function POST(request: NextRequest) {
         recalculateListingChildrenInventory([sku]).catch((err) =>
           console.error('[purchase-master] Child inventory recalculation failed:', err)
         );
-        const listingDelta = data.type?.listing != null && data.type.listing > 0 ? (Number(data.quantity) || 0) : 0;
+        const listingDelta = data.type?.listing != null && data.type.listing > 0 ? Math.floor(Number(data.type.listing) || 0) : 0;
         if (listingDelta > 0) {
           sendInventoryWebhook(sku, listingDelta).catch((err) =>
             console.error('[purchase-master] Webhook failed for', sku, err)

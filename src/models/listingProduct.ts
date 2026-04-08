@@ -139,6 +139,8 @@ export interface ListingProduct {
   storeHippoId?: string;
   /** StoreHippo product _id - same as storeHippoId */
   product_id?: string;
+  /** StoreHippo URL slug / alias (if synced) */
+  storeHippoAlias?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }

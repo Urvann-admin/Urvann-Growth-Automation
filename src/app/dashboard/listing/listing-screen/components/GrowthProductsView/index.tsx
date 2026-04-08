@@ -146,7 +146,7 @@ export function GrowthProductsView() {
                     Product
                   </th>
                   <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
-                    SKU
+                    Parent SKU
                   </th>
                   <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
                     Qty
@@ -157,8 +157,8 @@ export function GrowthProductsView() {
                   <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Total = Price × Qty × Normalized Factor (includes overhead)">
                     Total Amount
                   </th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="grandTotal/billTotal — inflates cost by overhead share">
-                    Norm. Factor
+                  <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                    Product code
                   </th>
                   <th className="px-4 py-2 text-left text-[11px] font-medium text-gray-500 uppercase tracking-wider" title="Date invoice was added — shows how long since purchase">
                     Invoice Date
@@ -173,7 +173,11 @@ export function GrowthProductsView() {
                   <tr key={product.parentSku} className="hover:bg-gray-50">
                     <td className="px-4 py-2.5">
                       <div className="text-xs font-medium text-gray-900">
-                        {product.finalName || product.plant || product.productName || '—'}
+                        {product.productName ||
+                          (product.productCode ? String(product.productCode).trim() : '') ||
+                          product.finalName ||
+                          product.plant ||
+                          '—'}
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-600">
@@ -188,8 +192,8 @@ export function GrowthProductsView() {
                     <td className="px-4 py-2.5 text-xs text-gray-900 font-medium">
                       ₹{product.amount.toLocaleString()}
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-gray-500" title="Normalized factor = grandTotal ÷ billTotal (overhead allocation)">
-                      {product.normalizedFactor ?? 1}
+                    <td className="px-4 py-2.5 text-xs text-gray-600">
+                      {product.productCode?.trim() ? product.productCode.trim() : '—'}
                     </td>
                     <td className="px-4 py-2.5 text-xs text-gray-600" title="How long since purchase">
                       {product.invoiceDate ? (

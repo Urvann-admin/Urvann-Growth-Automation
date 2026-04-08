@@ -85,7 +85,13 @@ export function MoveToListingModal({
 
   if (!isOpen) return null;
 
-  const displayName = product?.finalName || product?.plant || product?.productName || product?.parentSku || 'Product';
+  const displayName =
+    product?.productName ||
+    (product?.productCode ? String(product.productCode).trim() : '') ||
+    product?.finalName ||
+    product?.plant ||
+    product?.parentSku ||
+    'Product';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">

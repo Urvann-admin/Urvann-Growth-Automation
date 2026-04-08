@@ -166,4 +166,18 @@ export class PurchaseMasterModel {
     const collection = await getCollection(COLLECTION_NAME);
     return collection.find({ parentSku }).toArray();
   }
+
+  /** Max of purely numeric `billNumber` values (for seeding auto-increment). */
+  static async maxNumericBillNumber(): Promise<number> {
+    const collection = await getCollection(COLLECTION_NAME);
+    const docs = await collection
+      .find({ billNumber: { $regex: /^\d+$/ } }, { projection: { billNumber: 1 } })
+      .toArray();
+    let max = 0;
+    for (const d of docs) {
+      const n = parseInt(String((d as { billNumber?: string }).billNumber ?? ''), 10);
+      if (!Number.isNaN(n)) max = Math.max(max, n);
+    }
+    return max;
+  }
 }

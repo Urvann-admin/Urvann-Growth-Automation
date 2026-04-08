@@ -9,6 +9,8 @@ export interface DraftPurchaseRow {
   productPrice: number;
   amount: number;
   parentSku: string;
+  /** Set after server resolve from product code + hub */
+  resolveError?: string;
   seller?: string;
   type: PurchaseTypeBreakdown;
   overhead?: {

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ProcurementSellerMasterModel } from '@/models/procurementSellerMaster';
+import {
+  ProcurementSellerMasterModel,
+  type ProcurementSellerMaster,
+} from '@/models/procurementSellerMaster';
+import { parseOptionalProcurementPhone } from '@/lib/procurementSellerPhone';
 
 export async function GET(
   request: NextRequest,
@@ -53,11 +57,25 @@ export async function PUT(
       );
     }
 
-    const updateData = { ...body };
-    delete (updateData as Record<string, unknown>)._id;
-    delete (updateData as Record<string, unknown>).createdAt;
+    const updateData = { ...body } as Record<string, unknown>;
+    delete updateData._id;
+    delete updateData.createdAt;
 
-    const result = await ProcurementSellerMasterModel.update(id, updateData);
+    if (Object.prototype.hasOwnProperty.call(updateData, 'phoneNumber')) {
+      const p = parseOptionalProcurementPhone(updateData.phoneNumber);
+      if (!p.ok) {
+        return NextResponse.json(
+          { success: false, message: p.message },
+          { status: 400 }
+        );
+      }
+      updateData.phoneNumber = p.value;
+    }
+
+    const result = await ProcurementSellerMasterModel.update(
+      id,
+      updateData as Partial<Omit<ProcurementSellerMaster, '_id' | 'createdAt'>>
+    );
 
     if (result.matchedCount === 0) {
       return NextResponse.json(
